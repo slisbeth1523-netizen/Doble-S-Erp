@@ -13,7 +13,7 @@ Backend base de Doble S ERP con Node.js, Express, TypeScript, JWT y SQL Server.
 
 - `GET /health`: estado de la API.
 - `POST /api/auth/login`: autenticacion con email y password.
-- `POST /api/auth/logout`: salida para clientes JWT stateless.
+- `POST /api/auth/logout`: revoca la sesion JWT actual.
 - `GET /api/auth/me`: usuario autenticado.
 - `GET /api/core/me`: usuario y contexto tenant/empresa.
 - `GET /api/core/tenants`: tenants activos.
@@ -24,6 +24,39 @@ Backend base de Doble S ERP con Node.js, Express, TypeScript, JWT y SQL Server.
 - `GET /api/security/roles`: roles del tenant.
 - `POST /api/security/roles`: crea rol del tenant.
 - `GET /api/security/permissions`: permisos registrados.
+
+## Sesiones y JWT
+
+El login genera un `JwtId`, guarda la sesion en `security.Sessions` e incluye `jwtId` en el token.
+
+Cada solicitud autenticada valida que la sesion exista, no este revocada y no este vencida. Un token cuya sesion fue revocada por logout deja de ser valido.
+
+## Contexto multiempresa
+
+Enviar `x-tenant-id` para establecer el tenant de trabajo.
+
+Enviar `x-company-id` cuando el endpoint opere sobre una empresa legal. Si el usuario no tiene acceso a esa empresa en `security.UserCompanyAccess`, la API responde 403.
+
+Para endpoints futuros que obligan empresa legal, usar `requireCompanyContext`.
+
+## Permisos
+
+Existe el middleware:
+
+```ts
+requirePermission(moduleCode: string, actionCode: string)
+```
+
+Consulta roles y permisos del usuario autenticado. Si el permiso no existe o no esta activo, responde 403 y registra `PERMISSION_DENIED`.
+
+## Auditoria
+
+- `audit.AuditLogs`: solicitudes tecnicas.
+- `audit.AuditEvents`: acciones funcionales como login, logout, company created, user created, role created y permission denied.
+
+## Onboarding
+
+Usar `database/sqlserver/seeds/001_onboarding_admin.template.sql` para crear el primer tenant, empresa y usuario administrador con valores parametrizados.
 
 ## Nota
 

@@ -2,8 +2,9 @@ import { Router } from "express";
 import { z } from "zod";
 
 import { requireAuth } from "../../../security/api/auth.middleware.js";
+import { recordFunctionalAuditEvent } from "../../../audit/infrastructure/audit.repository.js";
 import { asyncHandler } from "../../../../shared/http/async-handler.js";
-import { createCompany, listCompaniesForUser, listTenants } from "../../infrastructure/company.repository.js";
+import { createCompanyForUser, listCompaniesForUser, listTenants } from "../../infrastructure/company.repository.js";
 import { requireTenantContext } from "../tenant-context.middleware.js";
 
 export const coreRouter = Router();
@@ -45,11 +46,21 @@ coreRouter.post(
   requireTenantContext,
   asyncHandler(async (request, response) => {
     const body = createCompanySchema.parse(request.body);
-    const company = await createCompany({
+    const company = await createCompanyForUser({
       tenantId: request.tenantContext!.tenantId,
+      userId: request.user!.userId,
       legalName: body.legalName,
       tradeName: body.tradeName,
       taxId: body.taxId
+    });
+
+    await recordFunctionalAuditEvent({
+      tenantId: request.tenantContext!.tenantId,
+      companyId: company.CompanyId,
+      userId: request.user!.userId,
+      action: "COMPANY_CREATED",
+      entityName: "core.Companies",
+      entityId: company.CompanyId
     });
 
     response.status(201).json({ data: company });

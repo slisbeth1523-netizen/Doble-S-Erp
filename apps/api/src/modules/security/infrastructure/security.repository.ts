@@ -41,3 +41,34 @@ export async function listPermissions() {
 
   return result.recordset;
 }
+
+export async function userHasPermission(input: {
+  tenantId: string;
+  userId: string;
+  moduleCode: string;
+  actionCode: string;
+}) {
+  const pool = await getSqlPool();
+  const result = await pool
+    .request()
+    .input("TenantId", sql.UniqueIdentifier, input.tenantId)
+    .input("UserId", sql.UniqueIdentifier, input.userId)
+    .input("ModuleCode", sql.NVarChar(80), input.moduleCode)
+    .input("ActionCode", sql.NVarChar(80), input.actionCode)
+    .query(`
+      SELECT TOP 1 p.PermissionId
+      FROM security.UserRoles ur
+      INNER JOIN security.RolePermissions rp
+        ON rp.RoleId = ur.RoleId
+       AND rp.TenantId = ur.TenantId
+      INNER JOIN security.Permissions p
+        ON p.PermissionId = rp.PermissionId
+      WHERE ur.TenantId = @TenantId
+        AND ur.UserId = @UserId
+        AND p.ModuleCode = @ModuleCode
+        AND p.ActionCode = @ActionCode
+        AND ISNULL(p.IsActive, 1) = 1
+    `);
+
+  return result.recordset.length > 0;
+}

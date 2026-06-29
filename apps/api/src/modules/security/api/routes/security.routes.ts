@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 
 import { asyncHandler } from "../../../../shared/http/async-handler.js";
+import { recordFunctionalAuditEvent } from "../../../audit/infrastructure/audit.repository.js";
 import { requireTenantContext } from "../../../core/api/tenant-context.middleware.js";
 import { createUserWithPassword } from "../../application/user.service.js";
 import { listPermissions, listRoles, createRole } from "../../infrastructure/security.repository.js";
@@ -44,6 +45,15 @@ securityRouter.post(
       password: body.password
     });
 
+    await recordFunctionalAuditEvent({
+      tenantId: request.tenantContext!.tenantId,
+      companyId: body.defaultCompanyId,
+      userId: request.user!.userId,
+      action: "USER_CREATED",
+      entityName: "security.Users",
+      entityId: user.UserId
+    });
+
     response.status(201).json({ data: user });
   })
 );
@@ -64,6 +74,15 @@ securityRouter.post(
       tenantId: request.tenantContext!.tenantId,
       code: body.code,
       name: body.name
+    });
+
+    await recordFunctionalAuditEvent({
+      tenantId: request.tenantContext!.tenantId,
+      companyId: request.tenantContext?.companyId,
+      userId: request.user!.userId,
+      action: "ROLE_CREATED",
+      entityName: "security.Roles",
+      entityId: role.RoleId
     });
 
     response.status(201).json({ data: role });
