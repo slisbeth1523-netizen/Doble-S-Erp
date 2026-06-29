@@ -57,3 +57,4 @@ GET http://localhost:3000/health
 Detalle de la fundacion SaaS implementada:
 
 - [Fase 1 - Fundacion SaaS](docs/PHASE_1_FOUNDATION.md)
+- [Fase 1.1 - Endurecimiento de Fundacion SaaS](docs/PHASE_1_1_FOUNDATION_HARDENING.md)

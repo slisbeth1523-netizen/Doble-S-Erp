@@ -8,3 +8,13 @@ export type AuditEvent = {
   ipAddress?: string;
   userAgent?: string;
 };
+
+export type FunctionalAuditEvent = {
+  tenantId?: string;
+  companyId?: string;
+  userId?: string;
+  action: string;
+  entityName?: string;
+  entityId?: string;
+  metadata?: Record<string, unknown>;
+};
