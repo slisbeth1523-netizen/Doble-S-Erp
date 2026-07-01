@@ -37,3 +37,66 @@ La plantilla no incluye contrasenas reales. El valor `@AdminPasswordHash` debe g
 
 - Fase 1.1 documentada: endurecimiento de fundacion SaaS.
 - Siguiente paso: Fase 1.2, estructura tecnica inicial del monorepo, API, configuracion, migraciones y health checks.
+
+## Fase 1.2 - Bootstrap tecnico
+
+El repositorio queda organizado como monorepo:
+
+```text
+apps/
+  api/
+  web/
+database/
+  sqlserver/
+    migrations/
+    seeds/
+docs/
+  phases/
+  architecture/
+packages/
+  shared/
+  config/
+```
+
+## Instalacion
+
+```bash
+npm install
+```
+
+Copiar `.env.example` a `.env` y completar valores locales sin usar credenciales reales.
+
+## API
+
+La API usa Node.js, Express, TypeScript, SQL Server, dotenv, cors y helmet.
+
+```bash
+npm run dev:api
+```
+
+Endpoints base:
+
+```text
+GET http://localhost:4001/api/health
+GET http://localhost:4001/api/health/db
+GET http://localhost:4001/api/version
+```
+
+## Web
+
+El frontend usa React, Vite y TypeScript.
+
+```bash
+npm run dev:web
+```
+
+La variable `VITE_API_URL` define la URL base de la API.
+
+## Calidad
+
+```bash
+npm run typecheck
+npm run build
+```
+
+Esta fase no implementa clientes, proveedores, inventario, ventas, compras, facturacion ni fiscalidad dominicana avanzada.
