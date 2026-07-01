@@ -67,3 +67,174 @@ code {
   padding: 8px 10px;
 }
 
+.master-data-runtime-page {
+  display: grid;
+  gap: 24px;
+  min-height: 100vh;
+  padding: 32px;
+}
+
+.runtime-page-header {
+  align-items: flex-start;
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+}
+
+.runtime-layout {
+  display: grid;
+  gap: 20px;
+}
+
+.runtime-layout-two {
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+}
+
+.runtime-panel {
+  background: #ffffff;
+  border: 1px solid #d9e2ec;
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.runtime-panel h2 {
+  font-size: 1rem;
+  margin: 0 0 16px;
+}
+
+.runtime-state {
+  background: #ffffff;
+  border: 1px solid #d9e2ec;
+  border-radius: 8px;
+  color: #52616f;
+  padding: 12px 14px;
+}
+
+.runtime-error {
+  color: #b42318;
+}
+
+.runtime-actions,
+.runtime-filters,
+.runtime-pagination {
+  align-items: end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.runtime-actions button,
+.runtime-primary-action,
+.runtime-pagination button,
+.runtime-lookup button {
+  background: #0f766e;
+  border: 0;
+  border-radius: 6px;
+  color: #ffffff;
+  cursor: pointer;
+  font-weight: 700;
+  padding: 9px 12px;
+}
+
+.runtime-actions button:disabled,
+.runtime-pagination button:disabled,
+.runtime-lookup button:disabled {
+  background: #bcccdc;
+  cursor: not-allowed;
+}
+
+.runtime-filters label,
+.runtime-field {
+  display: grid;
+  gap: 6px;
+}
+
+.runtime-form {
+  display: grid;
+  gap: 14px;
+}
+
+.runtime-field span,
+.runtime-filters span {
+  color: #334e68;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.runtime-field strong {
+  color: #b42318;
+  margin-left: 4px;
+}
+
+.runtime-field input,
+.runtime-field select,
+.runtime-field textarea,
+.runtime-filters input,
+.runtime-filters select,
+.runtime-lookup input,
+.runtime-lookup select {
+  border: 1px solid #bcccdc;
+  border-radius: 6px;
+  box-sizing: border-box;
+  min-height: 38px;
+  padding: 8px 10px;
+  width: 100%;
+}
+
+.runtime-field textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.runtime-field small,
+.runtime-hint {
+  color: #627d98;
+  font-size: 0.8rem;
+}
+
+.runtime-lookup {
+  display: grid;
+  gap: 8px;
+}
+
+.runtime-table-wrap {
+  margin-top: 16px;
+  overflow-x: auto;
+}
+
+.runtime-grid table {
+  border-collapse: collapse;
+  min-width: 100%;
+}
+
+.runtime-grid th,
+.runtime-grid td {
+  border-bottom: 1px solid #d9e2ec;
+  padding: 10px;
+  vertical-align: top;
+}
+
+.runtime-grid th button {
+  background: transparent;
+  border: 0;
+  color: #102a43;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  padding: 0;
+}
+
+.runtime-pagination {
+  justify-content: space-between;
+  margin-top: 14px;
+}
+
+@media (max-width: 860px) {
+  .runtime-layout-two {
+    grid-template-columns: 1fr;
+  }
+
+  .runtime-page-header {
+    display: grid;
+  }
+}
