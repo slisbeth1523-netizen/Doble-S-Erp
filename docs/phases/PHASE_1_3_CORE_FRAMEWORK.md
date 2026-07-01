@@ -6,7 +6,7 @@ Fecha: 2026-06-29
 
 Construir la infraestructura comun que usaran todos los modulos futuros de Doble S ERP, antes de implementar clientes, proveedores, inventario, ventas, compras, facturacion o DGII.
 
-Esta fase debe dejar una base tecnica reusable, consistente y segura para que los modulos de negocio no repitan logica ni estructuras.
+Esta fase deja una base tecnica reusable, consistente y segura para que los modulos de negocio no repitan logica ni estructuras.
 
 ## Contexto heredado
 
@@ -30,42 +30,55 @@ La Fase 1.2 dejo implementado el bootstrap tecnico:
 - Manejo resiliente de errores base.
 - SQL Server preparado.
 
-## Alcance de la Fase 1.3
+## Utilidades implementadas
 
-Implementar utilidades transversales para los modulos futuros.
+### Config service
 
-### 1. Respuesta estandar de API
+`apps/api/src/config/config.service.ts` centraliza la configuracion de la API.
 
-Todas las respuestas deben mantener un formato uniforme:
+Los modulos deben leer configuracion con:
 
 ```ts
-{
-  success: boolean;
-  message?: string;
-  data?: T;
-  error?: {
-    code: string;
-    message: string;
-    details?: unknown;
-  };
-  meta?: Record<string, unknown>;
-}
+config.get("api.port");
+config.get("jwt.secret");
+config.get("sql.host");
+config.get("sql.database");
+config.get("sql.user");
+config.get("sql.password");
 ```
 
-Debe evitarse que cada controlador arme respuestas con formatos distintos.
+El servicio valida variables requeridas al iniciar y detiene la API con un mensaje claro si falta configuracion obligatoria. Fuera de este servicio no se debe leer `process.env` directamente.
 
-### 2. Manejo centralizado de errores
+### Clock service
 
-Crear una clase base `AppError` con:
+`apps/api/src/utils/clock.ts` centraliza fechas:
 
-- `statusCode`
-- `code`
+- `clock.now()`
+- `clock.utcNow()`
+- `clock.today()`
+- `clock.isoNow()`
+- `clock.addMilliseconds()`
+- `clock.parse()`
+
+La auditoria y los modulos futuros deben usar este servicio en lugar de fechas dispersas.
+
+### Response builder
+
+El contrato compartido `ApiResponse<T>` soporta:
+
+- `success`
 - `message`
-- `details` opcional
-- `isOperational`
+- `data`
+- `error`
+- `meta`
 
-Crear errores especificos reutilizables:
+Los controladores deben usar `apps/api/src/utils/responseBuilder.ts` para evitar formatos distintos. `api-response.ts` queda como compatibilidad y delega al builder unico.
 
+### Errores
+
+Se agrego una jerarquia central en `apps/api/src/errors`:
+
+- `AppError`
 - `BadRequestError`
 - `UnauthorizedError`
 - `ForbiddenError`
@@ -73,44 +86,33 @@ Crear errores especificos reutilizables:
 - `ConflictError`
 - `ValidationError`
 
-El middleware de errores debe:
+Los middlewares de error convierten errores operacionales y errores de validacion en respuestas JSON consistentes sin exponer stack traces, credenciales ni detalles internos.
 
-- No exponer stack trace en produccion.
-- No exponer credenciales.
-- Responder JSON consistente.
-- Registrar errores de forma controlada.
+### Logger
 
-### 3. Logger base
-
-Agregar un logger reutilizable para API.
-
-Debe soportar niveles:
+`apps/api/src/utils/logger.ts` provee:
 
 - `debug`
 - `info`
 - `warn`
 - `error`
 
-Debe estar preparado para reemplazarse mas adelante por una libreria profesional si se desea.
+El servidor usa el logger al iniciar. Los modulos futuros deben evitar `console.log` disperso.
 
-No usar `console.log` disperso en los modulos futuros.
+### Validacion
 
-### 4. Validacion de entrada
-
-Agregar una estrategia de validacion con `zod`.
-
-Crear helper/middleware reutilizable para validar:
+`apps/api/src/utils/validateRequest.ts` permite validar con `zod`:
 
 - `body`
 - `params`
 - `query`
-- `headers` cuando sea necesario
+- `headers`
 
-Si la validacion falla, debe responder HTTP 400 con formato estandar.
+Los errores de validacion se responden como HTTP 400 con formato estandar.
 
-### 5. Paginacion estandar
+### Paginacion
 
-Crear tipos y utilidades para paginacion:
+`apps/api/src/utils/pagination.ts` y `packages/shared/src/pagination.ts` definen:
 
 - `page`
 - `pageSize`
@@ -119,120 +121,99 @@ Crear tipos y utilidades para paginacion:
 - `totalItems`
 - `totalPages`
 
-Reglas:
+Reglas aplicadas:
 
 - `page` minimo 1.
 - `pageSize` minimo 1.
-- `pageSize` maximo recomendado 100.
-- Valores por defecto seguros.
+- `pageSize` maximo 100.
+- valores por defecto seguros.
 
-### 6. Ordenamiento estandar
+### Ordenamiento
 
-Crear utilidades para ordenar resultados:
+`apps/api/src/utils/sorting.ts` valida:
 
-- `sortBy`
-- `sortDirection`
+- `sortBy` contra una lista permitida.
+- `sortDirection` solo como `asc` o `desc`.
 
-Reglas:
+Los modulos futuros deben mapear columnas permitidas y no concatenar valores de usuario directamente en SQL.
 
-- Solo permitir columnas definidas por cada modulo.
-- Evitar SQL injection.
-- `sortDirection` solo puede ser `asc` o `desc`.
+### Filtros base
 
-### 7. Filtros base
-
-Preparar tipos para filtros comunes:
+`packages/shared/src/filters.ts` y `apps/api/src/utils/filters.ts` preparan filtros comunes:
 
 - `search`
 - `isActive`
 - `createdFrom`
 - `createdTo`
 
-No implementar filtros de clientes ni inventario todavia.
+No se implementaron filtros de modulos funcionales.
 
-### 8. Contexto SaaS por solicitud
+### Contexto SaaS
 
-Estandarizar el tipo de contexto de solicitud para:
+`RequestContext` estandariza:
 
-- `TenantId`
-- `CompanyId`
-- `UserId`
+- `tenantId`
+- `companyId`
+- `userId`
 - `jwtId`
-- permisos futuros
+- `permissions`
+- `requestId`
+- `correlationId`
 
-No implementar autenticacion nueva en esta fase, solo preparar tipos y helpers.
+`apps/api/src/middlewares/request-context.middleware.ts` asigna `requestId` y `correlationId` por solicitud y los expone como headers. `apps/api/src/utils/requestContext.ts` lee esos valores desde la solicitud actual sin crear autenticacion nueva.
 
-### 9. BaseRepository conceptual
+### Base SQL Repository
 
-Crear una base reusable para repositorios SQL Server, sin crear modulos de negocio.
+`apps/api/src/repositories/BaseSqlRepository.ts` prepara una base reusable para:
 
-Debe incluir helpers seguros para:
+- obtener el pool SQL Server actual.
+- ejecutar queries parametrizadas.
+- ejecutar stored procedures.
+- ejecutar transacciones.
+- manejar errores SQL sin exponer mensajes internos.
+- centralizar acceso seguro a SQL Server.
 
-- Ejecutar queries parametrizadas.
-- Manejar transacciones.
-- Obtener pool.
-- Evitar SQL dinamico inseguro.
+No contiene CRUD de modulos de negocio.
 
-No crear CRUD completo de clientes/proveedores todavia.
+### Base Service
 
-### 10. BaseService conceptual
+`apps/api/src/services/BaseService.ts` centraliza helpers comunes para servicios futuros:
 
-Crear estructura base para servicios futuros:
+- validar existencia de recursos.
+- validar reglas de negocio comunes.
+- separar controller, service y repository.
 
-- Validacion de reglas comunes.
-- Manejo de errores de negocio.
-- Separacion clara de controlador, servicio y repositorio.
+No contiene reglas de negocio especificas.
 
-### 11. Auditoria preparada
+### Auditoria
 
-Preparar helper para registrar eventos funcionales futuros, sin implementar eventos especificos de modulos.
-
-Debe aceptar:
+`apps/api/src/utils/audit.ts` prepara `auditEvent` para registrar eventos funcionales futuros con:
 
 - `tenantId`
 - `companyId`
 - `userId`
 - `action`
-- `entityName`
+- `entity` o `entityName`
 - `entityId`
 - `metadata`
+- `timestamp`
 
-No debe fallar el proceso principal si el registro de auditoria falla; debe registrarse warning.
+Si el registro falla, se emite warning y no se rompe el flujo principal.
 
-### 12. Documentacion
+## Restricciones respetadas
 
-Actualizar documentacion tecnica de la fase explicando:
-
-- Utilidades creadas.
-- Como deben usarlas los modulos futuros.
-- Restricciones respetadas.
-
-## Reglas obligatorias
-
-No implementar todavia:
-
-- Clientes
-- Proveedores
-- Inventario
-- Ventas
-- Compras
-- Caja y bancos
-- Facturacion
-- DGII
-- POS
-- Contabilidad
-- Reportes funcionales
-
-No agregar:
-
-- Datos quemados.
-- Credenciales reales.
-- Tablas nuevas de negocio.
-- Endpoints de modulos funcionales.
+- No se implementaron clientes.
+- No se implementaron proveedores.
+- No se implemento inventario.
+- No se implementaron ventas.
+- No se implementaron compras.
+- No se implemento facturacion.
+- No se implemento DGII.
+- No se agregaron datos quemados.
+- No se agregaron credenciales reales.
+- No se agregaron endpoints funcionales nuevos.
 
 ## Criterios de aceptacion
-
-La fase se considera completada cuando:
 
 - Existe manejo centralizado de errores con `AppError`.
 - Existe logger base.
