@@ -321,3 +321,163 @@ La fase se considera completada cuando:
 - `npm run build` pasa.
 - Los endpoints de health/version siguen funcionando.
 - No se implementaron modulos fuera de alcance.
+
+## Implementacion
+
+### Modulo backend
+
+Se agrego el modulo:
+
+```text
+apps/api/src/modules/master-data
+```
+
+Con estructura:
+
+```text
+api/
+application/
+domain/
+infrastructure/
+validators/
+```
+
+### CatalogDefinition
+
+Las definiciones viven en:
+
+```text
+apps/api/src/modules/master-data/domain/catalog-definition.ts
+```
+
+Cada catalogo declara:
+
+- `catalogCode`
+- `displayName`
+- `tableName`
+- columnas fisicas permitidas
+- columnas permitidas para busqueda
+- columnas permitidas para ordenamiento
+- permisos requeridos
+- `moduleCode`
+- alcance tenant/company
+- licencia o feature flag opcional
+
+Para registrar un catalogo nuevo se debe agregar una entrada en `catalogDefinitions` y declarar solo columnas permitidas. El repositorio generico solo usa valores provenientes de esta definicion, no columnas libres enviadas por el usuario.
+
+### Repositorio y servicio base
+
+Se agregaron:
+
+- `apps/api/src/modules/master-data/infrastructure/BaseCatalogRepository.ts`
+- `apps/api/src/modules/master-data/application/BaseCatalogService.ts`
+
+El repositorio usa `BaseSqlRepository` y soporta:
+
+- listar con paginacion
+- obtener por id
+- obtener por codigo
+- validar codigo unico
+- crear
+- actualizar
+- activar
+- desactivar
+
+El servicio usa `BaseService` y centraliza:
+
+- validacion de codigo unico
+- errores consistentes
+- auditoria funcional
+- contexto tenant/company
+
+### Router generico
+
+Se agrego:
+
+```text
+apps/api/src/modules/master-data/api/routes/master-data.routes.ts
+```
+
+Montado bajo:
+
+```text
+/api/master-data
+```
+
+Endpoints:
+
+- `GET /api/master-data/:catalog`
+- `GET /api/master-data/:catalog/:id`
+- `POST /api/master-data/:catalog`
+- `PUT /api/master-data/:catalog/:id`
+- `DELETE /api/master-data/:catalog/:id`
+- `PATCH /api/master-data/:catalog/:id/activate`
+- `PATCH /api/master-data/:catalog/:id/deactivate`
+
+`DELETE` ejecuta desactivacion logica.
+
+### Catalogos iniciales
+
+Se registraron solo catalogos tecnicos permitidos:
+
+- `currencies`
+- `payment-terms`
+- `tax-categories`
+- `units-of-measure`
+
+No se implementaron clientes, proveedores, productos ni inventario.
+
+### Migracion
+
+Se agrego:
+
+```text
+database/sqlserver/migrations/005_master_data_engine.sql
+```
+
+Crea:
+
+- `core.Currencies`
+- `core.PaymentTerms`
+- `fiscal.TaxCategories`
+- `core.UnitsOfMeasure`
+
+Cada tabla incluye:
+
+- `TenantId`
+- `CompanyId`
+- `Code`
+- `Name`
+- `Description`
+- `IsActive`
+- `CreatedAt`
+- `UpdatedAt`
+- `CreatedBy`
+- `UpdatedBy`
+- indices utiles
+- restriccion unica por tenant/company/code
+
+No se insertaron datos obligatorios quemados.
+
+### Seguridad y auditoria
+
+El router usa:
+
+- `requireAuth`
+- `requireTenantContext`
+- `requirePermission`
+- `requireLicensedModule` cuando la definicion lo requiera
+- `requireFeatureFlag` cuando la definicion lo requiera
+- `RequestContext`
+- `ResponseBuilder`
+- validacion Zod
+- `auditEvent`
+
+Eventos registrados:
+
+- `MASTER_DATA_ITEM_CREATED`
+- `MASTER_DATA_ITEM_UPDATED`
+- `MASTER_DATA_ITEM_ACTIVATED`
+- `MASTER_DATA_ITEM_DEACTIVATED`
+
+La auditoria no rompe el flujo principal si falla.
