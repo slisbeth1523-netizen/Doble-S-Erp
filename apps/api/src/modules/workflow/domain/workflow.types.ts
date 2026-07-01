@@ -62,3 +62,39 @@ export type WorkflowTransitionCreateInput = WorkflowDefinitionCreateInput & {
   fromStateId: string;
   toStateId: string;
 };
+
+export type WorkflowEntityState = {
+  entityStateId: string;
+  tenantId: string;
+  companyId?: string | null;
+  workflowDefinitionId: string;
+  entityName: string;
+  entityId: string;
+  currentStateId: string;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt?: Date | null;
+  createdBy?: string | null;
+  updatedBy?: string | null;
+};
+
+export type WorkflowExecutionRequest = {
+  workflowDefinitionId: string;
+  entityName: string;
+  entityId: string;
+  transitionId: string;
+  comment?: string | null;
+};
+
+export type WorkflowTransitionExecutionContext = WorkflowContext & {
+  workflowDefinitionId: string;
+  entityName: string;
+  entityId: string;
+};
+
+export type WorkflowExecutionResult = {
+  entityState: WorkflowEntityState;
+  previousStateId: string;
+  newStateId: string;
+  transition: WorkflowTransition;
+};
