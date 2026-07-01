@@ -1,4 +1,5 @@
 import { ConflictError } from "../../../errors/index.js";
+import { domainEventPublisher } from "../../events/application/DomainEventPublisher.js";
 import { BaseService } from "../../../services/BaseService.js";
 import { auditEvent } from "../../../utils/audit.js";
 import { logger } from "../../../utils/logger.js";
@@ -152,6 +153,13 @@ export class WorkflowExecutionService extends BaseService {
       )
     );
     await this.prepareActionsSafely(context, found, validTransition);
+    await this.publishTransitionCompletedSafely(
+      context,
+      found.entityStateId,
+      validTransition.workflowTransitionId,
+      currentState.currentStateId,
+      validTransition.toStateId
+    );
 
     return {
       entityState: found,
@@ -371,6 +379,51 @@ export class WorkflowExecutionService extends BaseService {
         tenantId: context.tenantId,
         workflowDefinitionId: context.workflowDefinitionId,
         transitionId: transition.workflowTransitionId
+      });
+    }
+  }
+
+  private async publishTransitionCompletedSafely(
+    context: WorkflowTransitionExecutionContext,
+    entityStateId: string,
+    transitionId: string,
+    previousStateId: string,
+    newStateId: string
+  ) {
+    try {
+      await domainEventPublisher.publish({
+        tenantId: context.tenantId,
+        companyId: context.companyId,
+        eventName: "WorkflowTransitionCompleted",
+        eventType: "WORKFLOW_TRANSITION_COMPLETED",
+        sourceModule: "workflow",
+        sourceEntity: context.entityName,
+        sourceEntityId: context.entityId,
+        payload: {
+          workflowDefinitionId: context.workflowDefinitionId,
+          transitionId,
+          entityName: context.entityName,
+          entityId: context.entityId,
+          previousStateId,
+          newStateId
+        },
+        metadata: {
+          entityStateId,
+          requestId: context.requestId,
+          correlationId: context.correlationId
+        },
+        requestId: context.requestId,
+        correlationId: context.correlationId,
+        createdBy: context.userId
+      });
+    } catch {
+      // TODO: move workflow transition and domain event insert into a transactional outbox.
+      logger.warn("Workflow transition domain event could not be published", {
+        tenantId: context.tenantId,
+        workflowDefinitionId: context.workflowDefinitionId,
+        transitionId,
+        entityName: context.entityName,
+        entityId: context.entityId
       });
     }
   }
