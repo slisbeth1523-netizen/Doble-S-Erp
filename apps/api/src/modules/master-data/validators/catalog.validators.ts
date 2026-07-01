@@ -28,10 +28,20 @@ export const catalogQuerySchema = z.object({
   sortDirection: z.enum(["asc", "desc"]).optional()
 });
 
+export const catalogLookupQuerySchema = z.object({
+  search: z.string().max(160).optional(),
+  page: z.coerce.number().int().positive().optional(),
+  pageSize: z.coerce.number().int().positive().max(100).optional()
+});
+
 export const catalogPayloadSchema = z.object({
   code: z.string().min(1).max(80),
   name: z.string().min(1).max(160),
   description: z.string().max(250).nullable().optional(),
   companyId: z.string().uuid().nullable().optional(),
   isActive: z.boolean().optional()
+});
+
+export const catalogImportPreviewSchema = z.object({
+  rows: z.array(z.record(z.string(), z.unknown())).max(100).optional()
 });

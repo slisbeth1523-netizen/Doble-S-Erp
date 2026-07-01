@@ -18,6 +18,8 @@ import { baseCatalogService } from "../../application/BaseCatalogService.js";
 import type { CatalogDefinition, CatalogPermissionSet } from "../../domain/catalog-definition.js";
 import { getCatalogDefinition } from "../../domain/catalog-definition.js";
 import {
+  catalogImportPreviewSchema,
+  catalogLookupQuerySchema,
   catalogParamsSchema,
   catalogPayloadSchema,
   catalogQuerySchema
@@ -88,6 +90,64 @@ function catalogContext(request: Request) {
     correlationId: context.correlationId
   };
 }
+
+masterDataRouter.get(
+  "/:catalog/metadata",
+  validateRequest({ params: catalogParamsSchema }),
+  requireCatalogAccess("read"),
+  asyncHandler(async (request, response) => {
+    const metadata = baseCatalogService.getMetadata(resolveCatalog(request));
+    sendSuccess(response, metadata);
+  })
+);
+
+masterDataRouter.get(
+  "/:catalog/lookup",
+  validateRequest({ params: catalogParamsSchema, query: catalogLookupQuerySchema }),
+  requireCatalogAccess("lookup"),
+  asyncHandler(async (request, response) => {
+    const definition = resolveCatalog(request);
+    const pagination = getPagination(request.query);
+    const context = catalogContext(request);
+    const result = await baseCatalogService.lookup(definition, {
+      tenantId: context.tenantId,
+      companyId: context.companyId,
+      filters: {
+        search: typeof request.query.search === "string" ? request.query.search : undefined,
+        isActive: true
+      },
+      pagination,
+      sorting: {
+        sortBy: definition.defaultSortBy,
+        sortDirection: "asc"
+      }
+    });
+
+    sendSuccess(response, result.items, 200, undefined, {
+      pagination: getPaginationMeta(pagination, result.totalItems)
+    });
+  })
+);
+
+masterDataRouter.get(
+  "/:catalog/export-template",
+  validateRequest({ params: catalogParamsSchema }),
+  requireCatalogAccess("export"),
+  asyncHandler(async (request, response) => {
+    const contract = baseCatalogService.getExportTemplate(resolveCatalog(request));
+    sendSuccess(response, contract);
+  })
+);
+
+masterDataRouter.post(
+  "/:catalog/import-preview",
+  validateRequest({ params: catalogParamsSchema, body: catalogImportPreviewSchema }),
+  requireCatalogAccess("import"),
+  asyncHandler(async (request, response) => {
+    const contract = baseCatalogService.getImportPreview(resolveCatalog(request));
+    sendSuccess(response, contract, 202);
+  })
+);
 
 masterDataRouter.get(
   "/:catalog",
