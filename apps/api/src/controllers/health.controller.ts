@@ -1,14 +1,19 @@
 import type { Request, Response } from "express";
 
 import { getApiHealth, getDbHealth } from "../services/health.service.js";
-import { ok } from "../utils/api-response.js";
+import { sendFailure, sendSuccess } from "../utils/responseBuilder.js";
 
 export function healthController(_request: Request, response: Response) {
-  response.json(ok(getApiHealth()));
+  sendSuccess(response, getApiHealth());
 }
 
 export async function databaseHealthController(_request: Request, response: Response) {
   const health = await getDbHealth();
-  response.json(ok(health));
-}
 
+  if (!health.connected) {
+    sendFailure(response, "Database unavailable", health, 503);
+    return;
+  }
+
+  sendSuccess(response, health);
+}

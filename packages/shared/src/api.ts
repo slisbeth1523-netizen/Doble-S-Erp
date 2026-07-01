@@ -9,6 +9,7 @@ export type ApiResponse<T> = {
   message?: string;
   data?: T;
   error?: ApiError;
+  meta?: Record<string, unknown>;
 };
 
 export type PaginatedResponse<T> = ApiResponse<{
@@ -18,4 +19,3 @@ export type PaginatedResponse<T> = ApiResponse<{
   totalItems: number;
   totalPages: number;
 }>;
-

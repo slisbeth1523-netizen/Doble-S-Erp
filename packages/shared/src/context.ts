@@ -12,3 +12,12 @@ export type UserContext = TenantContext & {
   roles: string[];
 };
 
+export type RequestContext = {
+  tenantId?: string;
+  companyId?: string;
+  userId?: string;
+  jwtId?: string;
+  permissions?: string[];
+  requestId: string;
+  correlationId: string;
+};
