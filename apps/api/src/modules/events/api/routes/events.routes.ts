@@ -7,11 +7,14 @@ import { validateRequest } from "../../../../utils/validateRequest.js";
 import { requireTenantContext } from "../../../core/api/tenant-context.middleware.js";
 import { requireAuth } from "../../../security/api/auth.middleware.js";
 import { requirePermission } from "../../../security/api/permission.middleware.js";
+import { domainEventProcessorService } from "../../application/DomainEventProcessorService.js";
 import { domainEventService } from "../../application/DomainEventService.js";
 import { eventSubscriptionService } from "../../application/EventSubscriptionService.js";
 import type { DomainEventStatus, EventContext } from "../../domain/events.types.js";
 import {
   domainEventIdParamsSchema,
+  domainEventNameParamsSchema,
+  domainEventProcessBatchSchema,
   domainEventPublishSchema,
   domainEventQuerySchema,
   eventSubscriptionCreateSchema
@@ -79,6 +82,32 @@ eventsRouter.post(
   })
 );
 
+eventsRouter.post(
+  "/process",
+  validateRequest({ body: domainEventProcessBatchSchema }),
+  requirePermission("events", "events.process"),
+  asyncHandler(async (request, response) => {
+    const result = await domainEventProcessorService.processPendingBatch(
+      eventContext(request),
+      request.body.limit
+    );
+    sendSuccess(response, result);
+  })
+);
+
+eventsRouter.get(
+  "/subscriptions/active/:eventName",
+  validateRequest({ params: domainEventNameParamsSchema }),
+  requirePermission("events", "events.subscriptions.read"),
+  asyncHandler(async (request, response) => {
+    const subscriptions = await domainEventProcessorService.listActiveSubscriptions(
+      eventContext(request),
+      request.params.eventName!
+    );
+    sendSuccess(response, subscriptions);
+  })
+);
+
 eventsRouter.get(
   "/subscriptions",
   requirePermission("events", "events.subscriptions.read"),
@@ -105,5 +134,18 @@ eventsRouter.get(
   asyncHandler(async (request, response) => {
     const event = await domainEventService.getById(eventContext(request), request.params.eventId!);
     sendSuccess(response, event);
+  })
+);
+
+eventsRouter.post(
+  "/:eventId/retry",
+  validateRequest({ params: domainEventIdParamsSchema }),
+  requirePermission("events", "events.retry"),
+  asyncHandler(async (request, response) => {
+    const result = await domainEventProcessorService.retryEvent(
+      eventContext(request),
+      request.params.eventId!
+    );
+    sendSuccess(response, result);
   })
 );
