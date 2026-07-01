@@ -4,7 +4,31 @@ Fecha: 2026-06-29
 
 ## Objetivo
 
-Construir infraestructura transversal reusable para futuros modulos de Doble S ERP sin implementar clientes, proveedores, inventario, ventas, compras, facturacion ni DGII.
+Construir la infraestructura comun que usaran todos los modulos futuros de Doble S ERP, antes de implementar clientes, proveedores, inventario, ventas, compras, facturacion o DGII.
+
+Esta fase deja una base tecnica reusable, consistente y segura para que los modulos de negocio no repitan logica ni estructuras.
+
+## Contexto heredado
+
+La Fase 1.1 dejo definida la fundacion SaaS:
+
+- Multi-tenant por `TenantId`.
+- Multiempresa por `CompanyId`.
+- Sesiones persistidas.
+- JWT con `JwtId`.
+- Validacion de acceso por empresa.
+- Permisos base.
+- Auditoria funcional y tecnica.
+
+La Fase 1.2 dejo implementado el bootstrap tecnico:
+
+- Monorepo.
+- API Express + TypeScript.
+- Frontend React + Vite + TypeScript.
+- Packages compartidos.
+- Health checks.
+- Manejo resiliente de errores base.
+- SQL Server preparado.
 
 ## Utilidades implementadas
 
@@ -40,7 +64,7 @@ La auditoria y los modulos futuros deben usar este servicio en lugar de fechas d
 
 ### Response builder
 
-El contrato compartido `ApiResponse<T>` ahora soporta:
+El contrato compartido `ApiResponse<T>` soporta:
 
 - `success`
 - `message`
@@ -62,7 +86,7 @@ Se agrego una jerarquia central en `apps/api/src/errors`:
 - `ConflictError`
 - `ValidationError`
 
-Los middlewares de error convierten errores operacionales y errores de validacion en respuestas JSON consistentes sin exponer stack traces ni detalles internos.
+Los middlewares de error convierten errores operacionales y errores de validacion en respuestas JSON consistentes sin exponer stack traces, credenciales ni detalles internos.
 
 ### Logger
 
@@ -102,7 +126,7 @@ Reglas aplicadas:
 - `page` minimo 1.
 - `pageSize` minimo 1.
 - `pageSize` maximo 100.
-- valor por defecto seguro.
+- valores por defecto seguros.
 
 ### Ordenamiento
 
@@ -188,3 +212,19 @@ Si el registro falla, se emite warning y no se rompe el flujo principal.
 - No se agregaron datos quemados.
 - No se agregaron credenciales reales.
 - No se agregaron endpoints funcionales nuevos.
+
+## Criterios de aceptacion
+
+- Existe manejo centralizado de errores con `AppError`.
+- Existe logger base.
+- Existe validacion reutilizable con `zod`.
+- Existen utilidades de paginacion.
+- Existen utilidades de ordenamiento seguro.
+- Existen tipos de filtros comunes.
+- Existe contexto SaaS estandarizado.
+- Existe base reusable para repositorios SQL Server.
+- Existe helper preparado para auditoria funcional.
+- Todos los endpoints existentes siguen funcionando.
+- `npm run typecheck` pasa.
+- `npm run build` pasa.
+- No se implementaron modulos fuera de alcance.
