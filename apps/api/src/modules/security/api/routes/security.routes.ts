@@ -10,6 +10,7 @@ import { sendSuccess } from "../../../../utils/responseBuilder.js";
 import { validateRequest } from "../../../../utils/validateRequest.js";
 import { requireTenantContext } from "../../../core/api/tenant-context.middleware.js";
 import { enterpriseSecurityService } from "../../application/enterprise-security.service.js";
+import { securityEngineService } from "../../application/security-engine.service.js";
 import { requireAuth } from "../auth.middleware.js";
 import { requirePermission } from "../permission.middleware.js";
 
@@ -18,7 +19,11 @@ const idParamSchema = z.object({
   roleId: z.string().uuid().optional(),
   permissionId: z.string().uuid().optional(),
   moduleId: z.string().uuid().optional(),
-  actionId: z.string().uuid().optional()
+  actionId: z.string().uuid().optional(),
+  navigationId: z.string().uuid().optional(),
+  policyId: z.string().uuid().optional(),
+  licenseId: z.string().uuid().optional(),
+  flagId: z.string().uuid().optional()
 });
 
 const createUserSchema = z.object({
@@ -65,6 +70,41 @@ const rolePermissionSchema = z.object({
   permissionId: z.string().uuid()
 });
 
+const navigationSchema = z.object({
+  tenantId: z.string().uuid().nullable().optional(),
+  moduleId: z.string().uuid().nullable().optional(),
+  parentNavigationId: z.string().uuid().nullable().optional(),
+  label: z.string().min(1).max(160),
+  route: z.string().max(250).nullable().optional(),
+  icon: z.string().max(80).nullable().optional(),
+  displayOrder: z.number().int().default(0),
+  isVisible: z.boolean().default(true),
+  isActive: z.boolean().default(true),
+  requiredPermissionCode: z.string().max(180).nullable().optional()
+});
+
+const policySchema = z.object({
+  code: z.string().min(1).max(80),
+  name: z.string().min(1).max(160),
+  description: z.string().max(250).nullable().optional(),
+  scopeCode: z.enum(["OWN_RECORDS", "BRANCH_ONLY", "COMPANY_ONLY", "TENANT_WIDE"]),
+  isActive: z.boolean().default(true)
+});
+
+const moduleLicenseSchema = z.object({
+  moduleId: z.string().uuid(),
+  startsAt: z.string().datetime().nullable().optional(),
+  expiresAt: z.string().datetime().nullable().optional()
+});
+
+const featureFlagSchema = z.object({
+  code: z.string().min(1).max(120),
+  name: z.string().min(1).max(160),
+  description: z.string().max(250).nullable().optional(),
+  isEnabled: z.boolean().default(false),
+  isActive: z.boolean().default(true)
+});
+
 export const securityRouter = Router();
 
 securityRouter.use(requireAuth, requireTenantContext);
@@ -107,6 +147,228 @@ async function auditSecurityChange(
     }
   });
 }
+
+securityRouter.get(
+  "/me/context",
+  asyncHandler(async (request, response) => {
+    const context = getRequestContext(request);
+    const userContext = await securityEngineService.getUserContext({
+      tenantId: tenantIdFrom(request),
+      userId: request.user!.userId,
+      companyId: context.companyId,
+      user: request.user
+    });
+
+    sendSuccess(response, userContext);
+  })
+);
+
+securityRouter.get(
+  "/navigation",
+  requirePermission("security", "navigation.read"),
+  asyncHandler(async (request, response) => {
+    const navigation = await securityEngineService.listNavigation(tenantIdFrom(request));
+    sendSuccess(response, navigation);
+  })
+);
+
+securityRouter.post(
+  "/navigation",
+  requirePermission("security", "navigation.create"),
+  validateRequest({ body: navigationSchema }),
+  asyncHandler(async (request, response) => {
+    const navigation = await securityEngineService.createNavigation(request.body);
+    await auditSecurityChange(
+      request,
+      "SECURITY_NAVIGATION_CREATED",
+      "security.NavigationItems",
+      navigation.NavigationId
+    );
+    sendSuccess(response, navigation, 201);
+  })
+);
+
+securityRouter.put(
+  "/navigation/:navigationId",
+  requirePermission("security", "navigation.update"),
+  validateRequest({ params: idParamSchema, body: navigationSchema }),
+  asyncHandler(async (request, response) => {
+    const navigation = await securityEngineService.updateNavigation({
+      navigationId: request.params.navigationId!,
+      ...request.body
+    });
+    await auditSecurityChange(
+      request,
+      "SECURITY_NAVIGATION_UPDATED",
+      "security.NavigationItems",
+      navigation.NavigationId
+    );
+    sendSuccess(response, navigation);
+  })
+);
+
+securityRouter.delete(
+  "/navigation/:navigationId",
+  requirePermission("security", "navigation.delete"),
+  validateRequest({ params: idParamSchema }),
+  asyncHandler(async (request, response) => {
+    const navigation = await securityEngineService.deleteNavigation(request.params.navigationId!);
+    await auditSecurityChange(
+      request,
+      "SECURITY_NAVIGATION_DEACTIVATED",
+      "security.NavigationItems",
+      navigation.NavigationId
+    );
+    sendSuccess(response, navigation);
+  })
+);
+
+securityRouter.get(
+  "/policies",
+  requirePermission("security", "policies.read"),
+  asyncHandler(async (_request, response) => {
+    const policies = await securityEngineService.listPolicies();
+    sendSuccess(response, policies);
+  })
+);
+
+securityRouter.post(
+  "/policies",
+  requirePermission("security", "policies.create"),
+  validateRequest({ body: policySchema }),
+  asyncHandler(async (request, response) => {
+    const policy = await securityEngineService.createPolicy(request.body);
+    await auditSecurityChange(request, "SECURITY_POLICY_CREATED", "security.AccessPolicies", policy.PolicyId);
+    sendSuccess(response, policy, 201);
+  })
+);
+
+securityRouter.put(
+  "/policies/:policyId",
+  requirePermission("security", "policies.update"),
+  validateRequest({ params: idParamSchema, body: policySchema }),
+  asyncHandler(async (request, response) => {
+    const policy = await securityEngineService.updatePolicy({
+      policyId: request.params.policyId!,
+      ...request.body
+    });
+    await auditSecurityChange(request, "SECURITY_POLICY_UPDATED", "security.AccessPolicies", policy.PolicyId);
+    sendSuccess(response, policy);
+  })
+);
+
+securityRouter.delete(
+  "/policies/:policyId",
+  requirePermission("security", "policies.delete"),
+  validateRequest({ params: idParamSchema }),
+  asyncHandler(async (request, response) => {
+    const policy = await securityEngineService.deletePolicy(request.params.policyId!);
+    await auditSecurityChange(
+      request,
+      "SECURITY_POLICY_DEACTIVATED",
+      "security.AccessPolicies",
+      policy.PolicyId
+    );
+    sendSuccess(response, policy);
+  })
+);
+
+securityRouter.get(
+  "/licenses/modules",
+  requirePermission("security", "licenses.read"),
+  asyncHandler(async (request, response) => {
+    const licenses = await securityEngineService.listModuleLicenses(tenantIdFrom(request));
+    sendSuccess(response, licenses);
+  })
+);
+
+securityRouter.post(
+  "/licenses/modules",
+  requirePermission("security", "licenses.assign"),
+  validateRequest({ body: moduleLicenseSchema }),
+  asyncHandler(async (request, response) => {
+    const license = await securityEngineService.createModuleLicense({
+      tenantId: tenantIdFrom(request),
+      ...request.body
+    });
+    await auditSecurityChange(
+      request,
+      "SECURITY_MODULE_LICENSE_ASSIGNED",
+      "security.TenantModuleLicenses",
+      license.LicenseId
+    );
+    sendSuccess(response, license, 201);
+  })
+);
+
+securityRouter.delete(
+  "/licenses/modules/:licenseId",
+  requirePermission("security", "licenses.revoke"),
+  validateRequest({ params: idParamSchema }),
+  asyncHandler(async (request, response) => {
+    const license = await securityEngineService.deleteModuleLicense(
+      tenantIdFrom(request),
+      request.params.licenseId!
+    );
+    await auditSecurityChange(
+      request,
+      "SECURITY_MODULE_LICENSE_REVOKED",
+      "security.TenantModuleLicenses",
+      license.LicenseId
+    );
+    sendSuccess(response, license);
+  })
+);
+
+securityRouter.get(
+  "/feature-flags",
+  requirePermission("security", "feature-flags.read"),
+  asyncHandler(async (request, response) => {
+    const flags = await securityEngineService.listFeatureFlags(tenantIdFrom(request));
+    sendSuccess(response, flags);
+  })
+);
+
+securityRouter.post(
+  "/feature-flags",
+  requirePermission("security", "feature-flags.create"),
+  validateRequest({ body: featureFlagSchema }),
+  asyncHandler(async (request, response) => {
+    const flag = await securityEngineService.createFeatureFlag(request.body);
+    await auditSecurityChange(request, "SECURITY_FEATURE_FLAG_CREATED", "security.FeatureFlags", flag.FlagId);
+    sendSuccess(response, flag, 201);
+  })
+);
+
+securityRouter.put(
+  "/feature-flags/:flagId",
+  requirePermission("security", "feature-flags.update"),
+  validateRequest({ params: idParamSchema, body: featureFlagSchema }),
+  asyncHandler(async (request, response) => {
+    const flag = await securityEngineService.updateFeatureFlag({
+      flagId: request.params.flagId!,
+      ...request.body
+    });
+    await auditSecurityChange(request, "SECURITY_FEATURE_FLAG_UPDATED", "security.FeatureFlags", flag.FlagId);
+    sendSuccess(response, flag);
+  })
+);
+
+securityRouter.delete(
+  "/feature-flags/:flagId",
+  requirePermission("security", "feature-flags.delete"),
+  validateRequest({ params: idParamSchema }),
+  asyncHandler(async (request, response) => {
+    const flag = await securityEngineService.deleteFeatureFlag(request.params.flagId!);
+    await auditSecurityChange(
+      request,
+      "SECURITY_FEATURE_FLAG_DEACTIVATED",
+      "security.FeatureFlags",
+      flag.FlagId
+    );
+    sendSuccess(response, flag);
+  })
+);
 
 securityRouter.get(
   "/users",
