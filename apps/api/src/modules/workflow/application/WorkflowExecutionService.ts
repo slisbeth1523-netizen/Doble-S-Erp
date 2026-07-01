@@ -7,6 +7,9 @@ import type {
   WorkflowExecutionResult,
   WorkflowTransitionExecutionContext
 } from "../domain/workflow.types.js";
+import { workflowConditionService } from "./WorkflowConditionService.js";
+import { workflowEvaluationService } from "./WorkflowEvaluationService.js";
+import { workflowGuardService } from "./WorkflowGuardService.js";
 import { workflowHistoryService } from "./WorkflowHistoryService.js";
 import { WorkflowDefinitionRepository } from "../infrastructure/WorkflowDefinitionRepository.js";
 import { WorkflowExecutionRepository } from "../infrastructure/WorkflowExecutionRepository.js";
@@ -83,7 +86,8 @@ export class WorkflowExecutionService extends BaseService {
   async executeTransition(
     context: WorkflowTransitionExecutionContext,
     transitionId: string,
-    comment?: string | null
+    comment?: string | null,
+    entityData: Record<string, unknown> = {}
   ): Promise<WorkflowExecutionResult> {
     await this.ensureDefinitionExists(context, context.workflowDefinitionId);
     const currentState = await this.repository.getCurrentEntityState(
@@ -113,6 +117,7 @@ export class WorkflowExecutionService extends BaseService {
     }
 
     const validTransition = this.ensureFound(transition, "Workflow transition not found");
+    await this.ensureTransitionRulesPass(context, validTransition.workflowTransitionId, entityData);
     const updatedState = await this.repository.updateCurrentEntityState({
       tenantId: context.tenantId,
       workflowDefinitionId: context.workflowDefinitionId,
@@ -204,6 +209,90 @@ export class WorkflowExecutionService extends BaseService {
     }
 
     throw new ConflictError("Workflow transition is not valid", undefined, "WORKFLOW_TRANSITION_INVALID");
+  }
+
+  private async ensureTransitionRulesPass(
+    context: WorkflowTransitionExecutionContext,
+    transitionId: string,
+    entityData: Record<string, unknown>
+  ) {
+    const guards = await workflowGuardService.getActiveByTransition(
+      context,
+      context.workflowDefinitionId,
+      transitionId
+    );
+    const guardResults = workflowEvaluationService.evaluateGuards(guards, { entityData });
+    const failedGuard = guardResults.find((result) => !result.passed);
+
+    if (failedGuard) {
+      logger.warn("Workflow transition blocked by guard", {
+        tenantId: context.tenantId,
+        workflowDefinitionId: context.workflowDefinitionId,
+        transitionId,
+        guardCode: failedGuard.guard.code,
+        reason: failedGuard.reason
+      });
+      await auditEvent({
+        tenantId: context.tenantId,
+        companyId: context.companyId,
+        userId: context.userId,
+        action: "WORKFLOW_TRANSITION_BLOCKED_BY_GUARD",
+        entity: "workflow.Guards",
+        entityId: failedGuard.guard.workflowGuardId,
+        metadata: {
+          workflowDefinitionId: context.workflowDefinitionId,
+          transitionId,
+          entityName: context.entityName,
+          entityId: context.entityId,
+          guardCode: failedGuard.guard.code,
+          reason: failedGuard.reason
+        }
+      });
+      throw new ConflictError(
+        failedGuard.reason ?? "Workflow transition blocked by guard",
+        undefined,
+        "WORKFLOW_TRANSITION_BLOCKED_BY_GUARD"
+      );
+    }
+
+    const conditions = await workflowConditionService.getActiveByTransition(
+      context,
+      context.workflowDefinitionId,
+      transitionId
+    );
+    const conditionResults = workflowEvaluationService.evaluateConditions(conditions, { entityData });
+    const failedCondition = conditionResults.find((result) => !result.passed);
+
+    if (failedCondition) {
+      logger.warn("Workflow transition blocked by condition", {
+        tenantId: context.tenantId,
+        workflowDefinitionId: context.workflowDefinitionId,
+        transitionId,
+        conditionCode: failedCondition.condition.code,
+        reason: failedCondition.reason
+      });
+      await auditEvent({
+        tenantId: context.tenantId,
+        companyId: context.companyId,
+        userId: context.userId,
+        action: "WORKFLOW_TRANSITION_BLOCKED_BY_CONDITION",
+        entity: "workflow.Conditions",
+        entityId: failedCondition.condition.workflowConditionId,
+        metadata: {
+          workflowDefinitionId: context.workflowDefinitionId,
+          transitionId,
+          entityName: context.entityName,
+          entityId: context.entityId,
+          conditionCode: failedCondition.condition.code,
+          reason: failedCondition.reason
+        }
+      });
+      throw new ConflictError(
+        failedCondition.reason ?? "Workflow transition blocked by condition",
+        undefined,
+        "WORKFLOW_TRANSITION_BLOCKED_BY_CONDITION"
+      );
+    }
   }
 
   private auditInitialized(

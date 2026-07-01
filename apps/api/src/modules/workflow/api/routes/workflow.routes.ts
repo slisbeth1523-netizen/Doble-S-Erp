@@ -7,8 +7,10 @@ import { validateRequest } from "../../../../utils/validateRequest.js";
 import { requireTenantContext } from "../../../core/api/tenant-context.middleware.js";
 import { requireAuth } from "../../../security/api/auth.middleware.js";
 import { requirePermission } from "../../../security/api/permission.middleware.js";
+import { workflowConditionService } from "../../application/WorkflowConditionService.js";
 import { workflowDefinitionService } from "../../application/WorkflowDefinitionService.js";
 import { workflowExecutionService } from "../../application/WorkflowExecutionService.js";
+import { workflowGuardService } from "../../application/WorkflowGuardService.js";
 import { workflowHistoryService } from "../../application/WorkflowHistoryService.js";
 import { workflowStateService } from "../../application/WorkflowStateService.js";
 import { workflowTransitionService } from "../../application/WorkflowTransitionService.js";
@@ -17,10 +19,13 @@ import {
   workflowEntityInitializeSchema,
   workflowEntityParamsSchema,
   workflowEntityTransitionSchema,
+  workflowConditionCreateSchema,
+  workflowGuardCreateSchema,
   workflowHistoryQuerySchema,
   workflowCreateSchema,
   workflowIdParamsSchema,
   workflowStateCreateSchema,
+  workflowTransitionParamsSchema,
   workflowTransitionCreateSchema
 } from "../../validators/workflow.validators.js";
 
@@ -153,9 +158,68 @@ workflowRouter.post(
     const result = await workflowExecutionService.executeTransition(
       workflowExecutionContext(request),
       request.body.transitionId,
-      request.body.comment
+      request.body.comment,
+      request.body.entityData
     );
     sendSuccess(response, result);
+  })
+);
+
+workflowRouter.get(
+  "/:workflowId/transitions/:transitionId/guards",
+  validateRequest({ params: workflowTransitionParamsSchema }),
+  requirePermission("workflow", "workflow.guards.read"),
+  asyncHandler(async (request, response) => {
+    const guards = await workflowGuardService.listByTransition(
+      workflowContext(request),
+      request.params.workflowId!,
+      request.params.transitionId!
+    );
+    sendSuccess(response, guards);
+  })
+);
+
+workflowRouter.post(
+  "/:workflowId/transitions/:transitionId/guards",
+  validateRequest({ params: workflowTransitionParamsSchema, body: workflowGuardCreateSchema }),
+  requirePermission("workflow", "workflow.guards.create"),
+  asyncHandler(async (request, response) => {
+    const guard = await workflowGuardService.create(
+      workflowContext(request),
+      request.params.workflowId!,
+      request.params.transitionId!,
+      request.body
+    );
+    sendSuccess(response, guard, 201);
+  })
+);
+
+workflowRouter.get(
+  "/:workflowId/transitions/:transitionId/conditions",
+  validateRequest({ params: workflowTransitionParamsSchema }),
+  requirePermission("workflow", "workflow.conditions.read"),
+  asyncHandler(async (request, response) => {
+    const conditions = await workflowConditionService.listByTransition(
+      workflowContext(request),
+      request.params.workflowId!,
+      request.params.transitionId!
+    );
+    sendSuccess(response, conditions);
+  })
+);
+
+workflowRouter.post(
+  "/:workflowId/transitions/:transitionId/conditions",
+  validateRequest({ params: workflowTransitionParamsSchema, body: workflowConditionCreateSchema }),
+  requirePermission("workflow", "workflow.conditions.create"),
+  asyncHandler(async (request, response) => {
+    const condition = await workflowConditionService.create(
+      workflowContext(request),
+      request.params.workflowId!,
+      request.params.transitionId!,
+      request.body
+    );
+    sendSuccess(response, condition, 201);
   })
 );
 

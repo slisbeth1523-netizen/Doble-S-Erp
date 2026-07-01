@@ -154,3 +154,99 @@ export type WorkflowHistoryListResult = {
   items: WorkflowHistoryEntry[];
   totalItems: number;
 };
+
+export type WorkflowGuardType =
+  | "REQUIRED_FIELD"
+  | "ENTITY_PROPERTY_EQUALS"
+  | "ENTITY_PROPERTY_NOT_EQUALS"
+  | "ENTITY_PROPERTY_MIN"
+  | "ENTITY_PROPERTY_MAX"
+  | "CUSTOM_PLACEHOLDER";
+
+export type WorkflowConditionType =
+  | "FIELD_EXISTS"
+  | "FIELD_EQUALS"
+  | "FIELD_NOT_EQUALS"
+  | "FIELD_GREATER_THAN"
+  | "FIELD_LESS_THAN"
+  | "CUSTOM_PLACEHOLDER";
+
+export type WorkflowGuard = {
+  workflowGuardId: string;
+  tenantId: string;
+  workflowDefinitionId: string;
+  transitionId: string;
+  code: string;
+  name: string;
+  description?: string | null;
+  guardType: WorkflowGuardType;
+  fieldName?: string | null;
+  expectedValue?: string | null;
+  metadataJson?: string | null;
+  errorMessage?: string | null;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt?: Date | null;
+  createdBy?: string | null;
+  updatedBy?: string | null;
+};
+
+export type WorkflowCondition = {
+  workflowConditionId: string;
+  tenantId: string;
+  workflowDefinitionId: string;
+  transitionId: string;
+  code: string;
+  name: string;
+  description?: string | null;
+  conditionType: WorkflowConditionType;
+  fieldName?: string | null;
+  operator?: string | null;
+  expectedValue?: string | null;
+  metadataJson?: string | null;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt?: Date | null;
+  createdBy?: string | null;
+  updatedBy?: string | null;
+};
+
+export type WorkflowGuardCreateInput = {
+  code: string;
+  name: string;
+  description?: string | null;
+  guardType: WorkflowGuardType;
+  fieldName?: string | null;
+  expectedValue?: string | null;
+  metadata?: Record<string, unknown>;
+  errorMessage?: string | null;
+  isActive?: boolean;
+};
+
+export type WorkflowConditionCreateInput = {
+  code: string;
+  name: string;
+  description?: string | null;
+  conditionType: WorkflowConditionType;
+  fieldName?: string | null;
+  operator?: string | null;
+  expectedValue?: string | null;
+  metadata?: Record<string, unknown>;
+  isActive?: boolean;
+};
+
+export type WorkflowEvaluationContext = {
+  entityData: Record<string, unknown>;
+};
+
+export type WorkflowGuardEvaluationResult = {
+  passed: boolean;
+  guard: WorkflowGuard;
+  reason?: string;
+};
+
+export type WorkflowConditionEvaluationResult = {
+  passed: boolean;
+  condition: WorkflowCondition;
+  reason?: string;
+};
