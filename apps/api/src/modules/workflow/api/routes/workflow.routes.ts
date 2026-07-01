@@ -7,6 +7,8 @@ import { validateRequest } from "../../../../utils/validateRequest.js";
 import { requireTenantContext } from "../../../core/api/tenant-context.middleware.js";
 import { requireAuth } from "../../../security/api/auth.middleware.js";
 import { requirePermission } from "../../../security/api/permission.middleware.js";
+import { workflowActionExecutionService } from "../../application/WorkflowActionExecutionService.js";
+import { workflowActionService } from "../../application/WorkflowActionService.js";
 import { workflowConditionService } from "../../application/WorkflowConditionService.js";
 import { workflowDefinitionService } from "../../application/WorkflowDefinitionService.js";
 import { workflowExecutionService } from "../../application/WorkflowExecutionService.js";
@@ -14,8 +16,15 @@ import { workflowGuardService } from "../../application/WorkflowGuardService.js"
 import { workflowHistoryService } from "../../application/WorkflowHistoryService.js";
 import { workflowStateService } from "../../application/WorkflowStateService.js";
 import { workflowTransitionService } from "../../application/WorkflowTransitionService.js";
-import type { WorkflowContext, WorkflowTransitionExecutionContext } from "../../domain/workflow.types.js";
+import type {
+  WorkflowActionExecutionStatus,
+  WorkflowContext,
+  WorkflowTransitionExecutionContext
+} from "../../domain/workflow.types.js";
 import {
+  workflowActionCreateSchema,
+  workflowActionExecutionQuerySchema,
+  workflowActionExecutionStatusParamsSchema,
   workflowEntityInitializeSchema,
   workflowEntityParamsSchema,
   workflowEntityTransitionSchema,
@@ -71,6 +80,17 @@ function historyQuery(request: Parameters<typeof getRequestContext>[0]) {
   };
 }
 
+function paginationQuery(request: Parameters<typeof getRequestContext>[0]) {
+  const page = Number(request.query.page ?? 1);
+  const pageSize = Number(request.query.pageSize ?? 20);
+
+  return {
+    page,
+    pageSize,
+    offset: (page - 1) * pageSize
+  };
+}
+
 workflowRouter.get(
   "/",
   requirePermission("workflow", "workflow.definitions.read"),
@@ -87,6 +107,28 @@ workflowRouter.post(
   asyncHandler(async (request, response) => {
     const definition = await workflowDefinitionService.create(workflowContext(request), request.body);
     sendSuccess(response, definition, 201);
+  })
+);
+
+workflowRouter.get(
+  "/action-executions/status/:status",
+  validateRequest({
+    params: workflowActionExecutionStatusParamsSchema,
+    query: workflowActionExecutionQuerySchema
+  }),
+  requirePermission("workflow", "workflow.actionExecutions.read"),
+  asyncHandler(async (request, response) => {
+    const context = workflowContext(request);
+    const pagination = paginationQuery(request);
+    const result = await workflowActionExecutionService.listByStatus({
+      tenantId: context.tenantId,
+      status: request.params.status as WorkflowActionExecutionStatus,
+      ...pagination
+    });
+
+    sendSuccess(response, result.items, 200, undefined, {
+      pagination: { ...pagination, totalItems: result.totalItems }
+    });
   })
 );
 
@@ -123,6 +165,26 @@ workflowRouter.get(
         pageSize: Number(request.query.pageSize ?? 20),
         totalItems: result.totalItems
       }
+    });
+  })
+);
+
+workflowRouter.get(
+  "/:workflowId/entities/:entityName/:entityId/action-executions",
+  validateRequest({ params: workflowEntityParamsSchema, query: workflowActionExecutionQuerySchema }),
+  requirePermission("workflow", "workflow.actionExecutions.read"),
+  asyncHandler(async (request, response) => {
+    const context = workflowExecutionContext(request);
+    const pagination = paginationQuery(request);
+    const result = await workflowActionExecutionService.listByEntity({
+      tenantId: context.tenantId,
+      entityName: context.entityName,
+      entityId: context.entityId,
+      ...pagination
+    });
+
+    sendSuccess(response, result.items, 200, undefined, {
+      pagination: { ...pagination, totalItems: result.totalItems }
     });
   })
 );
@@ -220,6 +282,35 @@ workflowRouter.post(
       request.body
     );
     sendSuccess(response, condition, 201);
+  })
+);
+
+workflowRouter.get(
+  "/:workflowId/transitions/:transitionId/actions",
+  validateRequest({ params: workflowTransitionParamsSchema }),
+  requirePermission("workflow", "workflow.actions.read"),
+  asyncHandler(async (request, response) => {
+    const actions = await workflowActionService.listByTransition(
+      workflowContext(request),
+      request.params.workflowId!,
+      request.params.transitionId!
+    );
+    sendSuccess(response, actions);
+  })
+);
+
+workflowRouter.post(
+  "/:workflowId/transitions/:transitionId/actions",
+  validateRequest({ params: workflowTransitionParamsSchema, body: workflowActionCreateSchema }),
+  requirePermission("workflow", "workflow.actions.create"),
+  asyncHandler(async (request, response) => {
+    const action = await workflowActionService.create(
+      workflowContext(request),
+      request.params.workflowId!,
+      request.params.transitionId!,
+      request.body
+    );
+    sendSuccess(response, action, 201);
   })
 );
 

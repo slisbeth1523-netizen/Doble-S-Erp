@@ -11,6 +11,7 @@ import { workflowConditionService } from "./WorkflowConditionService.js";
 import { workflowEvaluationService } from "./WorkflowEvaluationService.js";
 import { workflowGuardService } from "./WorkflowGuardService.js";
 import { workflowHistoryService } from "./WorkflowHistoryService.js";
+import { workflowActionDispatcherService } from "./WorkflowActionDispatcherService.js";
 import { WorkflowDefinitionRepository } from "../infrastructure/WorkflowDefinitionRepository.js";
 import { WorkflowExecutionRepository } from "../infrastructure/WorkflowExecutionRepository.js";
 import { WorkflowStateRepository } from "../infrastructure/WorkflowStateRepository.js";
@@ -150,6 +151,7 @@ export class WorkflowExecutionService extends BaseService {
         comment
       )
     );
+    await this.prepareActionsSafely(context, found, validTransition);
 
     return {
       entityState: found,
@@ -349,6 +351,27 @@ export class WorkflowExecutionService extends BaseService {
     } catch {
       // TODO: move workflow state update and history insert into one strong transaction.
       logger.warn("Workflow history entry could not be recorded", { action });
+    }
+  }
+
+  private async prepareActionsSafely(
+    context: WorkflowTransitionExecutionContext,
+    entityState: WorkflowExecutionResult["entityState"],
+    transition: WorkflowExecutionResult["transition"]
+  ) {
+    try {
+      await workflowActionDispatcherService.prepareActionsAfterTransition({
+        ...context,
+        entityState,
+        transition
+      });
+    } catch {
+      // TODO: move transition, history and action dispatch into a strong outbox transaction.
+      logger.warn("Workflow actions could not be prepared after transition", {
+        tenantId: context.tenantId,
+        workflowDefinitionId: context.workflowDefinitionId,
+        transitionId: transition.workflowTransitionId
+      });
     }
   }
 }

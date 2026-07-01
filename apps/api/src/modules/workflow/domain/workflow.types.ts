@@ -250,3 +250,116 @@ export type WorkflowConditionEvaluationResult = {
   condition: WorkflowCondition;
   reason?: string;
 };
+
+export type WorkflowActionType =
+  | "AUDIT"
+  | "NOTIFICATION_PLACEHOLDER"
+  | "DOMAIN_EVENT_PLACEHOLDER"
+  | "JOB_PLACEHOLDER"
+  | "WEBHOOK_PLACEHOLDER"
+  | "CUSTOM_PLACEHOLDER";
+
+export type WorkflowActionExecutionMode = "AFTER_TRANSITION" | "MANUAL" | "ASYNC_PLACEHOLDER";
+
+export type WorkflowActionExecutionStatus = "PENDING" | "PREPARED" | "SKIPPED" | "FAILED";
+
+export type WorkflowAction = {
+  workflowActionId: string;
+  tenantId: string;
+  workflowDefinitionId: string;
+  transitionId: string;
+  code: string;
+  name: string;
+  description?: string | null;
+  actionType: WorkflowActionType;
+  executionMode: WorkflowActionExecutionMode;
+  targetModule?: string | null;
+  targetAction?: string | null;
+  payloadTemplateJson?: string | null;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt?: Date | null;
+  createdBy?: string | null;
+  updatedBy?: string | null;
+};
+
+export type WorkflowActionCreateInput = {
+  code: string;
+  name: string;
+  description?: string | null;
+  actionType: WorkflowActionType;
+  executionMode: WorkflowActionExecutionMode;
+  targetModule?: string | null;
+  targetAction?: string | null;
+  payloadTemplate?: Record<string, unknown>;
+  isActive?: boolean;
+};
+
+export type WorkflowActionExecution = {
+  workflowActionExecutionId: string;
+  tenantId: string;
+  companyId?: string | null;
+  workflowActionId: string;
+  workflowDefinitionId: string;
+  transitionId: string;
+  entityStateId: string;
+  entityName: string;
+  entityId: string;
+  status: WorkflowActionExecutionStatus;
+  actionType: WorkflowActionType;
+  executionMode: WorkflowActionExecutionMode;
+  payloadJson?: string | null;
+  resultJson?: string | null;
+  errorMessage?: string | null;
+  createdAt: Date;
+  updatedAt?: Date | null;
+  createdBy?: string | null;
+  requestId?: string | null;
+  correlationId?: string | null;
+};
+
+export type WorkflowActionExecutionCreateInput = {
+  tenantId: string;
+  companyId?: string | null;
+  workflowActionId: string;
+  workflowDefinitionId: string;
+  transitionId: string;
+  entityStateId: string;
+  entityName: string;
+  entityId: string;
+  status: WorkflowActionExecutionStatus;
+  actionType: WorkflowActionType;
+  executionMode: WorkflowActionExecutionMode;
+  payload?: Record<string, unknown>;
+  result?: Record<string, unknown>;
+  errorMessage?: string | null;
+  createdBy?: string;
+  requestId?: string;
+  correlationId?: string;
+};
+
+export type WorkflowActionExecutionQuery = {
+  tenantId: string;
+  workflowActionId?: string;
+  status?: WorkflowActionExecutionStatus;
+  entityName?: string;
+  entityId?: string;
+  page: number;
+  pageSize: number;
+  offset: number;
+};
+
+export type WorkflowActionExecutionListResult = {
+  items: WorkflowActionExecution[];
+  totalItems: number;
+};
+
+export type WorkflowActionPreparationContext = WorkflowTransitionExecutionContext & {
+  entityState: WorkflowEntityState;
+  transition: WorkflowTransition;
+};
+
+export type WorkflowActionPreparationResult = {
+  prepared: WorkflowActionExecution[];
+  failed: Array<{ action: WorkflowAction; errorMessage: string }>;
+};

@@ -81,3 +81,31 @@ export const workflowConditionCreateSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional(),
   isActive: z.boolean().optional()
 });
+
+export const workflowActionCreateSchema = z.object({
+  code: z.string().trim().min(1).max(80),
+  name: z.string().trim().min(1).max(160),
+  description: z.string().trim().max(250).nullable().optional(),
+  actionType: z.enum([
+    "AUDIT",
+    "NOTIFICATION_PLACEHOLDER",
+    "DOMAIN_EVENT_PLACEHOLDER",
+    "JOB_PLACEHOLDER",
+    "WEBHOOK_PLACEHOLDER",
+    "CUSTOM_PLACEHOLDER"
+  ]),
+  executionMode: z.enum(["AFTER_TRANSITION", "MANUAL", "ASYNC_PLACEHOLDER"]),
+  targetModule: z.string().trim().max(120).nullable().optional(),
+  targetAction: z.string().trim().max(120).nullable().optional(),
+  payloadTemplate: z.record(z.string(), z.unknown()).optional(),
+  isActive: z.boolean().optional()
+});
+
+export const workflowActionExecutionStatusParamsSchema = z.object({
+  status: z.enum(["PENDING", "PREPARED", "SKIPPED", "FAILED"])
+});
+
+export const workflowActionExecutionQuerySchema = z.object({
+  page: z.coerce.number().int().positive().optional(),
+  pageSize: z.coerce.number().int().positive().max(100).optional()
+});
