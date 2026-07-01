@@ -7,8 +7,9 @@ import type {
   WorkflowExecutionResult,
   WorkflowTransitionExecutionContext
 } from "../domain/workflow.types.js";
-import { WorkflowExecutionRepository } from "../infrastructure/WorkflowExecutionRepository.js";
+import { workflowHistoryService } from "./WorkflowHistoryService.js";
 import { WorkflowDefinitionRepository } from "../infrastructure/WorkflowDefinitionRepository.js";
+import { WorkflowExecutionRepository } from "../infrastructure/WorkflowExecutionRepository.js";
 import { WorkflowStateRepository } from "../infrastructure/WorkflowStateRepository.js";
 
 export class WorkflowExecutionService extends BaseService {
@@ -72,6 +73,9 @@ export class WorkflowExecutionService extends BaseService {
       currentStateId: found.currentStateId
     });
     await this.auditInitialized(context, found.entityStateId, initialStateId);
+    await this.registerHistorySafely("initialization", () =>
+      workflowHistoryService.registerInitialization(context, found, initialStateId)
+    );
 
     return found;
   }
@@ -132,6 +136,15 @@ export class WorkflowExecutionService extends BaseService {
       newStateId: validTransition.toStateId,
       comment
     });
+    await this.registerHistorySafely("transition", () =>
+      workflowHistoryService.registerTransition(
+        context,
+        found,
+        validTransition,
+        currentState.currentStateId,
+        comment
+      )
+    );
 
     return {
       entityState: found,
@@ -239,6 +252,15 @@ export class WorkflowExecutionService extends BaseService {
         correlationId: context.correlationId
       }
     });
+  }
+
+  private async registerHistorySafely(action: string, callback: () => Promise<unknown>) {
+    try {
+      await callback();
+    } catch {
+      // TODO: move workflow state update and history insert into one strong transaction.
+      logger.warn("Workflow history entry could not be recorded", { action });
+    }
   }
 }
 

@@ -31,3 +31,10 @@ export const workflowEntityTransitionSchema = z.object({
   transitionId: z.string().uuid(),
   comment: z.string().trim().max(500).nullable().optional()
 });
+
+export const workflowHistoryQuerySchema = z.object({
+  page: z.coerce.number().int().positive().optional(),
+  pageSize: z.coerce.number().int().positive().max(100).optional(),
+  from: z.string().datetime().optional(),
+  to: z.string().datetime().optional()
+});

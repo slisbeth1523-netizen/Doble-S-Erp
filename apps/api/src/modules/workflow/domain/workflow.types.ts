@@ -98,3 +98,59 @@ export type WorkflowExecutionResult = {
   newStateId: string;
   transition: WorkflowTransition;
 };
+
+export type WorkflowHistoryEntry = {
+  workflowHistoryId: string;
+  tenantId: string;
+  companyId?: string | null;
+  workflowDefinitionId: string;
+  entityStateId: string;
+  entityName: string;
+  entityId: string;
+  transitionId?: string | null;
+  fromStateId?: string | null;
+  toStateId: string;
+  actionCode: string;
+  comment?: string | null;
+  metadataJson?: string | null;
+  createdAt: Date;
+  createdBy?: string | null;
+  requestId?: string | null;
+  correlationId?: string | null;
+};
+
+export type WorkflowHistoryCreateInput = {
+  tenantId: string;
+  companyId?: string | null;
+  workflowDefinitionId: string;
+  entityStateId: string;
+  entityName: string;
+  entityId: string;
+  transitionId?: string | null;
+  fromStateId?: string | null;
+  toStateId: string;
+  actionCode: "WORKFLOW_INITIALIZED" | "WORKFLOW_TRANSITION_EXECUTED";
+  comment?: string | null;
+  metadata?: Record<string, unknown>;
+  createdBy?: string;
+  requestId?: string;
+  correlationId?: string;
+};
+
+export type WorkflowHistoryQuery = {
+  tenantId: string;
+  workflowDefinitionId?: string;
+  entityStateId?: string;
+  entityName?: string;
+  entityId?: string;
+  page: number;
+  pageSize: number;
+  offset: number;
+  from?: string;
+  to?: string;
+};
+
+export type WorkflowHistoryListResult = {
+  items: WorkflowHistoryEntry[];
+  totalItems: number;
+};
