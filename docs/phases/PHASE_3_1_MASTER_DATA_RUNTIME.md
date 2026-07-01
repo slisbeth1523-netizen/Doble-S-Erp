@@ -278,3 +278,190 @@ La fase se considera completada cuando:
 - `npm run build` pasa.
 - Los endpoints de health/version siguen funcionando.
 - No se implementaron modulos fuera de alcance.
+
+## Implementacion
+
+### Metadata de campos
+
+Se extendio `CatalogDefinition` en:
+
+```text
+apps/api/src/modules/master-data/domain/catalog-definition.ts
+```
+
+Cada catalogo declara `fields` con:
+
+- `field`
+- `label`
+- `type`
+- `required`
+- `visibleInGrid`
+- `visibleInForm`
+- `searchable`
+- `sortable`
+- `editable`
+- `readOnly`
+- `defaultValue`
+- `placeholder`
+- `helpText`
+- `displayOrder`
+- `validation`
+- configuracion opcional de grid
+
+Las reglas de `validation` soportan:
+
+- `required`
+- `minLength`
+- `maxLength`
+- `min`
+- `max`
+- `regex`
+- `unique`
+- `nullable`
+
+Los catalogos iniciales (`currencies`, `payment-terms`, `tax-categories`, `units-of-measure`) entregan metadata para codigo, nombre, descripcion, empresa cuando aplica y estado activo.
+
+### Endpoint de metadata
+
+Se agrego:
+
+```text
+GET /api/master-data/:catalog/metadata
+```
+
+Devuelve:
+
+- definicion basica del catalogo
+- campos declarados
+- configuracion de grid
+- configuracion de formulario
+- validaciones
+- acciones runtime
+- permisos requeridos
+- requerimiento de licencia si aplica
+- requerimiento de feature flag si aplica
+
+El frontend debe consumir este endpoint para construir formularios, grids, columnas, reglas basicas y acciones disponibles sin quemar campos por catalogo.
+
+### Lookup runtime
+
+Se agrego:
+
+```text
+GET /api/master-data/:catalog/lookup
+```
+
+Devuelve elementos compactos:
+
+```ts
+{
+  value: string;
+  label: string;
+  code?: string;
+  isActive?: boolean;
+}
+```
+
+Soporta:
+
+- `search`
+- `page`
+- `pageSize`
+- solo activos por defecto
+- paginacion
+- seguridad existente
+
+### Grid runtime
+
+La metadata incluye `grid.columns` con:
+
+- campo
+- etiqueta
+- tipo
+- orden
+- ancho sugerido
+- alineacion
+- formato
+- sortable
+- searchable
+
+No se construyo UI en esta fase.
+
+### Form runtime
+
+La metadata incluye `form.fields` con:
+
+- campo
+- etiqueta
+- tipo de input
+- orden
+- required
+- readOnly
+- editable
+- defaultValue
+- placeholder
+- helpText
+- validation
+
+Las mismas reglas declaradas se usan como validacion backend complementaria antes de crear o actualizar registros.
+
+### Import/export
+
+Se agregaron contratos seguros:
+
+```text
+GET /api/master-data/:catalog/export-template
+POST /api/master-data/:catalog/import-preview
+```
+
+En esta fase no se agregaron dependencias pesadas ni procesamiento Excel/CSV. Los endpoints responden JSON controlado indicando que el contrato esta preparado, pero la generacion/procesamiento real aun no esta disponible.
+
+### Acciones runtime
+
+La metadata informa acciones:
+
+- `create`
+- `update`
+- `activate`
+- `deactivate`
+- `lookup`
+- `export`
+- `import`
+
+Cada accion incluye el permiso requerido por el catalogo.
+
+### Seguridad
+
+Los endpoints runtime usan:
+
+- `requireAuth`
+- `requireTenantContext`
+- `requirePermission`
+- `requireLicensedModule` cuando la definicion lo requiera
+- `requireFeatureFlag` cuando la definicion lo requiera
+- `RequestContext`
+- `ResponseBuilder`
+- validacion Zod
+
+### Auditoria
+
+No se agrego auditoria funcional para metadata, lookup ni contratos de solo lectura/preparacion.
+
+Se mantiene auditoria solamente para acciones que cambian datos o estado:
+
+- creado
+- actualizado
+- activado
+- desactivado
+
+### Extender un catalogo
+
+Para extender o registrar un catalogo se debe:
+
+1. Agregar la entrada en `catalogDefinitions`.
+2. Declarar solo tabla y columnas permitidas.
+3. Declarar `fields` con metadata de grid, formulario y validacion.
+4. Definir permisos, modulo, licencia o feature flag si aplica.
+5. Evitar columnas o SQL recibidos desde el usuario.
+
+No se crearon clientes, proveedores, productos, inventario, compras, ventas, facturacion, DGII, POS, contabilidad, reportes ni pantallas completas.
