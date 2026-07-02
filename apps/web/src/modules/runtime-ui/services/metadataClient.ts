@@ -1,7 +1,7 @@
 import type { ApiResponse } from "@doble-s-erp/shared";
 
 import { FriendlyApiError, apiErrorKindFromStatus, normalizeApiError } from "../../../services/apiErrors.js";
-import { apiUrl } from "../../../services/apiClient.js";
+import { apiFetch } from "../../../services/apiClient.js";
 import type {
   CatalogListResult,
   CatalogMetadata,
@@ -26,7 +26,7 @@ function buildQuery(params: Record<string, QueryValue>) {
 
 async function requestApi<T>(path: string): Promise<T> {
   try {
-    const response = await fetch(`${apiUrl}${path}`);
+    const response = await apiFetch(path);
     const body = (await response.json().catch(() => null)) as ApiResponse<T> | null;
 
     if (!response.ok || !body?.success) {
@@ -70,7 +70,7 @@ export async function fetchCatalogItems(
   } = {}
 ): Promise<CatalogListResult> {
   try {
-    const result = await fetch(`${apiUrl}/master-data/${encodeURIComponent(catalog)}${buildQuery(params)}`);
+    const result = await apiFetch(`/master-data/${encodeURIComponent(catalog)}${buildQuery(params)}`);
     const body = (await result.json().catch(() => null)) as ApiResponse<CatalogRecord[]> | null;
 
     if (!result.ok || !body?.success) {
