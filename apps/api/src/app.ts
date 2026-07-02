@@ -11,7 +11,11 @@ export function createApp() {
   const app = express();
 
   app.use(helmet());
-  app.use(cors());
+  app.use(
+    cors({
+      origin: env.corsOrigin
+    })
+  );
   app.use(express.json());
   app.use(requestContextMiddleware);
   app.use(env.apiPrefix, apiRouter);

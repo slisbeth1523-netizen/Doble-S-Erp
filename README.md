@@ -87,6 +87,7 @@ npm install
 Edita `.env` y `apps/api/.env` con los datos reales de SQL Server:
 
 ```text
+CORS_ORIGIN=http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174
 SQLSERVER_HOST=localhost
 SQLSERVER_PORT=1433
 SQLSERVER_DATABASE=DOBLE_S_ERP
@@ -95,6 +96,8 @@ SQLSERVER_PASSWORD=tu_password_local
 SQLSERVER_ENCRYPT=false
 SQLSERVER_TRUST_SERVER_CERTIFICATE=true
 ```
+
+`CORS_ORIGIN` acepta un origen unico o varios origenes separados por coma. Para desarrollo local se permiten los hosts `localhost` y `127.0.0.1` en los puertos Vite `5173` y `5174`, sin usar wildcard.
 
 El frontend usa:
 
@@ -130,7 +133,7 @@ URLs locales:
 
 ```text
 API: http://localhost:4001/api
-Web: http://localhost:5173
+Web: http://localhost:5173 o http://localhost:5174
 Health: http://localhost:4001/api/health
 Version: http://localhost:4001/api/version
 DB Health: http://localhost:4001/api/health/db
