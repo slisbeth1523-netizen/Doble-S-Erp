@@ -69,6 +69,7 @@ export class BaseCatalogService extends BaseService {
             defaultValue: field.defaultValue,
             placeholder: field.placeholder,
             helpText: field.helpText,
+            lookupCatalog: field.lookupCatalog,
             validation: field.validation
           }))
       },
@@ -244,7 +245,7 @@ export class BaseCatalogService extends BaseService {
   private validatePayload(definition: CatalogDefinition, input: CatalogWriteInput) {
     const errors = definition.fields
       .filter((field) => field.visibleInForm && field.editable)
-      .flatMap((field) => this.validateField(field, input[field.field as keyof CatalogWriteInput]));
+      .flatMap((field) => this.validateField(field, input[field.field]));
 
     if (errors.length > 0) {
       throw new ValidationError("Catalog payload validation failed", errors, "CATALOG_VALIDATION_ERROR");
