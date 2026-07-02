@@ -5,10 +5,20 @@ const metadataSchema = z.record(z.string(), z.unknown()).optional();
 const positivePageSchema = z.coerce.number().int().min(1).default(1);
 const pageSizeSchema = z.coerce.number().int().min(1).max(100).default(20);
 
-export const domainEventStatusSchema = z.enum(["PENDING", "PROCESSED", "FAILED", "IGNORED"]);
+export const domainEventStatusSchema = z.enum([
+  "PENDING",
+  "PROCESSING",
+  "PROCESSED",
+  "FAILED",
+  "IGNORED"
+]);
 
 export const domainEventIdParamsSchema = z.object({
   eventId: z.string().uuid()
+});
+
+export const domainEventNameParamsSchema = z.object({
+  eventName: z.string().trim().min(1).max(160)
 });
 
 export const domainEventQuerySchema = z.object({
@@ -36,4 +46,8 @@ export const eventSubscriptionCreateSchema = z.object({
   subscriberModule: z.string().trim().min(1).max(120),
   subscriberName: z.string().trim().min(1).max(160),
   isActive: z.boolean().optional()
+});
+
+export const domainEventProcessBatchSchema = z.object({
+  limit: z.number().int().min(1).max(100).optional()
 });

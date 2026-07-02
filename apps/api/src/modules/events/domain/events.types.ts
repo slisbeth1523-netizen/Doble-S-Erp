@@ -1,4 +1,4 @@
-export type DomainEventStatus = "PENDING" | "PROCESSED" | "FAILED" | "IGNORED";
+export type DomainEventStatus = "PENDING" | "PROCESSING" | "PROCESSED" | "FAILED" | "IGNORED";
 
 export type EventContext = {
   tenantId: string;
@@ -25,6 +25,11 @@ export type DomainEvent = {
   failedAt?: Date | null;
   errorMessage?: string | null;
   retryCount: number;
+  lockedAt?: Date | null;
+  lockedBy?: string | null;
+  nextAttemptAt?: Date | null;
+  lastAttemptAt?: Date | null;
+  maxRetries: number;
   requestId?: string | null;
   correlationId?: string | null;
   createdBy?: string | null;
@@ -87,4 +92,22 @@ export type EventSubscriptionCreateInput = {
   subscriberModule: string;
   subscriberName: string;
   isActive?: boolean;
+};
+
+export type DomainEventDispatchResult = {
+  dispatchedCount: number;
+  skippedCount: number;
+  errors: Array<{ subscriberName: string; errorMessage: string }>;
+};
+
+export type DomainEventProcessResult = {
+  event: DomainEvent;
+  status: DomainEventStatus;
+  dispatchResult?: DomainEventDispatchResult;
+};
+
+export type DomainEventBatchProcessResult = {
+  lockedBy: string;
+  processedCount: number;
+  results: DomainEventProcessResult[];
 };
