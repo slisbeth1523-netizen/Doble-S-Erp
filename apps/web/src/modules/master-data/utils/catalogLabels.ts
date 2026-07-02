@@ -3,6 +3,7 @@ export const catalogLabels: Record<string, string> = {
   suppliers: "Proveedores",
   items: "Artículos",
   categories: "Categorías",
+  brands: "Marcas",
   currencies: "Monedas",
   "units-of-measure": "Unidades de medida",
   "payment-terms": "Condiciones de pago",
@@ -12,4 +13,3 @@ export const catalogLabels: Record<string, string> = {
 export function getCatalogLabel(catalog: string) {
   return catalogLabels[catalog] ?? catalog;
 }
-
