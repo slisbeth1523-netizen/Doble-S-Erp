@@ -993,6 +993,105 @@ const categoryFields = [
   }
 ] as const satisfies readonly CatalogFieldDefinition[];
 
+const brandFields = [
+  {
+    field: "code",
+    label: "Codigo",
+    type: "text",
+    required: true,
+    visibleInGrid: true,
+    visibleInForm: true,
+    searchable: true,
+    sortable: true,
+    editable: true,
+    readOnly: false,
+    placeholder: "MAR-0001",
+    displayOrder: 10,
+    validation: { required: true, minLength: 1, maxLength: 40, unique: true, nullable: false },
+    grid: { width: 120, align: "left" }
+  },
+  {
+    field: "name",
+    label: "Nombre",
+    type: "text",
+    required: true,
+    visibleInGrid: true,
+    visibleInForm: true,
+    searchable: true,
+    sortable: true,
+    editable: true,
+    readOnly: false,
+    placeholder: "Nombre de la marca",
+    displayOrder: 20,
+    validation: { required: true, minLength: 1, maxLength: 160, nullable: false },
+    grid: { width: 220, align: "left" }
+  },
+  {
+    field: "description",
+    label: "Descripcion",
+    type: "textarea",
+    required: false,
+    visibleInGrid: true,
+    visibleInForm: true,
+    searchable: true,
+    sortable: false,
+    editable: true,
+    readOnly: false,
+    displayOrder: 30,
+    validation: { maxLength: 250, nullable: true },
+    grid: { width: 280, align: "left" }
+  },
+  {
+    field: "website",
+    dbColumn: "Website",
+    label: "Sitio web",
+    type: "text",
+    required: false,
+    visibleInGrid: true,
+    visibleInForm: true,
+    searchable: false,
+    sortable: false,
+    editable: true,
+    readOnly: false,
+    displayOrder: 40,
+    validation: { maxLength: 250, nullable: true },
+    grid: { width: 220, align: "left" }
+  },
+  {
+    field: "countryCode",
+    dbColumn: "CountryCode",
+    label: "Pais",
+    type: "text",
+    required: false,
+    visibleInGrid: true,
+    visibleInForm: true,
+    searchable: false,
+    sortable: false,
+    editable: true,
+    readOnly: false,
+    placeholder: "DOM",
+    displayOrder: 50,
+    validation: { maxLength: 3, nullable: true },
+    grid: { width: 90, align: "left" }
+  },
+  {
+    field: "isActive",
+    label: "Activo",
+    type: "boolean",
+    required: false,
+    visibleInGrid: true,
+    visibleInForm: true,
+    searchable: false,
+    sortable: true,
+    editable: true,
+    readOnly: false,
+    defaultValue: true,
+    displayOrder: 60,
+    validation: { nullable: false },
+    grid: { width: 96, align: "center", format: "boolean" }
+  }
+] as const satisfies readonly CatalogFieldDefinition[];
+
 const itemFields = [
   {
     field: "code",
@@ -1710,6 +1809,36 @@ export const catalogDefinitions = {
       updatedBy: "UpdatedBy"
     },
     fields: categoryFields
+  },
+  brands: {
+    catalogCode: "brands",
+    displayName: "Marcas",
+    tableName: "inventory.Brands",
+    idColumn: "BrandId",
+    codeColumn: "Code",
+    nameColumn: "Name",
+    descriptionColumn: "Description",
+    allowedSearchColumns: ["Code", "Name", "Description"],
+    allowedSortColumns: ["Code", "Name", "CreatedAt", "IsActive"],
+    defaultSortBy: "Code",
+    permissions: commonPermissions("inventory.brands"),
+    moduleCode: "inventory",
+    tenantScoped: true,
+    companyScoped: true,
+    columns: {
+      id: "BrandId",
+      tenantId: "TenantId",
+      companyId: "CompanyId",
+      code: "Code",
+      name: "Name",
+      description: "Description",
+      isActive: "IsActive",
+      createdAt: "CreatedAt",
+      updatedAt: "UpdatedAt",
+      createdBy: "CreatedBy",
+      updatedBy: "UpdatedBy"
+    },
+    fields: brandFields
   },
   items: {
     catalogCode: "items",

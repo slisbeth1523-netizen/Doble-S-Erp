@@ -140,6 +140,7 @@ const catalogFields: Record<string, FieldInput[]> = {
     { field: "barcode", label: "Código de barras", searchable: true, sortable: true, validation: { maxLength: 100 }, width: 170 },
     { field: "alternateCode", label: "Código alterno", searchable: true, sortable: true, visibleInGrid: false },
     { field: "categoryId", label: "Categoría", type: "lookup", lookupCatalog: "categories", sortable: true },
+    { field: "brandId", label: "Marca", type: "lookup", lookupCatalog: "brands", sortable: true },
     { field: "unitOfMeasureId", label: "Unidad", type: "lookup", lookupCatalog: "units-of-measure" },
     { field: "taxCategoryId", label: "Categoría fiscal", type: "lookup", lookupCatalog: "tax-categories", visibleInGrid: false },
     { field: "inventoryType", label: "Tipo inventario", defaultValue: "PRODUCT", visibleInGrid: false },
@@ -156,6 +157,12 @@ const catalogFields: Record<string, FieldInput[]> = {
     { field: "isSalesCategory", label: "Categoría de ventas", type: "boolean", defaultValue: true, align: "center" },
     { field: "isPurchaseCategory", label: "Categoría de compras", type: "boolean", defaultValue: true, align: "center" },
     { field: "isInventoryCategory", label: "Categoría de inventario", type: "boolean", defaultValue: true, align: "center" },
+    technicalFields[3]!
+  ],
+  brands: [
+    ...technicalFields.slice(0, 3),
+    { field: "website", label: "Sitio web", validation: { maxLength: 250, nullable: true }, width: 220 },
+    { field: "countryCode", label: "País", validation: { maxLength: 3, nullable: true }, width: 90 },
     technicalFields[3]!
   ],
   currencies: technicalFields,
