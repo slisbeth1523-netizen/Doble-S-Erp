@@ -134,7 +134,7 @@ export function DynamicGrid({ catalog }: DynamicGridProps) {
         </button>
         <span>
           Page {query.page}
-          {data.data ? ` · ${data.data.totalItems} items` : ""}
+          {data.data ? ` - ${data.data.totalItems} items` : ""}
         </span>
         <button
           disabled={data.loading || (data.data?.items.length ?? 0) < query.pageSize}

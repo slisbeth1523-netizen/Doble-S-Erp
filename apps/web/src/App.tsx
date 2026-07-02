@@ -1,6 +1,66 @@
-import { AppShell } from "./components/AppShell.js";
+import { useEffect, useMemo, useState } from "react";
 
-export function App() {
-  return <AppShell />;
+import { AppLayout } from "./layouts/AppLayout.js";
+import { MasterDataRuntimePage } from "./modules/master-data/pages/MasterDataRuntimePage.js";
+import { DashboardPreview } from "./pages/DashboardPreview.js";
+import { EventsPreview } from "./pages/EventsPreview.js";
+import { SecurityPreview } from "./pages/SecurityPreview.js";
+import { SettingsPreview } from "./pages/SettingsPreview.js";
+import { WorkflowsPreview } from "./pages/WorkflowsPreview.js";
+
+function currentPath() {
+  return window.location.pathname === "/" ? "/dashboard" : window.location.pathname;
 }
 
+function catalogFromPath(path: string) {
+  const segments = path.split("/").filter(Boolean);
+
+  return segments[0] === "master-data" ? segments[1] : undefined;
+}
+
+export function App() {
+  const [path, setPath] = useState(currentPath);
+  const page = useMemo(() => {
+    const catalog = catalogFromPath(path);
+
+    if (catalog) {
+      return <MasterDataRuntimePage catalog={catalog} />;
+    }
+
+    if (path === "/workflows") {
+      return <WorkflowsPreview />;
+    }
+
+    if (path === "/events") {
+      return <EventsPreview />;
+    }
+
+    if (path === "/security") {
+      return <SecurityPreview />;
+    }
+
+    if (path === "/settings") {
+      return <SettingsPreview />;
+    }
+
+    return <DashboardPreview />;
+  }, [path]);
+
+  useEffect(() => {
+    const listener = () => setPath(currentPath());
+    window.addEventListener("popstate", listener);
+
+    return () => window.removeEventListener("popstate", listener);
+  }, []);
+
+  function navigate(nextPath: string) {
+    window.history.pushState({}, "", nextPath);
+    setPath(currentPath());
+  }
+
+  return (
+    <AppLayout currentPath={path} onNavigate={navigate}>
+      {page}
+    </AppLayout>
+  );
+}
