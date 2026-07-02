@@ -221,6 +221,142 @@ const commonCatalogFields = (companyVisible: boolean): readonly CatalogFieldDefi
   }
 ];
 
+const unitOfMeasureFields = [
+  {
+    field: "code",
+    label: "Codigo",
+    type: "text",
+    required: true,
+    visibleInGrid: true,
+    visibleInForm: true,
+    searchable: true,
+    sortable: true,
+    editable: true,
+    readOnly: false,
+    placeholder: "UND",
+    displayOrder: 10,
+    validation: { required: true, minLength: 1, maxLength: 40, unique: true, nullable: false },
+    grid: { width: 120, align: "left" }
+  },
+  {
+    field: "name",
+    label: "Nombre",
+    type: "text",
+    required: true,
+    visibleInGrid: true,
+    visibleInForm: true,
+    searchable: true,
+    sortable: true,
+    editable: true,
+    readOnly: false,
+    placeholder: "Unidad",
+    displayOrder: 20,
+    validation: { required: true, minLength: 1, maxLength: 160, nullable: false },
+    grid: { width: 220, align: "left" }
+  },
+  {
+    field: "description",
+    label: "Descripcion",
+    type: "textarea",
+    required: false,
+    visibleInGrid: true,
+    visibleInForm: true,
+    searchable: true,
+    sortable: false,
+    editable: true,
+    readOnly: false,
+    placeholder: "Descripcion opcional",
+    displayOrder: 30,
+    validation: { maxLength: 250, nullable: true },
+    grid: { width: 280, align: "left" }
+  },
+  {
+    field: "symbol",
+    dbColumn: "Symbol",
+    label: "Simbolo",
+    type: "text",
+    required: false,
+    visibleInGrid: true,
+    visibleInForm: true,
+    searchable: true,
+    sortable: false,
+    editable: true,
+    readOnly: false,
+    placeholder: "u",
+    displayOrder: 40,
+    validation: { maxLength: 20, nullable: true },
+    grid: { width: 100, align: "left" }
+  },
+  {
+    field: "unitType",
+    dbColumn: "UnitType",
+    label: "Tipo de unidad",
+    type: "text",
+    required: false,
+    visibleInGrid: true,
+    visibleInForm: true,
+    searchable: false,
+    sortable: false,
+    editable: true,
+    readOnly: false,
+    placeholder: "QUANTITY",
+    helpText: "QUANTITY, WEIGHT, VOLUME, LENGTH, TIME, SERVICE",
+    displayOrder: 50,
+    validation: { maxLength: 40, nullable: true },
+    grid: { width: 140, align: "left" }
+  },
+  {
+    field: "decimalPrecision",
+    dbColumn: "DecimalPrecision",
+    label: "Precision decimal",
+    type: "number",
+    required: true,
+    visibleInGrid: true,
+    visibleInForm: true,
+    searchable: false,
+    sortable: false,
+    editable: true,
+    readOnly: false,
+    defaultValue: 2,
+    displayOrder: 60,
+    validation: { required: true, min: 0, max: 6, nullable: false },
+    grid: { width: 130, align: "right" }
+  },
+  {
+    field: "isBaseUnit",
+    dbColumn: "IsBaseUnit",
+    label: "Unidad base",
+    type: "boolean",
+    required: false,
+    visibleInGrid: true,
+    visibleInForm: true,
+    searchable: false,
+    sortable: false,
+    editable: true,
+    readOnly: false,
+    defaultValue: false,
+    displayOrder: 70,
+    validation: { nullable: false },
+    grid: { width: 120, align: "center", format: "boolean" }
+  },
+  {
+    field: "isActive",
+    label: "Activo",
+    type: "boolean",
+    required: false,
+    visibleInGrid: true,
+    visibleInForm: true,
+    searchable: false,
+    sortable: true,
+    editable: true,
+    readOnly: false,
+    defaultValue: true,
+    displayOrder: 80,
+    validation: { nullable: false },
+    grid: { width: 96, align: "center", format: "boolean" }
+  }
+] as const satisfies readonly CatalogFieldDefinition[];
+
 const customerFields = [
   {
     field: "code",
@@ -1661,13 +1797,13 @@ export const catalogDefinitions = {
   },
   "units-of-measure": {
     catalogCode: "units-of-measure",
-    displayName: "Units of Measure",
+    displayName: "Unidades de medida",
     tableName: "core.UnitsOfMeasure",
     idColumn: "UnitOfMeasureId",
     codeColumn: "Code",
     nameColumn: "Name",
     descriptionColumn: "Description",
-    allowedSearchColumns: ["Code", "Name", "Description"],
+    allowedSearchColumns: ["Code", "Name", "Description", "Symbol"],
     allowedSortColumns: ["Code", "Name", "CreatedAt", "IsActive"],
     defaultSortBy: "Name",
     permissions: commonPermissions("master-data.units-of-measure"),
@@ -1687,7 +1823,7 @@ export const catalogDefinitions = {
       createdBy: "CreatedBy",
       updatedBy: "UpdatedBy"
     },
-    fields: commonCatalogFields(false)
+    fields: unitOfMeasureFields
   },
   customers: {
     catalogCode: "customers",
