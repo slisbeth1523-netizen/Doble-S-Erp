@@ -51,7 +51,12 @@ BEGIN
     );
 
     CREATE UNIQUE INDEX UX_crm_Customers_Tenant_Company_Code
-        ON crm.Customers (TenantId, CompanyId, Code);
+        ON crm.Customers (TenantId, CompanyId, Code)
+        WHERE CompanyId IS NOT NULL;
+
+    CREATE UNIQUE INDEX UX_crm_Customers_Tenant_Global_Code
+        ON crm.Customers (TenantId, Code)
+        WHERE CompanyId IS NULL;
 
     CREATE INDEX IX_crm_Customers_Tenant_Company_DocumentNumber
         ON crm.Customers (TenantId, CompanyId, DocumentNumber)
