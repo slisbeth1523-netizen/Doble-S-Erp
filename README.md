@@ -182,6 +182,9 @@ La variable `VITE_API_URL` define la URL base de la API.
 ```bash
 npm run typecheck
 npm run build
+npm run smoke:local
 ```
+
+`npm run smoke:local` valida la API local contra SQL Server ya migrado y sembrado: health, version, login demo, sesion, metadata, listados seed de clientes, proveedores, articulos, categorias y marcas, y CRUD minimo soportado por el Master Data Engine. Si la API o SQL Server no estan disponibles, falla con un mensaje claro.
 
 Esta fase no implementa clientes, proveedores, inventario, ventas, compras, facturacion ni fiscalidad dominicana avanzada.
