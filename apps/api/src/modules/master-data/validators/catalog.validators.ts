@@ -1,8 +1,17 @@
 import { z } from "zod";
 
+const sqlGuidSchema = z
+  .string()
+  .regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, "Invalid GUID");
+
+const uuidParam = z.preprocess(
+  (value) => (typeof value === "string" ? value.toLowerCase() : value),
+  sqlGuidSchema
+);
+
 export const catalogParamsSchema = z.object({
   catalog: z.string().min(1).max(80),
-  id: z.string().uuid().optional()
+  id: uuidParam.optional()
 });
 
 const booleanQuery = z.preprocess((value) => {
@@ -38,7 +47,7 @@ export const catalogPayloadSchema = z.object({
   code: z.string().min(1).max(80),
   name: z.string().min(1).max(300),
   description: z.string().max(250).nullable().optional(),
-  companyId: z.string().uuid().nullable().optional(),
+  companyId: sqlGuidSchema.nullable().optional(),
   isActive: z.boolean().optional()
 }).passthrough();
 

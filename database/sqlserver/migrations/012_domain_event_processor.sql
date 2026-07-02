@@ -44,7 +44,10 @@ WHERE cc.parent_object_id = OBJECT_ID('events.DomainEvents')
 
 IF @StatusConstraintName IS NOT NULL
 BEGIN
-    EXEC('ALTER TABLE events.DomainEvents DROP CONSTRAINT ' + QUOTENAME(@StatusConstraintName));
+    DECLARE @DropStatusConstraintSql NVARCHAR(MAX) =
+        N'ALTER TABLE events.DomainEvents DROP CONSTRAINT ' + QUOTENAME(@StatusConstraintName);
+
+    EXEC sp_executesql @DropStatusConstraintSql;
 END;
 GO
 

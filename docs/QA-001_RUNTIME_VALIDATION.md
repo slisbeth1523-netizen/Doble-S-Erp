@@ -22,10 +22,10 @@ No se implementaron inventario real, compras, ventas, facturacion, POS, DGII ni 
 npm install: OK
 npm run typecheck: OK
 npm run build: OK
-npm run db:setup: FAIL - Login failed for user 'sa'.
+npm run db:setup: OK contra SSORIANO\SQLEXPRESS.
 npm run dev:api: OK
 npm run dev:web: OK
-npm run smoke:local: FAIL controlado - SQL Server unavailable for smoke.
+npm run smoke:local: OK
 ```
 
 Endpoints verificados con API local:
@@ -33,12 +33,20 @@ Endpoints verificados con API local:
 ```text
 GET /api/health: 200
 GET /api/version: 200
-GET /api/health/db: 503 controlado, {"success":false,"message":"Database unavailable","data":{"connected":false}}
+GET /api/health/db: 200, {"success":true,"data":{"connected":true}}
 ```
+
+## Bugs encontrados y corregidos
+
+- El runtime Node no soportaba instancia nombrada de SQL Server. Se agrego soporte para `SQLSERVER_INSTANCE` y para `SQLSERVER_HOST` con formato `SERVIDOR\INSTANCIA`.
+- La migracion `012_domain_event_processor.sql` fallaba en SQL Server al concatenar `QUOTENAME()` dentro de `EXEC(...)`. Se cambio a SQL dinamico con `sp_executesql`.
+- Las rutas de autenticacion existian pero no estaban montadas en `/api/auth`; se agrego `authRouter` al router principal.
+- La validacion de parametros usaba `z.uuid()`, que rechaza algunos `uniqueidentifier` validos devueltos por SQL Server. Se cambio a validacion GUID compatible con SQL Server.
+- El smoke reenviaba campos no editables devueltos por SQL al actualizar cliente; ahora envia solo payload editable.
 
 ## Evidencia frontend
 
-Con API encendida pero SQL Server no disponible, las rutas:
+Con API encendida y SQL Server disponible, las rutas:
 
 ```text
 /master-data/customers
@@ -48,10 +56,6 @@ Con API encendida pero SQL Server no disponible, las rutas:
 /master-data/brands
 ```
 
-mostraron Vista local, formulario y grid sin `Failed to fetch` y sin carga infinita.
+mostraron `API conectada`, formulario, grid y datos seed reales (`CLI-DEMO`, `SUP-DEMO`, `ART-DEMO`, `GENERAL`, `DOBLES`) sin `Failed to fetch` y sin carga infinita.
 
 Con API apagada, se verifico fallback local en `customers`, `items` y `brands`; la pantalla mostro `API no disponible`, `Vista local`, formulario y grid usable.
-
-## Evidencia pendiente por ambiente
-
-La validacion de catalogos con API real y datos seed requiere SQL Server local disponible con credenciales correctas en `.env`. En este ambiente `npm run db:setup` no pudo autenticar el usuario `sa`, por lo que no fue posible validar login demo, metadata autenticada, listados seed ni CRUD real contra base de datos.

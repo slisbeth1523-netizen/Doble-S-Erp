@@ -212,10 +212,18 @@ async function validateCrud(session) {
     "customers",
     customer.id,
     {
-      ...customer,
       code: customerCode,
       name: "Cliente QA Runtime Editado",
+      commercialName: "Cliente QA",
+      documentType: "RNC",
+      documentNumber: `QA${suffix}`,
+      email: "qa.runtime@dobles.local",
+      phone: "809-000-0100",
+      city: "Santo Domingo",
+      province: "Distrito Nacional",
+      countryCode: "DOM",
       creditLimit: 1500,
+      isCreditCustomer: true,
       isActive: true
     },
     session

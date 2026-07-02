@@ -30,18 +30,24 @@ export function loadLocalEnv(cwd = process.cwd()) {
 
 export function getSqlConfig() {
   loadLocalEnv();
+  const rawServer = process.env.SQLSERVER_HOST ?? "localhost";
+  const [server, instanceFromServer] = rawServer.includes("\\")
+    ? rawServer.split("\\", 2)
+    : [rawServer, undefined];
+  const instanceName = process.env.SQLSERVER_INSTANCE || instanceFromServer;
+  const options = {
+    encrypt: String(process.env.SQLSERVER_ENCRYPT ?? "false").toLowerCase() === "true",
+    trustServerCertificate:
+      String(process.env.SQLSERVER_TRUST_SERVER_CERTIFICATE ?? "true").toLowerCase() === "true",
+    ...(instanceName ? { instanceName } : {})
+  };
 
   return {
-    server: process.env.SQLSERVER_HOST ?? "localhost",
-    port: Number(process.env.SQLSERVER_PORT ?? 1433),
+    server,
+    ...(instanceName ? {} : { port: Number(process.env.SQLSERVER_PORT ?? 1433) }),
     database: process.env.SQLSERVER_DATABASE ?? "DOBLE_S_ERP",
     user: process.env.SQLSERVER_USER ?? "sa",
     password: process.env.SQLSERVER_PASSWORD ?? "",
-    options: {
-      encrypt: String(process.env.SQLSERVER_ENCRYPT ?? "false").toLowerCase() === "true",
-      trustServerCertificate:
-        String(process.env.SQLSERVER_TRUST_SERVER_CERTIFICATE ?? "true").toLowerCase() === "true"
-    }
+    options
   };
 }
-

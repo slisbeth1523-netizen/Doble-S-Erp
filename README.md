@@ -89,6 +89,7 @@ Edita `.env` y `apps/api/.env` con los datos reales de SQL Server:
 ```text
 CORS_ORIGIN=http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174
 SQLSERVER_HOST=localhost
+SQLSERVER_INSTANCE=
 SQLSERVER_PORT=1433
 SQLSERVER_DATABASE=DOBLE_S_ERP
 SQLSERVER_USER=sa
@@ -96,6 +97,8 @@ SQLSERVER_PASSWORD=tu_password_local
 SQLSERVER_ENCRYPT=false
 SQLSERVER_TRUST_SERVER_CERTIFICATE=true
 ```
+
+Para SQL Server Express con instancia nombrada, usar `SQLSERVER_HOST=SSORIANO` y `SQLSERVER_INSTANCE=SQLEXPRESS`. Tambien se acepta `SQLSERVER_HOST=SSORIANO\SQLEXPRESS`; cuando hay instancia nombrada, el runtime no fuerza `SQLSERVER_PORT`.
 
 `CORS_ORIGIN` acepta un origen unico o varios origenes separados por coma. Para desarrollo local se permiten los hosts `localhost` y `127.0.0.1` en los puertos Vite `5173` y `5174`, sin usar wildcard.
 

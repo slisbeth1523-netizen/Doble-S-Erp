@@ -13,6 +13,12 @@ function parseCorsOrigins(value: string) {
     .filter(Boolean);
 }
 
+function parseSqlServerHost(value: string) {
+  const [host, instanceName] = value.includes("\\") ? value.split("\\", 2) : [value, undefined];
+
+  return { host, instanceName };
+}
+
 const configSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   API_PORT: z.coerce.number().int().positive().default(4001),
@@ -21,6 +27,7 @@ const configSchema = z.object({
   JWT_SECRET: z.string().min(32, "JWT_SECRET must have at least 32 characters"),
   JWT_EXPIRES_IN: z.string().default("8h"),
   SQLSERVER_HOST: z.string().min(1, "SQLSERVER_HOST is required"),
+  SQLSERVER_INSTANCE: z.string().optional(),
   SQLSERVER_PORT: z.coerce.number().int().positive().default(1433),
   SQLSERVER_DATABASE: z.string().min(1, "SQLSERVER_DATABASE is required"),
   SQLSERVER_USER: z.string().min(1, "SQLSERVER_USER is required"),
@@ -36,6 +43,8 @@ if (!parsed.success) {
   throw new Error(`Invalid application configuration: ${messages.join("; ")}`);
 }
 
+const parsedSqlServerHost = parseSqlServerHost(parsed.data.SQLSERVER_HOST);
+
 const values = {
   api: {
     port: parsed.data.API_PORT,
@@ -50,7 +59,8 @@ const values = {
     expiresIn: parsed.data.JWT_EXPIRES_IN
   },
   sql: {
-    host: parsed.data.SQLSERVER_HOST,
+    host: parsedSqlServerHost.host,
+    instanceName: parsed.data.SQLSERVER_INSTANCE || parsedSqlServerHost.instanceName,
     port: parsed.data.SQLSERVER_PORT,
     database: parsed.data.SQLSERVER_DATABASE,
     user: parsed.data.SQLSERVER_USER,
@@ -69,6 +79,7 @@ type ConfigKey =
   | "jwt.secret"
   | "jwt.expiresIn"
   | "sql.host"
+  | "sql.instanceName"
   | "sql.port"
   | "sql.database"
   | "sql.user"
@@ -84,6 +95,7 @@ type ConfigValueMap = {
   "jwt.secret": ConfigValues["jwt"]["secret"];
   "jwt.expiresIn": ConfigValues["jwt"]["expiresIn"];
   "sql.host": ConfigValues["sql"]["host"];
+  "sql.instanceName": ConfigValues["sql"]["instanceName"];
   "sql.port": ConfigValues["sql"]["port"];
   "sql.database": ConfigValues["sql"]["database"];
   "sql.user": ConfigValues["sql"]["user"];
