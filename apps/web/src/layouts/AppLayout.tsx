@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import { Badge } from "../components/ui/index.js";
+import { getCatalogLabel } from "../modules/master-data/utils/catalogLabels.js";
 
 type NavigationItem = {
   label: string;
@@ -11,17 +12,17 @@ type NavigationItem = {
 const navigation: NavigationItem[] = [
   { label: "Dashboard", path: "/dashboard" },
   {
-    label: "Catalogos",
+    label: "Catálogos",
     path: "/master-data/customers",
     children: [
       { label: "Clientes", path: "/master-data/customers" },
       { label: "Proveedores", path: "/master-data/suppliers" },
-      { label: "Articulos", path: "/master-data/items" },
-      { label: "Categorias", path: "/master-data/categories" },
+      { label: "Artículos", path: "/master-data/items" },
+      { label: "Categorías", path: "/master-data/categories" },
       { label: "Monedas", path: "/master-data/currencies" },
       { label: "Unidades de medida", path: "/master-data/units-of-measure" },
       { label: "Condiciones de pago", path: "/master-data/payment-terms" },
-      { label: "Categorias fiscales", path: "/master-data/tax-categories" }
+      { label: "Categorías fiscales", path: "/master-data/tax-categories" }
     ]
   },
   { label: "Workflows", path: "/workflows" },
@@ -51,7 +52,19 @@ function isActive(currentPath: string, item: NavigationItem) {
 function breadcrumb(path: string) {
   const segments = path === "/" ? ["dashboard"] : path.split("/").filter(Boolean);
 
-  return ["Doble S ERP", ...segments.map((segment) => segment.replaceAll("-", " "))];
+  if (segments[0] === "master-data") {
+    return ["Doble S ERP", "Catálogos", getCatalogLabel(segments[1] ?? "")];
+  }
+
+  const labels: Record<string, string> = {
+    dashboard: "Dashboard",
+    workflows: "Workflows",
+    events: "Eventos",
+    security: "Seguridad",
+    settings: "Configuración"
+  };
+
+  return ["Doble S ERP", ...segments.map((segment) => labels[segment] ?? segment.replaceAll("-", " "))];
 }
 
 export function AppLayout({ children, currentPath, onNavigate }: AppLayoutProps) {
@@ -64,7 +77,7 @@ export function AppLayout({ children, currentPath, onNavigate }: AppLayoutProps)
           <span className="brand-mark">DS</span>
           <span>
             <strong>Doble S ERP</strong>
-            <small>Developer Preview</small>
+            <small>Vista de desarrollo</small>
           </span>
         </button>
 
@@ -107,7 +120,7 @@ export function AppLayout({ children, currentPath, onNavigate }: AppLayoutProps)
             ))}
           </div>
           <div className="tenant-pill">
-            <Badge tone="blue">Preview</Badge>
+            <Badge tone="blue">Vista previa</Badge>
             <span>Usuario demo</span>
             <strong>Empresa actual</strong>
           </div>

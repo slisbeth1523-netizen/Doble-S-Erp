@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { normalizeApiError } from "../../../services/apiErrors.js";
 import { fetchCatalogMetadata } from "../services/metadataClient.js";
 import type { CatalogMetadata, RuntimeResourceState } from "../types/runtime-ui.types.js";
 
@@ -23,11 +24,14 @@ export function useCatalogMetadata(catalog: string): RuntimeResourceState<Catalo
         }
       })
       .catch((error: unknown) => {
+        const friendlyError = normalizeApiError(error);
+
         if (!cancelled) {
           setState({
             data: null,
             loading: false,
-            error: error instanceof Error ? error.message : "Unable to load metadata.",
+            error: friendlyError.message,
+            errorKind: friendlyError.kind,
             empty: false
           });
         }

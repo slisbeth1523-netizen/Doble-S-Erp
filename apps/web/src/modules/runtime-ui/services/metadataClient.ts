@@ -1,5 +1,6 @@
 import type { ApiResponse } from "@doble-s-erp/shared";
 
+import { FriendlyApiError, apiErrorKindFromStatus, normalizeApiError } from "../../../services/apiErrors.js";
 import { apiUrl } from "../../../services/apiClient.js";
 import type {
   CatalogListResult,
@@ -24,18 +25,22 @@ function buildQuery(params: Record<string, QueryValue>) {
 }
 
 async function requestApi<T>(path: string): Promise<T> {
-  const response = await fetch(`${apiUrl}${path}`);
-  const body = (await response.json()) as ApiResponse<T>;
+  try {
+    const response = await fetch(`${apiUrl}${path}`);
+    const body = (await response.json().catch(() => null)) as ApiResponse<T> | null;
 
-  if (!response.ok || !body.success) {
-    throw new Error(body.message ?? body.error?.message ?? `API request failed with status ${response.status}`);
+    if (!response.ok || !body?.success) {
+      throw new FriendlyApiError(apiErrorKindFromStatus(response.status), response.status);
+    }
+
+    if (body.data === undefined) {
+      throw new FriendlyApiError("generic");
+    }
+
+    return body.data;
+  } catch (error: unknown) {
+    throw normalizeApiError(error);
   }
-
-  if (body.data === undefined) {
-    throw new Error("API response did not include data.");
-  }
-
-  return body.data;
 }
 
 export function fetchCatalogMetadata(catalog: string) {
@@ -64,21 +69,25 @@ export async function fetchCatalogItems(
     sortDirection?: "asc" | "desc";
   } = {}
 ): Promise<CatalogListResult> {
-  const result = await fetch(`${apiUrl}/master-data/${encodeURIComponent(catalog)}${buildQuery(params)}`);
-  const body = (await result.json()) as ApiResponse<CatalogRecord[]>;
+  try {
+    const result = await fetch(`${apiUrl}/master-data/${encodeURIComponent(catalog)}${buildQuery(params)}`);
+    const body = (await result.json().catch(() => null)) as ApiResponse<CatalogRecord[]> | null;
 
-  if (!result.ok || !body.success) {
-    throw new Error(body.message ?? body.error?.message ?? `API request failed with status ${result.status}`);
+    if (!result.ok || !body?.success) {
+      throw new FriendlyApiError(apiErrorKindFromStatus(result.status), result.status);
+    }
+
+    const pagination = body.meta?.pagination as
+      | { page?: number; pageSize?: number; totalItems?: number }
+      | undefined;
+
+    return {
+      items: body.data ?? [],
+      totalItems: pagination?.totalItems ?? body.data?.length ?? 0,
+      page: pagination?.page,
+      pageSize: pagination?.pageSize
+    };
+  } catch (error: unknown) {
+    throw normalizeApiError(error);
   }
-
-  const pagination = body.meta?.pagination as
-    | { page?: number; pageSize?: number; totalItems?: number }
-    | undefined;
-
-  return {
-    items: body.data ?? [],
-    totalItems: pagination?.totalItems ?? body.data?.length ?? 0,
-    page: pagination?.page,
-    pageSize: pagination?.pageSize
-  };
 }

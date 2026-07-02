@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
+import { normalizeApiError } from "../../../services/apiErrors.js";
 import { fetchCatalogItems } from "../services/metadataClient.js";
 import type { CatalogListResult, RuntimeResourceState } from "../types/runtime-ui.types.js";
 
@@ -46,11 +47,14 @@ export function useCatalogData(catalog: string, query: CatalogGridQuery): Runtim
         }
       })
       .catch((error: unknown) => {
+        const friendlyError = normalizeApiError(error);
+
         if (!cancelled) {
           setState({
             data: null,
             loading: false,
-            error: error instanceof Error ? error.message : "Unable to load catalog data.",
+            error: friendlyError.message,
+            errorKind: friendlyError.kind,
             empty: false
           });
         }

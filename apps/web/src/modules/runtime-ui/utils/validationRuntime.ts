@@ -24,7 +24,7 @@ export function validateRuntimeValues(
     const empty = value === undefined || value === null || value === "";
 
     if ((field.required || validation.required) && empty) {
-      errors[field.field] = `${field.label} is required.`;
+      errors[field.field] = `${field.label} es requerido.`;
       return;
     }
 
@@ -34,25 +34,25 @@ export function validateRuntimeValues(
 
     if (typeof value === "string") {
       if (validation.minLength !== undefined && value.length < validation.minLength) {
-        errors[field.field] = `${field.label} must have at least ${validation.minLength} characters.`;
+        errors[field.field] = `${field.label} debe tener al menos ${validation.minLength} caracteres.`;
       }
 
       if (validation.maxLength !== undefined && value.length > validation.maxLength) {
-        errors[field.field] = `${field.label} must have ${validation.maxLength} characters or fewer.`;
+        errors[field.field] = `${field.label} debe tener ${validation.maxLength} caracteres o menos.`;
       }
 
       if (validation.regex && !new RegExp(validation.regex).test(value)) {
-        errors[field.field] = `${field.label} has an invalid format.`;
+        errors[field.field] = `${field.label} tiene un formato inválido.`;
       }
     }
 
     if (typeof value === "number") {
       if (validation.min !== undefined && value < validation.min) {
-        errors[field.field] = `${field.label} must be greater than or equal to ${validation.min}.`;
+        errors[field.field] = `${field.label} debe ser mayor o igual que ${validation.min}.`;
       }
 
       if (validation.max !== undefined && value > validation.max) {
-        errors[field.field] = `${field.label} must be less than or equal to ${validation.max}.`;
+        errors[field.field] = `${field.label} debe ser menor o igual que ${validation.max}.`;
       }
     }
   });

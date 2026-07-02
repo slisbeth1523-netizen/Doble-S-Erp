@@ -15,9 +15,9 @@ export function SettingsPreview() {
   return (
     <div className="page-stack">
       <PageHeader
-        description="Preferencias visuales y contexto de trabajo preparados como preview."
-        eyebrow="Configuracion"
-        title="Configuracion"
+        description="Preferencias visuales y contexto de trabajo preparados como vista previa."
+        eyebrow="Configuración"
+        title="Configuración"
       />
       <Alert>El tema claro/oscuro queda preparado por tokens CSS; esta pantalla no persiste preferencias.</Alert>
       <Card className="settings-form">
@@ -35,18 +35,18 @@ export function SettingsPreview() {
         </label>
         <label className="checkbox-row">
           <Checkbox defaultChecked />
-          <span>Usar modo developer preview</span>
+          <span>Usar modo vista de desarrollo</span>
         </label>
         <label>
           <span>Notas</span>
-          <Textarea placeholder="Notas locales de validacion visual" />
+          <Textarea placeholder="Notas locales de validación visual" />
         </label>
       </Card>
       <Card>
         <h2>Estados de UX</h2>
         <div className="state-demo">
           <LoadingState label="Cargando preferencias..." />
-          <ErrorState title="Preferencias no guardadas" message="No hay persistencia activa en esta preview." />
+          <ErrorState title="Preferencias no guardadas" message="No hay persistencia activa en esta vista previa." />
           <EmptyState title="Sin configuraciones reales" description="Las opciones son placeholders visuales." />
         </div>
       </Card>

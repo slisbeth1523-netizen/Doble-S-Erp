@@ -27,7 +27,7 @@ function formatCell(record: CatalogRecord, column: RuntimeGridColumn) {
   }
 
   if (column.type === "boolean") {
-    return value ? "Yes" : "No";
+    return value ? "Sí" : "No";
   }
 
   if (column.type === "date" || column.type === "datetime") {
@@ -53,21 +53,29 @@ export function DynamicGrid({ catalog }: DynamicGridProps) {
   });
 
   if (metadata.loading) {
-    return <div className="runtime-state">Loading grid...</div>;
+    return <div className="runtime-state">Cargando grid...</div>;
   }
 
   if (metadata.error) {
-    return <div className="runtime-state runtime-error">{metadata.error}</div>;
+    return (
+      <div className="runtime-state runtime-error">
+        No fue posible cargar los registros. Verifique la conexión con la API.
+      </div>
+    );
   }
 
   if (!metadata.data || columns.length === 0) {
-    return <div className="runtime-state">No columns available.</div>;
+    return <div className="runtime-state">No hay columnas disponibles.</div>;
   }
 
   return (
     <section className="runtime-grid">
       <FilterBuilder metadata={metadata.data} value={query} onChange={setQuery} />
-      {data.error ? <div className="runtime-state runtime-error">{data.error}</div> : null}
+      {data.error ? (
+        <div className="runtime-state runtime-error">
+          No fue posible cargar los registros. Verifique la conexión con la API.
+        </div>
+      ) : null}
       <div className="runtime-table-wrap">
         <table>
           <thead>
@@ -104,12 +112,12 @@ export function DynamicGrid({ catalog }: DynamicGridProps) {
           <tbody>
             {data.loading ? (
               <tr>
-                <td colSpan={columns.length}>Loading data...</td>
+                <td colSpan={columns.length}>Cargando registros...</td>
               </tr>
             ) : null}
             {data.empty ? (
               <tr>
-                <td colSpan={columns.length}>No data found.</td>
+                <td colSpan={columns.length}>No se encontraron registros.</td>
               </tr>
             ) : null}
             {data.data?.items.map((record, index) => (
@@ -130,18 +138,18 @@ export function DynamicGrid({ catalog }: DynamicGridProps) {
           onClick={() => setQuery((current) => ({ ...current, page: current.page - 1 }))}
           type="button"
         >
-          Previous
+          Anterior
         </button>
         <span>
-          Page {query.page}
-          {data.data ? ` - ${data.data.totalItems} items` : ""}
+          Página {query.page}
+          {data.data ? ` - ${data.data.totalItems} registros` : ""}
         </span>
         <button
           disabled={data.loading || (data.data?.items.length ?? 0) < query.pageSize}
           onClick={() => setQuery((current) => ({ ...current, page: current.page + 1 }))}
           type="button"
         >
-          Next
+          Siguiente
         </button>
       </footer>
     </section>
