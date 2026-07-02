@@ -38,8 +38,10 @@ export type CatalogFieldGrid = {
 
 export type CatalogFieldDefinition = {
   field: string;
+  dbColumn?: string;
   label: string;
   type: CatalogFieldType;
+  lookupCatalog?: string;
   required: boolean;
   visibleInGrid: boolean;
   visibleInForm: boolean;
@@ -76,7 +78,7 @@ export type CatalogDefinition = {
   idColumn: string;
   codeColumn: string;
   nameColumn: string;
-  descriptionColumn: string;
+  descriptionColumn?: string;
   allowedSearchColumns: readonly string[];
   allowedSortColumns: readonly string[];
   defaultSortBy: string;
@@ -219,6 +221,295 @@ const commonCatalogFields = (companyVisible: boolean): readonly CatalogFieldDefi
   }
 ];
 
+const customerFields = [
+  {
+    field: "code",
+    label: "Codigo",
+    type: "text",
+    required: true,
+    visibleInGrid: true,
+    visibleInForm: true,
+    searchable: true,
+    sortable: true,
+    editable: true,
+    readOnly: false,
+    placeholder: "CLI-0001",
+    displayOrder: 10,
+    validation: { required: true, minLength: 1, maxLength: 40, unique: true, nullable: false },
+    grid: { width: 120, align: "left" }
+  },
+  {
+    field: "name",
+    label: "Nombre",
+    type: "text",
+    required: true,
+    visibleInGrid: true,
+    visibleInForm: true,
+    searchable: true,
+    sortable: true,
+    editable: true,
+    readOnly: false,
+    placeholder: "Nombre legal del cliente",
+    displayOrder: 20,
+    validation: { required: true, minLength: 1, maxLength: 200, nullable: false },
+    grid: { width: 240, align: "left" }
+  },
+  {
+    field: "commercialName",
+    dbColumn: "CommercialName",
+    label: "Nombre comercial",
+    type: "text",
+    required: false,
+    visibleInGrid: true,
+    visibleInForm: true,
+    searchable: true,
+    sortable: true,
+    editable: true,
+    readOnly: false,
+    displayOrder: 30,
+    validation: { maxLength: 200, nullable: true },
+    grid: { width: 220, align: "left" }
+  },
+  {
+    field: "documentType",
+    dbColumn: "DocumentType",
+    label: "Tipo documento",
+    type: "text",
+    required: false,
+    visibleInGrid: false,
+    visibleInForm: true,
+    searchable: false,
+    sortable: false,
+    editable: true,
+    readOnly: false,
+    placeholder: "RNC, Cedula, Pasaporte",
+    displayOrder: 40,
+    validation: { maxLength: 30, nullable: true }
+  },
+  {
+    field: "documentNumber",
+    dbColumn: "DocumentNumber",
+    label: "Documento",
+    type: "text",
+    required: false,
+    visibleInGrid: true,
+    visibleInForm: true,
+    searchable: true,
+    sortable: true,
+    editable: true,
+    readOnly: false,
+    displayOrder: 50,
+    validation: { maxLength: 40, nullable: true },
+    grid: { width: 150, align: "left" }
+  },
+  {
+    field: "email",
+    dbColumn: "Email",
+    label: "Correo",
+    type: "text",
+    required: false,
+    visibleInGrid: true,
+    visibleInForm: true,
+    searchable: true,
+    sortable: true,
+    editable: true,
+    readOnly: false,
+    displayOrder: 60,
+    validation: { maxLength: 200, regex: "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", nullable: true },
+    grid: { width: 220, align: "left" }
+  },
+  {
+    field: "phone",
+    dbColumn: "Phone",
+    label: "Telefono",
+    type: "text",
+    required: false,
+    visibleInGrid: true,
+    visibleInForm: true,
+    searchable: true,
+    sortable: false,
+    editable: true,
+    readOnly: false,
+    displayOrder: 70,
+    validation: { maxLength: 40, nullable: true },
+    grid: { width: 140, align: "left" }
+  },
+  {
+    field: "mobile",
+    dbColumn: "Mobile",
+    label: "Movil",
+    type: "text",
+    required: false,
+    visibleInGrid: false,
+    visibleInForm: true,
+    searchable: false,
+    sortable: false,
+    editable: true,
+    readOnly: false,
+    displayOrder: 80,
+    validation: { maxLength: 40, nullable: true }
+  },
+  {
+    field: "addressLine1",
+    dbColumn: "AddressLine1",
+    label: "Direccion",
+    type: "textarea",
+    required: false,
+    visibleInGrid: false,
+    visibleInForm: true,
+    searchable: false,
+    sortable: false,
+    editable: true,
+    readOnly: false,
+    displayOrder: 90,
+    validation: { maxLength: 300, nullable: true }
+  },
+  {
+    field: "city",
+    dbColumn: "City",
+    label: "Ciudad",
+    type: "text",
+    required: false,
+    visibleInGrid: false,
+    visibleInForm: true,
+    searchable: false,
+    sortable: true,
+    editable: true,
+    readOnly: false,
+    displayOrder: 100,
+    validation: { maxLength: 120, nullable: true }
+  },
+  {
+    field: "province",
+    dbColumn: "Province",
+    label: "Provincia",
+    type: "text",
+    required: false,
+    visibleInGrid: false,
+    visibleInForm: true,
+    searchable: false,
+    sortable: true,
+    editable: true,
+    readOnly: false,
+    displayOrder: 110,
+    validation: { maxLength: 120, nullable: true }
+  },
+  {
+    field: "countryCode",
+    dbColumn: "CountryCode",
+    label: "Pais",
+    type: "text",
+    required: false,
+    visibleInGrid: false,
+    visibleInForm: true,
+    searchable: false,
+    sortable: false,
+    editable: true,
+    readOnly: false,
+    placeholder: "DOM",
+    displayOrder: 120,
+    validation: { minLength: 2, maxLength: 3, nullable: true }
+  },
+  {
+    field: "paymentTermId",
+    dbColumn: "PaymentTermId",
+    label: "Condicion de pago",
+    type: "lookup",
+    lookupCatalog: "payment-terms",
+    required: false,
+    visibleInGrid: false,
+    visibleInForm: true,
+    searchable: false,
+    sortable: false,
+    editable: true,
+    readOnly: false,
+    displayOrder: 130,
+    validation: { nullable: true }
+  },
+  {
+    field: "currencyId",
+    dbColumn: "CurrencyId",
+    label: "Moneda",
+    type: "lookup",
+    lookupCatalog: "currencies",
+    required: false,
+    visibleInGrid: false,
+    visibleInForm: true,
+    searchable: false,
+    sortable: false,
+    editable: true,
+    readOnly: false,
+    displayOrder: 140,
+    validation: { nullable: true }
+  },
+  {
+    field: "taxCategoryId",
+    dbColumn: "TaxCategoryId",
+    label: "Categoria fiscal",
+    type: "lookup",
+    lookupCatalog: "tax-categories",
+    required: false,
+    visibleInGrid: false,
+    visibleInForm: true,
+    searchable: false,
+    sortable: false,
+    editable: true,
+    readOnly: false,
+    displayOrder: 150,
+    validation: { nullable: true }
+  },
+  {
+    field: "creditLimit",
+    dbColumn: "CreditLimit",
+    label: "Limite de credito",
+    type: "number",
+    required: false,
+    visibleInGrid: true,
+    visibleInForm: true,
+    searchable: false,
+    sortable: true,
+    editable: true,
+    readOnly: false,
+    defaultValue: 0,
+    displayOrder: 160,
+    validation: { min: 0, nullable: true },
+    grid: { width: 140, align: "right", format: "currency" }
+  },
+  {
+    field: "isCreditCustomer",
+    dbColumn: "IsCreditCustomer",
+    label: "Cliente a credito",
+    type: "boolean",
+    required: false,
+    visibleInGrid: true,
+    visibleInForm: true,
+    searchable: false,
+    sortable: true,
+    editable: true,
+    readOnly: false,
+    defaultValue: false,
+    displayOrder: 170,
+    validation: { nullable: false },
+    grid: { width: 120, align: "center", format: "boolean" }
+  },
+  {
+    field: "isActive",
+    label: "Activo",
+    type: "boolean",
+    required: false,
+    visibleInGrid: true,
+    visibleInForm: true,
+    searchable: false,
+    sortable: true,
+    editable: true,
+    readOnly: false,
+    defaultValue: true,
+    displayOrder: 180,
+    validation: { nullable: false },
+    grid: { width: 96, align: "center", format: "boolean" }
+  }
+] as const satisfies readonly CatalogFieldDefinition[];
+
 export const catalogDefinitions = {
   currencies: {
     catalogCode: "currencies",
@@ -339,6 +630,47 @@ export const catalogDefinitions = {
       updatedBy: "UpdatedBy"
     },
     fields: commonCatalogFields(false)
+  },
+  customers: {
+    catalogCode: "customers",
+    displayName: "Clientes",
+    tableName: "crm.Customers",
+    idColumn: "CustomerId",
+    codeColumn: "Code",
+    nameColumn: "Name",
+    allowedSearchColumns: ["Code", "Name", "CommercialName", "DocumentNumber", "Email", "Phone"],
+    allowedSortColumns: [
+      "Code",
+      "Name",
+      "CommercialName",
+      "DocumentNumber",
+      "Email",
+      "City",
+      "Province",
+      "CreditLimit",
+      "IsCreditCustomer",
+      "CreatedAt",
+      "IsActive"
+    ],
+    defaultSortBy: "Name",
+    permissions: commonPermissions("crm.customers"),
+    moduleCode: "crm",
+    tenantScoped: true,
+    companyScoped: true,
+    columns: {
+      id: "CustomerId",
+      tenantId: "TenantId",
+      companyId: "CompanyId",
+      code: "Code",
+      name: "Name",
+      description: "AddressLine1",
+      isActive: "IsActive",
+      createdAt: "CreatedAt",
+      updatedAt: "UpdatedAt",
+      createdBy: "CreatedBy",
+      updatedBy: "UpdatedBy"
+    },
+    fields: customerFields
   }
 } as const satisfies Record<string, CatalogDefinition>;
 

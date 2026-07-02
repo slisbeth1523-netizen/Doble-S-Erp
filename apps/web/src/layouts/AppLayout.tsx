@@ -12,8 +12,9 @@ const navigation: NavigationItem[] = [
   { label: "Dashboard", path: "/dashboard" },
   {
     label: "Catalogos",
-    path: "/master-data/currencies",
+    path: "/master-data/customers",
     children: [
+      { label: "Clientes", path: "/master-data/customers" },
       { label: "Monedas", path: "/master-data/currencies" },
       { label: "Unidades de medida", path: "/master-data/units-of-measure" },
       { label: "Condiciones de pago", path: "/master-data/payment-terms" },
@@ -33,6 +34,10 @@ type AppLayoutProps = {
 };
 
 function isActive(currentPath: string, item: NavigationItem) {
+  if (item.children?.some((child) => currentPath === child.path)) {
+    return true;
+  }
+
   if (item.path === "/dashboard") {
     return currentPath === "/" || currentPath === "/dashboard";
   }
