@@ -312,3 +312,76 @@ La fase se considera completada cuando:
 - `npm run build` pasa.
 - Los endpoints base de health/version siguen funcionando.
 - No se implementaron modulos funcionales fuera del alcance.
+
+## Implementacion
+
+### Migracion
+
+Se agrego:
+
+```text
+database/sqlserver/migrations/004_security_engine_navigation_licenses.sql
+```
+
+La migracion crea:
+
+- `security.NavigationItems`
+- `security.AccessPolicies`
+- `security.RolePolicies`
+- `security.TenantModuleLicenses`
+- `security.FeatureFlags`
+- `security.TenantFeatureFlags`
+
+Tambien agrega indices para navegacion, licencias y feature flags por tenant.
+
+### API
+
+Se extendio `apps/api/src/modules/security/api/routes/security.routes.ts` con:
+
+- `GET /api/security/navigation`
+- `POST /api/security/navigation`
+- `PUT /api/security/navigation/:navigationId`
+- `DELETE /api/security/navigation/:navigationId`
+- `GET /api/security/policies`
+- `POST /api/security/policies`
+- `PUT /api/security/policies/:policyId`
+- `DELETE /api/security/policies/:policyId`
+- `GET /api/security/licenses/modules`
+- `POST /api/security/licenses/modules`
+- `DELETE /api/security/licenses/modules/:licenseId`
+- `GET /api/security/feature-flags`
+- `POST /api/security/feature-flags`
+- `PUT /api/security/feature-flags/:flagId`
+- `DELETE /api/security/feature-flags/:flagId`
+- `GET /api/security/me/context`
+
+Todos usan autenticacion, contexto SaaS, validacion Zod, ResponseBuilder, permisos y auditoria cuando aplica.
+
+### Servicios y repositorios
+
+Se agregaron:
+
+- `apps/api/src/modules/security/application/security-engine.service.ts`
+- `apps/api/src/modules/security/infrastructure/security-engine.repository.ts`
+
+El service extiende `BaseService`. El repository extiende `BaseSqlRepository`.
+
+### Middlewares
+
+Se agregaron:
+
+- `apps/api/src/modules/security/api/licensed-module.middleware.ts`
+- `apps/api/src/modules/security/api/feature-flag.middleware.ts`
+
+Permiten validar modulos licenciados y feature flags activos para el tenant actual.
+
+### Auditoria
+
+Se registran eventos funcionales para:
+
+- navegacion creada/modificada/desactivada
+- politica creada/modificada/desactivada
+- licencia asignada/revocada
+- feature flag creado/modificado/desactivado
+
+La auditoria usa `auditEvent` y no rompe el flujo principal si falla.

@@ -37,3 +37,157 @@ La plantilla no incluye contrasenas reales. El valor `@AdminPasswordHash` debe g
 
 - Fase 1.1 documentada: endurecimiento de fundacion SaaS.
 - Siguiente paso: Fase 1.2, estructura tecnica inicial del monorepo, API, configuracion, migraciones y health checks.
+
+## Fase 1.2 - Bootstrap tecnico
+
+El repositorio queda organizado como monorepo:
+
+```text
+apps/
+  api/
+  web/
+database/
+  sqlserver/
+    migrations/
+    seeds/
+docs/
+  phases/
+  architecture/
+packages/
+  shared/
+  config/
+```
+
+## Instalacion
+
+```bash
+npm install
+```
+
+Copiar `.env.example` a `.env` y completar valores locales sin usar credenciales reales.
+
+## Ejecutar localmente
+
+Requisitos:
+
+- Node.js 20 o superior.
+- npm 10 o superior.
+- SQL Server local o accesible desde la maquina de desarrollo.
+- Una base de datos creada, por ejemplo `DOBLE_S_ERP`.
+
+Pasos recomendados en Windows PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+Copy-Item apps/api/.env.example apps/api/.env
+Copy-Item apps/web/.env.example apps/web/.env
+npm install
+```
+
+Edita `.env` y `apps/api/.env` con los datos reales de SQL Server:
+
+```text
+CORS_ORIGIN=http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174
+SQLSERVER_HOST=localhost
+SQLSERVER_INSTANCE=
+SQLSERVER_PORT=1433
+SQLSERVER_DATABASE=DOBLE_S_ERP
+SQLSERVER_USER=sa
+SQLSERVER_PASSWORD=tu_password_local
+SQLSERVER_ENCRYPT=false
+SQLSERVER_TRUST_SERVER_CERTIFICATE=true
+```
+
+Para SQL Server Express con instancia nombrada, usar `SQLSERVER_HOST=SSORIANO` y `SQLSERVER_INSTANCE=SQLEXPRESS`. Tambien se acepta `SQLSERVER_HOST=SSORIANO\SQLEXPRESS`; cuando hay instancia nombrada, el runtime no fuerza `SQLSERVER_PORT`.
+
+`CORS_ORIGIN` acepta un origen unico o varios origenes separados por coma. Para desarrollo local se permiten los hosts `localhost` y `127.0.0.1` en los puertos Vite `5173` y `5174`, sin usar wildcard.
+
+El frontend usa:
+
+```text
+VITE_API_URL=http://localhost:4001/api
+VITE_DEMO_LOGIN_ENABLED=true
+VITE_DEMO_EMAIL=demo@dobles.local
+VITE_DEMO_PASSWORD=Demo12345!
+```
+
+Ejecuta migraciones y datos locales:
+
+```powershell
+npm run db:setup
+```
+
+El seed local crea un tenant, una empresa, el usuario demo, permisos mínimos y datos de prueba para catálogos técnicos, clientes, proveedores, artículos, categorías y marcas. Es idempotente: puede ejecutarse varias veces sin duplicar datos.
+
+Levantar API y Web por separado:
+
+```powershell
+npm run dev:api
+npm run dev:web
+```
+
+O levantar ambos desde la raíz:
+
+```powershell
+npm run dev
+```
+
+URLs locales:
+
+```text
+API: http://localhost:4001/api
+Web: http://localhost:5173 o http://localhost:5174
+Health: http://localhost:4001/api/health
+Version: http://localhost:4001/api/version
+DB Health: http://localhost:4001/api/health/db
+```
+
+Rutas runtime principales:
+
+```text
+http://localhost:5173/master-data/customers
+http://localhost:5173/master-data/suppliers
+http://localhost:5173/master-data/items
+http://localhost:5173/master-data/categories
+http://localhost:5173/master-data/brands
+```
+
+Si la API o SQL Server no estan disponibles, el frontend mantiene la Vista local con metadata de respaldo para no romper la pantalla. Cuando la API responde y el login demo esta habilitado, el runtime prioriza metadata y registros reales.
+
+## API
+
+La API usa Node.js, Express, TypeScript, SQL Server, dotenv, cors y helmet.
+
+```bash
+npm run dev:api
+```
+
+Endpoints base:
+
+```text
+GET http://localhost:4001/api/health
+GET http://localhost:4001/api/health/db
+GET http://localhost:4001/api/version
+```
+
+## Web
+
+El frontend usa React, Vite y TypeScript.
+
+```bash
+npm run dev:web
+```
+
+La variable `VITE_API_URL` define la URL base de la API.
+
+## Calidad
+
+```bash
+npm run typecheck
+npm run build
+npm run smoke:local
+```
+
+`npm run smoke:local` valida la API local contra SQL Server ya migrado y sembrado: health, version, login demo, sesion, metadata, listados seed de clientes, proveedores, articulos, categorias y marcas, y CRUD minimo soportado por el Master Data Engine. Si la API o SQL Server no estan disponibles, falla con un mensaje claro.
+
+Esta fase no implementa clientes, proveedores, inventario, ventas, compras, facturacion ni fiscalidad dominicana avanzada.

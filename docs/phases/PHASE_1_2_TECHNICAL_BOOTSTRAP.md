@@ -94,9 +94,11 @@ Crear `.env.example` con variables como:
 NODE_ENV=development
 API_PORT=4001
 API_PREFIX=/api
+CORS_ORIGIN=http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174
 JWT_SECRET=change_me
 JWT_EXPIRES_IN=8h
 SQLSERVER_HOST=localhost
+SQLSERVER_INSTANCE=
 SQLSERVER_PORT=1433
 SQLSERVER_DATABASE=DOBLE_S_ERP
 SQLSERVER_USER=sa
