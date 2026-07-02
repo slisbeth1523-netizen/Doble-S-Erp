@@ -15,6 +15,7 @@ const navigation: NavigationItem[] = [
     path: "/master-data/customers",
     children: [
       { label: "Clientes", path: "/master-data/customers" },
+      { label: "Proveedores", path: "/master-data/suppliers" },
       { label: "Monedas", path: "/master-data/currencies" },
       { label: "Unidades de medida", path: "/master-data/units-of-measure" },
       { label: "Condiciones de pago", path: "/master-data/payment-terms" },
