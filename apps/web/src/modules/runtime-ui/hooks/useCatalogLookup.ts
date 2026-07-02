@@ -32,11 +32,12 @@ export function useCatalogLookup(
 
         if (!cancelled) {
           setState({
-            data: null,
+            data: [],
             loading: false,
-            error: friendlyError.message,
+            error: null,
             errorKind: friendlyError.kind,
-            empty: false
+            usingFallback: true,
+            empty: true
           });
         }
       });

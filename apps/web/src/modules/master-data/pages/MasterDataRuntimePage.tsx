@@ -18,6 +18,16 @@ function catalogFromLocation() {
   return masterDataIndex >= 0 ? segments[masterDataIndex + 1] : undefined;
 }
 
+const actionLabels: Record<string, string> = {
+  create: "crear",
+  update: "actualizar",
+  activate: "activar",
+  deactivate: "desactivar",
+  lookup: "consultar",
+  export: "exportar",
+  import: "importar"
+};
+
 export function MasterDataRuntimePage({ catalog }: MasterDataRuntimePageProps) {
   const resolvedCatalog = catalog ?? catalogFromLocation() ?? "currencies";
   const metadata = useCatalogMetadata(resolvedCatalog);
@@ -27,10 +37,6 @@ export function MasterDataRuntimePage({ catalog }: MasterDataRuntimePageProps) {
     [metadata.data, resolvedCatalog]
   );
   const apiBadge = useMemo(() => {
-    if (metadata.data) {
-      return <Badge tone="green">API conectada</Badge>;
-    }
-
     if (metadata.errorKind === "unauthorized" || metadata.errorKind === "forbidden") {
       return <Badge tone="amber">Requiere sesión</Badge>;
     }
@@ -39,12 +45,12 @@ export function MasterDataRuntimePage({ catalog }: MasterDataRuntimePageProps) {
       return <Badge tone="red">API no disponible</Badge>;
     }
 
-    if (metadata.error) {
-      return <Badge tone="blue">Vista local</Badge>;
+    if (metadata.data && !metadata.usingFallback) {
+      return <Badge tone="green">API conectada</Badge>;
     }
 
     return <Badge tone="amber">Vista local</Badge>;
-  }, [metadata.data, metadata.error, metadata.errorKind]);
+  }, [metadata.data, metadata.errorKind, metadata.usingFallback]);
 
   return (
     <div className="master-data-runtime-page">
@@ -52,16 +58,18 @@ export function MasterDataRuntimePage({ catalog }: MasterDataRuntimePageProps) {
         actions={
           <div className="runtime-page-actions">
             {apiBadge}
-            {metadata.error ? <Badge tone="blue">Vista local</Badge> : null}
+            {metadata.usingFallback ? <Badge tone="blue">Vista local</Badge> : null}
             {metadata.data ? (
-            <RuntimeActions
-              actions={metadata.data.actions}
-              onAction={(action) => setLastAction(`${action} preparado por metadata.`)}
-            />
+              <RuntimeActions
+                actions={metadata.data.actions}
+                onAction={(action) =>
+                  setLastAction(`Acción ${actionLabels[action] ?? action} preparada por metadata.`)
+                }
+              />
             ) : null}
           </div>
         }
-        description="Pantalla genérica por metadata para catálogos técnicos. Si la API requiere autenticación, la vista muestra el estado controlado."
+        description="Pantalla genérica por metadata para catálogos técnicos. Si la API no está disponible, la vista local permite probar el formulario."
         eyebrow="Datos Maestros"
         title={title}
       />
@@ -71,7 +79,15 @@ export function MasterDataRuntimePage({ catalog }: MasterDataRuntimePageProps) {
       </Alert>
 
       {metadata.loading ? <LoadingState label="Cargando metadata del catálogo..." /> : null}
-      {metadata.error ? <ErrorState message={metadata.error} title="No se pudo cargar metadata" /> : null}
+      {metadata.usingFallback ? (
+        <Alert tone="warning" title="Vista local activa">
+          La API no está disponible o requiere sesión. Puedes revisar y probar el formulario con metadata local;
+          conecta el backend para consultar y guardar registros reales.
+        </Alert>
+      ) : null}
+      {metadata.error && !metadata.usingFallback ? (
+        <ErrorState message={metadata.error} title="No se pudo cargar metadata" />
+      ) : null}
       {lastAction ? <Alert tone="success">{lastAction}</Alert> : null}
 
       <section className="runtime-layout runtime-layout-two">

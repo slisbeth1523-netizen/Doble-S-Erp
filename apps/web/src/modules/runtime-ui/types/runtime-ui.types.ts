@@ -118,5 +118,6 @@ export type RuntimeResourceState<T> = {
   loading: boolean;
   error: string | null;
   errorKind?: ApiErrorKind;
+  usingFallback?: boolean;
   empty: boolean;
 };

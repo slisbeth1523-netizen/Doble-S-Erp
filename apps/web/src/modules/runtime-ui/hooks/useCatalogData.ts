@@ -51,11 +51,17 @@ export function useCatalogData(catalog: string, query: CatalogGridQuery): Runtim
 
         if (!cancelled) {
           setState({
-            data: null,
+            data: {
+              items: [],
+              totalItems: 0,
+              page: query.page,
+              pageSize: query.pageSize
+            },
             loading: false,
-            error: friendlyError.message,
+            error: null,
             errorKind: friendlyError.kind,
-            empty: false
+            usingFallback: true,
+            empty: true
           });
         }
       });
@@ -63,7 +69,7 @@ export function useCatalogData(catalog: string, query: CatalogGridQuery): Runtim
     return () => {
       cancelled = true;
     };
-  }, [catalog, query, serializedQuery]);
+  }, [catalog, serializedQuery]);
 
   return state;
 }

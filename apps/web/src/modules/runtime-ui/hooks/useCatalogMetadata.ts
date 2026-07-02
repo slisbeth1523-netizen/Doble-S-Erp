@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { normalizeApiError } from "../../../services/apiErrors.js";
+import { getFallbackCatalogMetadata } from "../../master-data/utils/fallbackCatalogMetadata.js";
 import { fetchCatalogMetadata } from "../services/metadataClient.js";
 import type { CatalogMetadata, RuntimeResourceState } from "../types/runtime-ui.types.js";
 
@@ -25,14 +26,16 @@ export function useCatalogMetadata(catalog: string): RuntimeResourceState<Catalo
       })
       .catch((error: unknown) => {
         const friendlyError = normalizeApiError(error);
+        const fallbackMetadata = getFallbackCatalogMetadata(catalog);
 
         if (!cancelled) {
           setState({
-            data: null,
+            data: fallbackMetadata,
             loading: false,
             error: friendlyError.message,
             errorKind: friendlyError.kind,
-            empty: false
+            usingFallback: Boolean(fallbackMetadata),
+            empty: fallbackMetadata ? fallbackMetadata.fields.length === 0 : false
           });
         }
       });

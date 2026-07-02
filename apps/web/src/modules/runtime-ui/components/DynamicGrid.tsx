@@ -56,7 +56,7 @@ export function DynamicGrid({ catalog }: DynamicGridProps) {
     return <div className="runtime-state">Cargando grid...</div>;
   }
 
-  if (metadata.error) {
+  if (metadata.error && !metadata.data) {
     return (
       <div className="runtime-state runtime-error">
         No fue posible cargar los registros. Verifique la conexión con la API.
@@ -117,7 +117,11 @@ export function DynamicGrid({ catalog }: DynamicGridProps) {
             ) : null}
             {data.empty ? (
               <tr>
-                <td colSpan={columns.length}>No se encontraron registros.</td>
+                <td colSpan={columns.length}>
+                  {data.usingFallback
+                    ? "Vista local activa. Conecte la API para consultar registros reales."
+                    : "No se encontraron registros."}
+                </td>
               </tr>
             ) : null}
             {data.data?.items.map((record, index) => (

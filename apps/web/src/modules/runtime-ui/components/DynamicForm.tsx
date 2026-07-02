@@ -131,7 +131,7 @@ export function DynamicForm({ catalog, initialValues, onSubmit }: DynamicFormPro
     return <div className="runtime-state">Cargando formulario...</div>;
   }
 
-  if (metadata.error) {
+  if (metadata.error && !metadata.data) {
     return (
       <div className="runtime-state runtime-error">
         No fue posible cargar la metadata del formulario. Cuando la API esté disponible, se mostrarán los campos
