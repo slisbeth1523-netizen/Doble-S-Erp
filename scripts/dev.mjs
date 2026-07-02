@@ -1,11 +1,16 @@
 import { spawn } from "node:child_process";
 
 const isWindows = process.platform === "win32";
-const npmCommand = isWindows ? "npm.cmd" : "npm";
+const npmCommand = isWindows ? process.env.ComSpec ?? "cmd.exe" : "npm";
+const spawnOptions = { stdio: "inherit", shell: false };
+
+function npmArgs(script) {
+  return isWindows ? ["/d", "/s", "/c", `npm run ${script}`] : ["run", script];
+}
 
 const processes = [
-  spawn(npmCommand, ["run", "dev:api"], { stdio: "inherit", shell: false }),
-  spawn(npmCommand, ["run", "dev:web"], { stdio: "inherit", shell: false })
+  spawn(npmCommand, npmArgs("dev:api"), spawnOptions),
+  spawn(npmCommand, npmArgs("dev:web"), spawnOptions)
 ];
 
 function stopAll(signal = "SIGTERM") {
