@@ -163,23 +163,31 @@ export class DomainEventProcessorService extends BaseService {
     event: DomainEvent,
     dispatchResult?: DomainEventDispatchResult
   ) {
-    await auditEvent({
-      tenantId: event.tenantId,
-      companyId: event.companyId ?? context.companyId ?? undefined,
-      userId: context.userId,
-      action,
-      entity: "events.DomainEvents",
-      entityId: event.domainEventId,
-      metadata: {
-        eventName: event.eventName,
-        status: event.status,
-        retryCount: event.retryCount,
-        maxRetries: event.maxRetries,
-        requestId: context.requestId,
-        correlationId: context.correlationId,
-        dispatchResult
-      }
-    });
+    try {
+      await auditEvent({
+        tenantId: event.tenantId,
+        companyId: event.companyId ?? context.companyId ?? undefined,
+        userId: context.userId,
+        action,
+        entity: "events.DomainEvents",
+        entityId: event.domainEventId,
+        metadata: {
+          eventName: event.eventName,
+          status: event.status,
+          retryCount: event.retryCount,
+          maxRetries: event.maxRetries,
+          requestId: context.requestId,
+          correlationId: context.correlationId,
+          dispatchResult
+        }
+      });
+    } catch {
+      logger.warn("Domain event processor audit could not be recorded", {
+        tenantId: event.tenantId,
+        domainEventId: event.domainEventId,
+        action
+      });
+    }
   }
 
   private errorMessage(error: unknown) {
