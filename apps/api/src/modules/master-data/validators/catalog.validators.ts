@@ -36,7 +36,7 @@ export const catalogLookupQuerySchema = z.object({
 
 export const catalogPayloadSchema = z.object({
   code: z.string().min(1).max(80),
-  name: z.string().min(1).max(200),
+  name: z.string().min(1).max(300),
   description: z.string().max(250).nullable().optional(),
   companyId: z.string().uuid().nullable().optional(),
   isActive: z.boolean().optional()
