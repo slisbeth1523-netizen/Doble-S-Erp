@@ -1,3 +1,5 @@
+import type { ApiErrorKind } from "../../../services/apiErrors.js";
+
 export type RuntimeFieldType =
   | "text"
   | "number"
@@ -115,5 +117,7 @@ export type RuntimeResourceState<T> = {
   data: T | null;
   loading: boolean;
   error: string | null;
+  errorKind?: ApiErrorKind;
+  usingFallback?: boolean;
   empty: boolean;
 };

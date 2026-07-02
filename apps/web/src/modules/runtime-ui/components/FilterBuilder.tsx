@@ -13,22 +13,22 @@ export function FilterBuilder({ metadata, value, onChange }: FilterBuilderProps)
     .sort((left, right) => left.displayOrder - right.displayOrder);
 
   return (
-    <section className="runtime-filters" aria-label="Catalog filters">
+    <section className="runtime-filters" aria-label="Filtros del catálogo">
       <label>
-        <span>Search</span>
+        <span>Buscar</span>
         <input
           onChange={(event) => onChange({ ...value, page: 1, search: event.target.value })}
           placeholder={
             searchableFields.length > 0
-              ? `Search ${searchableFields.map((field) => field.label).join(", ")}`
-              : "Search"
+              ? `Buscar por ${searchableFields.map((field) => field.label).join(", ")}`
+              : "Buscar"
           }
           type="search"
           value={value.search}
         />
       </label>
       <label>
-        <span>Status</span>
+        <span>Estado</span>
         <select
           onChange={(event) =>
             onChange({
@@ -39,13 +39,13 @@ export function FilterBuilder({ metadata, value, onChange }: FilterBuilderProps)
           }
           value={value.isActive}
         >
-          <option value="active">Active</option>
-          <option value="inactive">Inactive</option>
-          <option value="all">All</option>
+          <option value="active">Activos</option>
+          <option value="inactive">Inactivos</option>
+          <option value="all">Todos</option>
         </select>
       </label>
       <label>
-        <span>Created from</span>
+        <span>Creado desde</span>
         <input
           onChange={(event) => onChange({ ...value, page: 1, createdFrom: event.target.value })}
           type="date"
@@ -53,7 +53,7 @@ export function FilterBuilder({ metadata, value, onChange }: FilterBuilderProps)
         />
       </label>
       <label>
-        <span>Created to</span>
+        <span>Creado hasta</span>
         <input
           onChange={(event) => onChange({ ...value, page: 1, createdTo: event.target.value })}
           type="date"

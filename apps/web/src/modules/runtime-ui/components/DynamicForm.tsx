@@ -88,7 +88,7 @@ function renderField(
         onChange={(event) => onChange(field.field, event.target.value)}
         value={typeof value === "string" ? value : ""}
       >
-        <option value="">Select an option</option>
+        <option value="">Seleccione una opción</option>
       </select>
     );
   }
@@ -128,15 +128,20 @@ export function DynamicForm({ catalog, initialValues, onSubmit }: DynamicFormPro
   }, [initialValues, metadata.data]);
 
   if (metadata.loading) {
-    return <div className="runtime-state">Loading form...</div>;
+    return <div className="runtime-state">Cargando formulario...</div>;
   }
 
-  if (metadata.error) {
-    return <div className="runtime-state runtime-error">{metadata.error}</div>;
+  if (metadata.error && !metadata.data) {
+    return (
+      <div className="runtime-state runtime-error">
+        No fue posible cargar la metadata del formulario. Cuando la API esté disponible, se mostrarán los campos
+        dinámicos.
+      </div>
+    );
   }
 
   if (!metadata.data || fields.length === 0) {
-    return <div className="runtime-state">No form fields available.</div>;
+    return <div className="runtime-state">No hay campos disponibles para el formulario.</div>;
   }
 
   return (
@@ -155,7 +160,7 @@ export function DynamicForm({ catalog, initialValues, onSubmit }: DynamicFormPro
         <label className="runtime-field" key={field.field} htmlFor={field.field}>
           <span>
             {field.label}
-            {field.required ? <strong aria-label="required">*</strong> : null}
+            {field.required ? <strong aria-label="requerido">*</strong> : null}
           </span>
           {renderField(field, values[field.field], (fieldName, value) =>
             setValues((current) => ({ ...current, [fieldName]: value }))
@@ -167,7 +172,7 @@ export function DynamicForm({ catalog, initialValues, onSubmit }: DynamicFormPro
         </label>
       ))}
       <button className="runtime-primary-action" type="submit">
-        Save
+        Guardar
       </button>
     </form>
   );

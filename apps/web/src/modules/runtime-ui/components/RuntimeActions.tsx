@@ -6,22 +6,22 @@ type RuntimeActionsProps = {
 };
 
 const actionLabels: Record<RuntimeAction["action"], string> = {
-  create: "Create",
-  update: "Update",
-  activate: "Activate",
-  deactivate: "Deactivate",
-  lookup: "Lookup",
-  export: "Export",
-  import: "Import"
+  create: "Crear",
+  update: "Actualizar",
+  activate: "Activar",
+  deactivate: "Desactivar",
+  lookup: "Consultar",
+  export: "Exportar",
+  import: "Importar"
 };
 
 export function RuntimeActions({ actions, onAction }: RuntimeActionsProps) {
   if (actions.length === 0) {
-    return <div className="runtime-state">No actions available.</div>;
+    return <div className="runtime-state">No hay acciones disponibles.</div>;
   }
 
   return (
-    <div className="runtime-actions" aria-label="Runtime actions">
+    <div className="runtime-actions" aria-label="Acciones runtime">
       {actions.map((action) => {
         const available = action.available ?? Boolean(action.permission);
 
@@ -30,7 +30,7 @@ export function RuntimeActions({ actions, onAction }: RuntimeActionsProps) {
             disabled={!available}
             key={action.action}
             onClick={() => onAction?.(action.action)}
-            title={available ? action.permission : "Action not available"}
+            title={available ? action.permission : "Acción no disponible"}
             type="button"
           >
             {actionLabels[action.action]}

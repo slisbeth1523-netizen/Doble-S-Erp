@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { normalizeApiError } from "../../../services/apiErrors.js";
 import { fetchCatalogLookup } from "../services/metadataClient.js";
 import type { LookupOption, RuntimeResourceState } from "../types/runtime-ui.types.js";
 
@@ -27,12 +28,16 @@ export function useCatalogLookup(
         }
       })
       .catch((error: unknown) => {
+        const friendlyError = normalizeApiError(error);
+
         if (!cancelled) {
           setState({
-            data: null,
+            data: [],
             loading: false,
-            error: error instanceof Error ? error.message : "Unable to load lookup options.",
-            empty: false
+            error: null,
+            errorKind: friendlyError.kind,
+            usingFallback: true,
+            empty: true
           });
         }
       });

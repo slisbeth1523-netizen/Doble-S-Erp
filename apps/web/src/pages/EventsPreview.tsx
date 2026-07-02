@@ -8,27 +8,27 @@ export function EventsPreview() {
         eyebrow="Domain Events"
         title="Eventos"
       />
-      <Alert tone="warning" title="Preview">
+      <Alert tone="warning" title="Vista previa">
         No se ejecutan listeners reales, webhooks, jobs ni integraciones externas desde esta pantalla.
       </Alert>
       <Card>
         <h2>Flujo disponible</h2>
         <Table
-          columns={["Paso", "Estado", "Descripcion"]}
+          columns={["Paso", "Estado", "Descripción"]}
           rows={[
             ["Publish", <Badge tone="blue">Disponible</Badge>, "Registra eventos internos como PENDING."],
             ["Processor", <Badge tone="green">Disponible</Badge>, "Bloquea y procesa batches pendientes."],
-            ["Dispatcher", <Badge tone="amber">Simulado</Badge>, "Solo registra que subscriber habria recibido el evento."]
+            ["Dispatcher", <Badge tone="amber">Simulado</Badge>, "Solo registra que subscriber habría recibido el evento."]
           ]}
         />
       </Card>
-      <EmptyState title="Sin consola funcional" description="La administracion completa de eventos llegara en una fase posterior." />
+      <EmptyState title="Sin consola funcional" description="La administración completa de eventos llegará en una fase posterior." />
       <Card>
         <h2>Estados de UX</h2>
         <div className="state-demo">
           <LoadingState label="Consultando eventos..." />
-          <ErrorState title="Permisos requeridos" message="La vista muestra errores de autenticacion de forma controlada." />
-          <EmptyState title="Sin eventos visibles" description="No hay eventos reales conectados en esta preview." />
+          <ErrorState title="Permisos requeridos" message="La vista muestra errores de autenticación de forma controlada." />
+          <EmptyState title="Sin eventos visibles" description="No hay eventos reales conectados en esta vista previa." />
         </div>
       </Card>
     </div>

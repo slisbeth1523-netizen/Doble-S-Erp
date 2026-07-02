@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { getCatalogLabel } from "../../master-data/utils/catalogLabels.js";
 import { useCatalogLookup } from "../hooks/useCatalogLookup.js";
 
 type LookupFieldProps = {
@@ -17,10 +18,10 @@ export function LookupField({ catalog, value, disabled, placeholder, onChange }:
   return (
     <div className="runtime-lookup">
       <input
-        aria-label={`Search ${catalog}`}
+        aria-label={`Buscar ${getCatalogLabel(catalog)}`}
         disabled={disabled}
         onChange={(event) => setSearch(event.target.value)}
-        placeholder={placeholder ?? "Search"}
+        placeholder={placeholder ?? "Buscar"}
         type="search"
         value={search}
       />
@@ -29,19 +30,19 @@ export function LookupField({ catalog, value, disabled, placeholder, onChange }:
         onChange={(event) => onChange?.(event.target.value || null)}
         value={value ?? ""}
       >
-        <option value="">Select an option</option>
+        <option value="">Seleccione una opción</option>
         {lookup.data?.map((option) => (
           <option key={option.value} value={option.value}>
             {option.code ? `${option.code} - ${option.label}` : option.label}
           </option>
         ))}
       </select>
-      {lookup.loading ? <span className="runtime-hint">Loading options...</span> : null}
+      {lookup.loading ? <span className="runtime-hint">Cargando opciones...</span> : null}
       {lookup.error ? <span className="runtime-error">{lookup.error}</span> : null}
-      {lookup.empty ? <span className="runtime-hint">No options found.</span> : null}
+      {lookup.empty ? <span className="runtime-hint">No se encontraron opciones.</span> : null}
       {value ? (
         <button disabled={disabled} onClick={() => onChange?.(null)} type="button">
-          Clear
+          Limpiar
         </button>
       ) : null}
     </div>
