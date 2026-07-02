@@ -17,6 +17,7 @@ const navigation: NavigationItem[] = [
       { label: "Clientes", path: "/master-data/customers" },
       { label: "Proveedores", path: "/master-data/suppliers" },
       { label: "Articulos", path: "/master-data/items" },
+      { label: "Categorias", path: "/master-data/categories" },
       { label: "Monedas", path: "/master-data/currencies" },
       { label: "Unidades de medida", path: "/master-data/units-of-measure" },
       { label: "Condiciones de pago", path: "/master-data/payment-terms" },
