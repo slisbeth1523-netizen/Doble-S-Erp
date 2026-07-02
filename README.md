@@ -66,6 +66,88 @@ npm install
 
 Copiar `.env.example` a `.env` y completar valores locales sin usar credenciales reales.
 
+## Ejecutar localmente
+
+Requisitos:
+
+- Node.js 20 o superior.
+- npm 10 o superior.
+- SQL Server local o accesible desde la maquina de desarrollo.
+- Una base de datos creada, por ejemplo `DOBLE_S_ERP`.
+
+Pasos recomendados en Windows PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+Copy-Item apps/api/.env.example apps/api/.env
+Copy-Item apps/web/.env.example apps/web/.env
+npm install
+```
+
+Edita `.env` y `apps/api/.env` con los datos reales de SQL Server:
+
+```text
+SQLSERVER_HOST=localhost
+SQLSERVER_PORT=1433
+SQLSERVER_DATABASE=DOBLE_S_ERP
+SQLSERVER_USER=sa
+SQLSERVER_PASSWORD=tu_password_local
+SQLSERVER_ENCRYPT=false
+SQLSERVER_TRUST_SERVER_CERTIFICATE=true
+```
+
+El frontend usa:
+
+```text
+VITE_API_URL=http://localhost:4001/api
+VITE_DEMO_LOGIN_ENABLED=true
+VITE_DEMO_EMAIL=demo@dobles.local
+VITE_DEMO_PASSWORD=Demo12345!
+```
+
+Ejecuta migraciones y datos locales:
+
+```powershell
+npm run db:setup
+```
+
+El seed local crea un tenant, una empresa, el usuario demo, permisos mínimos y datos de prueba para catálogos técnicos, clientes, proveedores, artículos, categorías y marcas. Es idempotente: puede ejecutarse varias veces sin duplicar datos.
+
+Levantar API y Web por separado:
+
+```powershell
+npm run dev:api
+npm run dev:web
+```
+
+O levantar ambos desde la raíz:
+
+```powershell
+npm run dev
+```
+
+URLs locales:
+
+```text
+API: http://localhost:4001/api
+Web: http://localhost:5173
+Health: http://localhost:4001/api/health
+Version: http://localhost:4001/api/version
+DB Health: http://localhost:4001/api/health/db
+```
+
+Rutas runtime principales:
+
+```text
+http://localhost:5173/master-data/customers
+http://localhost:5173/master-data/suppliers
+http://localhost:5173/master-data/items
+http://localhost:5173/master-data/categories
+http://localhost:5173/master-data/brands
+```
+
+Si la API o SQL Server no estan disponibles, el frontend mantiene la Vista local con metadata de respaldo para no romper la pantalla. Cuando la API responde y el login demo esta habilitado, el runtime prioriza metadata y registros reales.
+
 ## API
 
 La API usa Node.js, Express, TypeScript, SQL Server, dotenv, cors y helmet.
