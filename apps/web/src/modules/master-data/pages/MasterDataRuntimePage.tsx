@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 
+import { Alert, Badge, ErrorState, LoadingState, PageHeader } from "../../../components/ui/index.js";
 import { DynamicForm } from "../../runtime-ui/components/DynamicForm.js";
 import { DynamicGrid } from "../../runtime-ui/components/DynamicGrid.js";
 import { RuntimeActions } from "../../runtime-ui/components/RuntimeActions.js";
@@ -26,39 +27,56 @@ export function MasterDataRuntimePage({ catalog }: MasterDataRuntimePageProps) {
   );
 
   return (
-    <main className="master-data-runtime-page">
-      <header className="runtime-page-header">
-        <div>
-          <p className="eyebrow">Master Data Runtime</p>
-          <h1>{title}</h1>
-        </div>
-        {metadata.data ? (
-          <RuntimeActions
-            actions={metadata.data.actions}
-            onAction={(action) => setLastAction(`${action} is prepared by metadata.`)}
-          />
-        ) : null}
-      </header>
+    <div className="master-data-runtime-page">
+      <PageHeader
+        actions={
+          metadata.data ? (
+            <RuntimeActions
+              actions={metadata.data.actions}
+              onAction={(action) => setLastAction(`${action} preparado por metadata.`)}
+            />
+          ) : (
+            <Badge tone="amber">Requiere API</Badge>
+          )
+        }
+        description="Pantalla generica por metadata para catalogos tecnicos. Si la API requiere autenticacion, la vista muestra el estado controlado."
+        eyebrow="Master Data Runtime"
+        title={title}
+      />
 
-      {metadata.loading ? <div className="runtime-state">Loading catalog runtime...</div> : null}
-      {metadata.error ? <div className="runtime-state runtime-error">{metadata.error}</div> : null}
-      {lastAction ? <div className="runtime-state">{lastAction}</div> : null}
+      <Alert title="Catalogo tecnico">
+        Esta pagina usa el motor runtime existente y no implementa pantallas especificas por catalogo.
+      </Alert>
+
+      {metadata.loading ? <LoadingState label="Cargando metadata del catalogo..." /> : null}
+      {metadata.error ? <ErrorState message={metadata.error} title="No se pudo cargar metadata" /> : null}
+      {lastAction ? <Alert tone="success">{lastAction}</Alert> : null}
 
       <section className="runtime-layout runtime-layout-two">
         <div className="runtime-panel">
-          <h2>Records</h2>
+          <div className="panel-heading">
+            <div>
+              <h2>Registros</h2>
+              <p>Grid dinamico preparado para busqueda, filtros y paginacion.</p>
+            </div>
+          </div>
           <DynamicGrid catalog={resolvedCatalog} />
         </div>
         <aside className="runtime-panel">
-          <h2>Form</h2>
+          <div className="panel-heading">
+            <div>
+              <h2>Formulario</h2>
+              <p>Campos renderizados desde metadata, sin reglas por catalogo.</p>
+            </div>
+          </div>
           <DynamicForm
             catalog={resolvedCatalog}
             onSubmit={(values: RuntimeFormValues) =>
-              setLastAction(`Form is valid with ${Object.keys(values).length} fields.`)
+              setLastAction(`Formulario valido con ${Object.keys(values).length} campos.`)
             }
           />
         </aside>
       </section>
-    </main>
+    </div>
   );
 }
