@@ -187,7 +187,7 @@ const catalogFields: Record<string, FieldInput[]> = {
     { field: "city", label: "Ciudad", searchable: true, validation: { maxLength: 120, nullable: true }, width: 150 },
     { field: "province", label: "Provincia", searchable: true, validation: { maxLength: 120, nullable: true }, width: 150 },
     { field: "countryCode", label: "Pais", visibleInGrid: false, validation: { maxLength: 3, nullable: true } },
-    { field: "responsibleUserId", label: "Responsable", type: "lookup", visibleInGrid: false },
+    { field: "responsibleUserId", label: "Responsable", type: "lookup", visibleInGrid: false, visibleInForm: false },
     { field: "allowsNegativeInventory", label: "Permite negativo", type: "boolean", defaultValue: false, visibleInGrid: false },
     { field: "isDefault", label: "Predeterminado", type: "boolean", defaultValue: false, width: 130, align: "center", format: "boolean" },
     { field: "isTransit", label: "Transito", type: "boolean", defaultValue: false, width: 110, align: "center", format: "boolean" },

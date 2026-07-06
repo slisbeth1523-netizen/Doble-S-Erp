@@ -514,7 +514,7 @@ const warehouseFields = [
     type: "lookup",
     required: false,
     visibleInGrid: false,
-    visibleInForm: true,
+    visibleInForm: false,
     searchable: false,
     sortable: false,
     editable: true,
