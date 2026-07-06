@@ -38,6 +38,16 @@ const actions: RuntimeAction[] = [
   { action: "lookup", permission: "local.preview", available: true }
 ];
 
+const readOnlyActions: RuntimeAction[] = [
+  { action: "create", permission: "local.preview", available: false },
+  { action: "update", permission: "local.preview", available: false },
+  { action: "activate", permission: "local.preview", available: false },
+  { action: "deactivate", permission: "local.preview", available: false },
+  { action: "lookup", permission: "local.preview", available: true },
+  { action: "export", permission: "local.preview", available: false },
+  { action: "import", permission: "local.preview", available: false }
+];
+
 const technicalFields: FieldInput[] = [
   {
     field: "code",
@@ -194,6 +204,20 @@ const catalogFields: Record<string, FieldInput[]> = {
     { field: "isVirtual", label: "Virtual", type: "boolean", defaultValue: false, width: 100, align: "center", format: "boolean" },
     technicalFields[3]!
   ],
+  "inventory-stocks": [
+    { field: "itemCode", label: "Articulo", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, width: 130 },
+    { field: "itemDescription", label: "Descripcion articulo", searchable: true, editable: false, readOnly: true, visibleInForm: false, width: 260 },
+    { field: "warehouseCode", label: "Almacen", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, width: 140 },
+    { field: "warehouseName", label: "Nombre almacen", searchable: true, editable: false, readOnly: true, visibleInForm: false, width: 220 },
+    { field: "quantityOnHand", label: "Existencia", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 130, align: "right" },
+    { field: "quantityReserved", label: "Reservado", type: "number", editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 130, align: "right" },
+    { field: "quantityAvailable", label: "Disponible", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 130, align: "right" },
+    { field: "averageCost", label: "Costo promedio", type: "number", editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 140, align: "right", format: "currency" },
+    { field: "lastCost", label: "Ultimo costo", type: "number", editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 130, align: "right", format: "currency" },
+    { field: "standardCost", label: "Costo estandar", type: "number", editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 140, align: "right", format: "currency" },
+    { field: "lastMovementAt", label: "Ultimo movimiento", type: "datetime", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 160 },
+    { field: "isActive", label: "Activo", type: "boolean", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 96, align: "center", format: "boolean" }
+  ],
   currencies: technicalFields,
   "units-of-measure": [
     ...technicalFields.slice(0, 3),
@@ -269,6 +293,8 @@ function buildFormField(field: RuntimeField, input: FieldInput): RuntimeFormFiel
 
 export function getFallbackCatalogMetadata(catalog: string): CatalogMetadata | null {
   const inputs = catalogFields[catalog];
+  const catalogReadOnly = catalog === "inventory-stocks";
+  const catalogActions = catalogReadOnly ? readOnlyActions : actions;
 
   if (!inputs) {
     return null;
@@ -289,7 +315,8 @@ export function getFallbackCatalogMetadata(catalog: string): CatalogMetadata | n
       code: catalog,
       displayName: getCatalogLabel(catalog),
       tenantScoped: true,
-      companyScoped: !["currencies", "units-of-measure"].includes(catalog)
+      companyScoped: !["currencies", "units-of-measure"].includes(catalog),
+      readOnly: catalogReadOnly
     },
     fields,
     grid: {
@@ -301,8 +328,8 @@ export function getFallbackCatalogMetadata(catalog: string): CatalogMetadata | n
       fields: formFields
     },
     validations: Object.fromEntries(fields.map((field) => [field.field, field.validation])),
-    actions,
-    permissions: Object.fromEntries(actions.map((action) => [action.action, action.permission])),
+    actions: catalogActions,
+    permissions: Object.fromEntries(catalogActions.map((action) => [action.action, action.permission])),
     requirements: {
       license: null,
       featureFlag: null

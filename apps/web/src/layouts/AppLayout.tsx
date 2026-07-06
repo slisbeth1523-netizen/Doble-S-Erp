@@ -12,20 +12,25 @@ type NavigationItem = {
 const navigation: NavigationItem[] = [
   { label: "Dashboard", path: "/dashboard" },
   {
-    label: "Catálogos",
+    label: "Catalogos",
     path: "/master-data/customers",
     children: [
       { label: "Clientes", path: "/master-data/customers" },
       { label: "Proveedores", path: "/master-data/suppliers" },
-      { label: "Artículos", path: "/master-data/items" },
-      { label: "Categorías", path: "/master-data/categories" },
+      { label: "Articulos", path: "/master-data/items" },
+      { label: "Categorias", path: "/master-data/categories" },
       { label: "Marcas", path: "/master-data/brands" },
       { label: "Almacenes", path: "/master-data/warehouses" },
       { label: "Monedas", path: "/master-data/currencies" },
       { label: "Unidades de medida", path: "/master-data/units-of-measure" },
       { label: "Condiciones de pago", path: "/master-data/payment-terms" },
-      { label: "Categorías fiscales", path: "/master-data/tax-categories" }
+      { label: "Categorias fiscales", path: "/master-data/tax-categories" }
     ]
+  },
+  {
+    label: "Inventario",
+    path: "/master-data/inventory-stocks",
+    children: [{ label: "Existencias", path: "/master-data/inventory-stocks" }]
   },
   { label: "Workflows", path: "/workflows" },
   { label: "Eventos", path: "/events" },
@@ -55,7 +60,11 @@ function breadcrumb(path: string) {
   const segments = path === "/" ? ["dashboard"] : path.split("/").filter(Boolean);
 
   if (segments[0] === "master-data") {
-    return ["Doble S ERP", "Catálogos", getCatalogLabel(segments[1] ?? "")];
+    if (segments[1] === "inventory-stocks") {
+      return ["Doble S ERP", "Inventario", getCatalogLabel(segments[1] ?? "")];
+    }
+
+    return ["Doble S ERP", "Catalogos", getCatalogLabel(segments[1] ?? "")];
   }
 
   const labels: Record<string, string> = {
@@ -63,7 +72,7 @@ function breadcrumb(path: string) {
     workflows: "Workflows",
     events: "Eventos",
     security: "Seguridad",
-    settings: "Configuración"
+    settings: "Configuracion"
   };
 
   return ["Doble S ERP", ...segments.map((segment) => labels[segment] ?? segment.replaceAll("-", " "))];

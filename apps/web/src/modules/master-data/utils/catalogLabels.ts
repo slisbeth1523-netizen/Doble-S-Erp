@@ -5,6 +5,7 @@ export const catalogLabels: Record<string, string> = {
   categories: "Categorías",
   brands: "Marcas",
   warehouses: "Almacenes",
+  "inventory-stocks": "Existencias",
   currencies: "Monedas",
   "units-of-measure": "Unidades de medida",
   "payment-terms": "Condiciones de pago",

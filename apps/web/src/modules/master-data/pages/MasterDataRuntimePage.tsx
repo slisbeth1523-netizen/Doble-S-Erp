@@ -36,9 +36,10 @@ export function MasterDataRuntimePage({ catalog }: MasterDataRuntimePageProps) {
     () => metadata.data?.catalog.displayName ?? getCatalogLabel(resolvedCatalog),
     [metadata.data, resolvedCatalog]
   );
+  const readOnly = metadata.data?.catalog.readOnly ?? false;
   const apiBadge = useMemo(() => {
     if (metadata.errorKind === "unauthorized" || metadata.errorKind === "forbidden") {
-      return <Badge tone="amber">Requiere sesión</Badge>;
+      return <Badge tone="amber">Requiere sesion</Badge>;
     }
 
     if (metadata.errorKind === "network") {
@@ -63,25 +64,30 @@ export function MasterDataRuntimePage({ catalog }: MasterDataRuntimePageProps) {
               <RuntimeActions
                 actions={metadata.data.actions}
                 onAction={(action) =>
-                  setLastAction(`Acción ${actionLabels[action] ?? action} preparada por metadata.`)
+                  setLastAction(`Accion ${actionLabels[action] ?? action} preparada por metadata.`)
                 }
               />
             ) : null}
           </div>
         }
-        description="Pantalla genérica por metadata para catálogos técnicos. Si la API no está disponible, la vista local permite probar el formulario."
+        description="Pantalla generica por metadata para catalogos tecnicos. Si la API no esta disponible, la vista local permite probar el formulario."
         eyebrow="Datos Maestros"
         title={title}
       />
 
-      <Alert title="Catálogo técnico">
-        Esta página usa el motor runtime existente y no implementa pantallas específicas por catálogo.
+      <Alert title="Catalogo tecnico">
+        Esta pagina usa el motor runtime existente y no implementa pantallas especificas por catalogo.
       </Alert>
+      {readOnly ? (
+        <Alert tone="info" title="Solo consulta">
+          Esta vista muestra existencias actuales y no permite ajustes manuales de inventario.
+        </Alert>
+      ) : null}
 
-      {metadata.loading ? <LoadingState label="Cargando metadata del catálogo..." /> : null}
+      {metadata.loading ? <LoadingState label="Cargando metadata del catalogo..." /> : null}
       {metadata.usingFallback ? (
         <Alert tone="warning" title="Vista local activa">
-          La API no está disponible o requiere sesión. Puedes revisar y probar el formulario con metadata local;
+          La API no esta disponible o requiere sesion. Puedes revisar y probar el formulario con metadata local;
           conecta el backend para consultar y guardar registros reales.
         </Alert>
       ) : null}
@@ -90,30 +96,32 @@ export function MasterDataRuntimePage({ catalog }: MasterDataRuntimePageProps) {
       ) : null}
       {lastAction ? <Alert tone="success">{lastAction}</Alert> : null}
 
-      <section className="runtime-layout runtime-layout-two">
+      <section className={readOnly ? "runtime-layout" : "runtime-layout runtime-layout-two"}>
         <div className="runtime-panel">
           <div className="panel-heading">
             <div>
               <h2>Registros</h2>
-              <p>Grid dinámico preparado para búsqueda, filtros y paginación.</p>
+              <p>Grid dinamico preparado para busqueda, filtros y paginacion.</p>
             </div>
           </div>
           <DynamicGrid catalog={resolvedCatalog} />
         </div>
-        <aside className="runtime-panel">
-          <div className="panel-heading">
-            <div>
-              <h2>Formulario</h2>
-              <p>Campos renderizados desde metadata, sin reglas por catálogo.</p>
+        {!readOnly ? (
+          <aside className="runtime-panel">
+            <div className="panel-heading">
+              <div>
+                <h2>Formulario</h2>
+                <p>Campos renderizados desde metadata, sin reglas por catalogo.</p>
+              </div>
             </div>
-          </div>
-          <DynamicForm
-            catalog={resolvedCatalog}
-            onSubmit={(values: RuntimeFormValues) =>
-              setLastAction(`Formulario válido con ${Object.keys(values).length} campos.`)
-            }
-          />
-        </aside>
+            <DynamicForm
+              catalog={resolvedCatalog}
+              onSubmit={(values: RuntimeFormValues) =>
+                setLastAction(`Formulario valido con ${Object.keys(values).length} campos.`)
+              }
+            />
+          </aside>
+        ) : null}
       </section>
     </div>
   );

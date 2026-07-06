@@ -103,7 +103,8 @@ VALUES
   ('inventory', 'inventory.warehouses.create', 'Local create warehouses'),
   ('inventory', 'inventory.warehouses.update', 'Local update warehouses'),
   ('inventory', 'inventory.warehouses.activate', 'Local activate warehouses'),
-  ('inventory', 'inventory.warehouses.deactivate', 'Local deactivate warehouses');
+  ('inventory', 'inventory.warehouses.deactivate', 'Local deactivate warehouses'),
+  ('inventory', 'inventory.stocks.read', 'Local read inventory stocks');
 
 INSERT INTO security.Permissions (ModuleCode, ActionCode, Description, IsActive)
 SELECT p.ModuleCode, p.ActionCode, p.Description, 1
@@ -327,6 +328,29 @@ BEGIN
   SET DefaultWarehouseId = COALESCE(DefaultWarehouseId, @WarehouseId),
       UpdatedBy = @UserId,
       UpdatedAt = SYSUTCDATETIME()
+  WHERE ItemId = @ItemId;
+END;
+
+IF OBJECT_ID('inventory.ItemStocks', 'U') IS NOT NULL
+   AND EXISTS (SELECT 1 FROM inventory.Items WHERE ItemId = @ItemId)
+   AND EXISTS (SELECT 1 FROM inventory.Warehouses WHERE WarehouseId = @WarehouseId)
+   AND NOT EXISTS (
+     SELECT 1
+     FROM inventory.ItemStocks
+     WHERE TenantId = @TenantId
+       AND CompanyId = @CompanyId
+       AND ItemId = @ItemId
+       AND WarehouseId = @WarehouseId
+   )
+BEGIN
+  INSERT INTO inventory.ItemStocks (
+    TenantId, CompanyId, ItemId, WarehouseId, QuantityOnHand,
+    QuantityReserved, AverageCost, LastCost, StandardCost, IsActive, CreatedBy
+  )
+  SELECT
+    @TenantId, @CompanyId, ItemId, @WarehouseId, 0,
+    0, COALESCE(AverageCost, 0), COALESCE(LastCost, 0), COALESCE(StandardCost, 0), 1, @UserId
+  FROM inventory.Items
   WHERE ItemId = @ItemId;
 END;
 GO
