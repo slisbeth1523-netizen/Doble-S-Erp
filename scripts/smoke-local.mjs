@@ -7,7 +7,8 @@ const requiredCatalogs = [
   { code: "suppliers", seedCode: "SUP-DEMO" },
   { code: "items", seedCode: "ART-DEMO" },
   { code: "categories", seedCode: "GENERAL" },
-  { code: "brands", seedCode: "DOBLES" }
+  { code: "brands", seedCode: "DOBLES" },
+  { code: "units-of-measure", seedCode: "UND" }
 ];
 
 const smokeRun = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
@@ -176,6 +177,25 @@ async function validateCatalogs(session) {
     if (!seedRecord) {
       fail(`${catalog.code} seed record ${catalog.seedCode} was not returned by the API.`);
     }
+
+    if (catalog.code === "units-of-measure") {
+      const fields = metadata.data.fields.map((field) => field.field);
+      const missingFields = ["symbol", "unitType", "decimalPrecision", "isBaseUnit"].filter(
+        (field) => !fields.includes(field)
+      );
+
+      if (missingFields.length) {
+        fail(`units-of-measure metadata is missing fields: ${missingFields.join(", ")}.`);
+      }
+    }
+
+    if (catalog.code === "items") {
+      const unitField = metadata.data.fields.find((field) => field.field === "unitOfMeasureId");
+
+      if (unitField?.lookupCatalog !== "units-of-measure") {
+        fail("items metadata did not keep unitOfMeasureId lookupCatalog=units-of-measure.");
+      }
+    }
   }
 }
 
@@ -184,6 +204,7 @@ async function validateCrud(session) {
   const customerCode = `QA-CUST-${suffix}`;
   const categoryCode = `QA-CAT-${suffix}`;
   const brandCode = `QA-BRD-${suffix}`;
+  const unitCode = `QA-UOM-${suffix}`;
   const itemCode = `QA-ITEM-${suffix}`;
 
   smokeStep("CRUD customer create");
@@ -269,6 +290,29 @@ async function validateCrud(session) {
     session
   );
 
+  smokeStep("CRUD unit of measure create");
+  const unit = await createCatalogRecord(
+    "units-of-measure",
+    {
+      code: unitCode,
+      name: "Unidad QA Runtime",
+      description: "Unidad creada por smoke local",
+      symbol: "qa",
+      unitType: "QUANTITY",
+      decimalPrecision: 0,
+      isBaseUnit: false,
+      isActive: true
+    },
+    session
+  );
+
+  smokeStep("CRUD unit of measure search");
+  const foundUnit = await findCatalogRecord("units-of-measure", unitCode, session);
+
+  if (!foundUnit) {
+    fail(`Created unit of measure ${unitCode} was not found by search.`);
+  }
+
   smokeStep("CRUD item create");
   await createCatalogRecord(
     "items",
@@ -280,6 +324,7 @@ async function validateCrud(session) {
       alternateCode: `ALT-${itemCode}`,
       categoryId: category.id,
       brandId: brand.id,
+      unitOfMeasureId: unit.id,
       inventoryType: "PRODUCT",
       itemType: "NORMAL",
       allowNegativeInventory: false,

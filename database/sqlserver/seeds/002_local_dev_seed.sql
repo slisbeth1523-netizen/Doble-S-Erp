@@ -127,6 +127,8 @@ DECLARE @CompanyId UNIQUEIDENTIFIER = '22222222-2222-2222-2222-222222222222';
 DECLARE @UserId UNIQUEIDENTIFIER = '33333333-3333-3333-3333-333333333333';
 DECLARE @CurrencyId UNIQUEIDENTIFIER = '55555555-5555-5555-5555-555555555555';
 DECLARE @UnitId UNIQUEIDENTIFIER = '66666666-6666-6666-6666-666666666666';
+DECLARE @BoxUnitId UNIQUEIDENTIFIER = '66666666-6666-6666-6666-666666666667';
+DECLARE @PackUnitId UNIQUEIDENTIFIER = '66666666-6666-6666-6666-666666666668';
 DECLARE @PaymentTermId UNIQUEIDENTIFIER = '77777777-7777-7777-7777-777777777777';
 DECLARE @TaxCategoryId UNIQUEIDENTIFIER = '88888888-8888-8888-8888-888888888888';
 DECLARE @CategoryId UNIQUEIDENTIFIER = '99999999-9999-9999-9999-999999999999';
@@ -143,8 +145,49 @@ END;
 
 IF NOT EXISTS (SELECT 1 FROM core.UnitsOfMeasure WHERE UnitOfMeasureId = @UnitId)
 BEGIN
-  INSERT INTO core.UnitsOfMeasure (UnitOfMeasureId, TenantId, CompanyId, Code, Name, Description, IsActive, CreatedBy)
-  VALUES (@UnitId, @TenantId, NULL, 'UND', 'Unidad', 'Unidad base para pruebas', 1, @UserId);
+  INSERT INTO core.UnitsOfMeasure (
+    UnitOfMeasureId, TenantId, CompanyId, Code, Name, Description,
+    Symbol, UnitType, DecimalPrecision, IsBaseUnit, IsActive, CreatedBy
+  )
+  VALUES (
+    @UnitId, @TenantId, NULL, 'UND', 'Unidad', 'Unidad base para pruebas',
+    'und', 'QUANTITY', 0, 1, 1, @UserId
+  );
+END;
+ELSE
+BEGIN
+  UPDATE core.UnitsOfMeasure
+  SET Symbol = COALESCE(Symbol, 'und'),
+      UnitType = COALESCE(UnitType, 'QUANTITY'),
+      DecimalPrecision = 0,
+      IsBaseUnit = 1,
+      UpdatedBy = @UserId,
+      UpdatedAt = SYSUTCDATETIME()
+  WHERE UnitOfMeasureId = @UnitId;
+END;
+
+IF NOT EXISTS (SELECT 1 FROM core.UnitsOfMeasure WHERE UnitOfMeasureId = @BoxUnitId)
+BEGIN
+  INSERT INTO core.UnitsOfMeasure (
+    UnitOfMeasureId, TenantId, CompanyId, Code, Name, Description,
+    Symbol, UnitType, DecimalPrecision, IsBaseUnit, IsActive, CreatedBy
+  )
+  VALUES (
+    @BoxUnitId, @TenantId, NULL, 'CAJA', 'Caja', 'Caja para pruebas locales',
+    'cja', 'QUANTITY', 0, 0, 1, @UserId
+  );
+END;
+
+IF NOT EXISTS (SELECT 1 FROM core.UnitsOfMeasure WHERE UnitOfMeasureId = @PackUnitId)
+BEGIN
+  INSERT INTO core.UnitsOfMeasure (
+    UnitOfMeasureId, TenantId, CompanyId, Code, Name, Description,
+    Symbol, UnitType, DecimalPrecision, IsBaseUnit, IsActive, CreatedBy
+  )
+  VALUES (
+    @PackUnitId, @TenantId, NULL, 'PAQ', 'Paquete', 'Paquete para pruebas locales',
+    'paq', 'QUANTITY', 0, 0, 1, @UserId
+  );
 END;
 
 IF NOT EXISTS (SELECT 1 FROM core.PaymentTerms WHERE PaymentTermId = @PaymentTermId)

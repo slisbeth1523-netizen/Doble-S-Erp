@@ -166,7 +166,23 @@ const catalogFields: Record<string, FieldInput[]> = {
     technicalFields[3]!
   ],
   currencies: technicalFields,
-  "units-of-measure": technicalFields,
+  "units-of-measure": [
+    ...technicalFields.slice(0, 3),
+    { field: "symbol", label: "Simbolo", searchable: true, validation: { maxLength: 20, nullable: true }, width: 100 },
+    { field: "unitType", label: "Tipo de unidad", placeholder: "QUANTITY", validation: { maxLength: 40, nullable: true }, width: 140 },
+    {
+      field: "decimalPrecision",
+      label: "Precision decimal",
+      type: "number",
+      required: true,
+      defaultValue: 2,
+      validation: { required: true, min: 0, max: 6, nullable: false },
+      width: 130,
+      align: "right"
+    },
+    { field: "isBaseUnit", label: "Unidad base", type: "boolean", defaultValue: false, width: 120, align: "center" },
+    technicalFields[3]!
+  ],
   "payment-terms": technicalFields,
   "tax-categories": technicalFields
 };
