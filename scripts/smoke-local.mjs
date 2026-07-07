@@ -8,7 +8,8 @@ const requiredCatalogs = [
   { code: "items", seedCode: "ART-DEMO" },
   { code: "categories", seedCode: "GENERAL" },
   { code: "brands", seedCode: "DOBLES" },
-  { code: "units-of-measure", seedCode: "UND" }
+  { code: "units-of-measure", seedCode: "UND" },
+  { code: "warehouses", seedCode: "ALM-PRINCIPAL" }
 ];
 
 const smokeRun = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
@@ -191,9 +192,35 @@ async function validateCatalogs(session) {
 
     if (catalog.code === "items") {
       const unitField = metadata.data.fields.find((field) => field.field === "unitOfMeasureId");
+      const warehouseField = metadata.data.fields.find((field) => field.field === "defaultWarehouseId");
 
       if (unitField?.lookupCatalog !== "units-of-measure") {
         fail("items metadata did not keep unitOfMeasureId lookupCatalog=units-of-measure.");
+      }
+
+      if (warehouseField?.lookupCatalog !== "warehouses") {
+        fail("items metadata did not keep defaultWarehouseId lookupCatalog=warehouses.");
+      }
+    }
+
+    if (catalog.code === "warehouses") {
+      const fields = metadata.data.fields.map((field) => field.field);
+      const missingFields = [
+        "warehouseType",
+        "addressLine1",
+        "addressLine2",
+        "city",
+        "province",
+        "countryCode",
+        "responsibleUserId",
+        "allowsNegativeInventory",
+        "isDefault",
+        "isTransit",
+        "isVirtual"
+      ].filter((field) => !fields.includes(field));
+
+      if (missingFields.length) {
+        fail(`warehouses metadata is missing fields: ${missingFields.join(", ")}.`);
       }
     }
   }
@@ -205,6 +232,7 @@ async function validateCrud(session) {
   const categoryCode = `QA-CAT-${suffix}`;
   const brandCode = `QA-BRD-${suffix}`;
   const unitCode = `QA-UOM-${suffix}`;
+  const warehouseCode = `QA-WHS-${suffix}`;
   const itemCode = `QA-ITEM-${suffix}`;
 
   smokeStep("CRUD customer create");
@@ -313,6 +341,36 @@ async function validateCrud(session) {
     fail(`Created unit of measure ${unitCode} was not found by search.`);
   }
 
+  smokeStep("CRUD warehouse create");
+  const warehouse = await createCatalogRecord(
+    "warehouses",
+    {
+      code: warehouseCode,
+      name: "Almacen QA Runtime",
+      description: "Almacen creado por smoke local",
+      warehouseType: "NORMAL",
+      addressLine1: "Calle QA 1",
+      addressLine2: "Nave QA",
+      city: "Santo Domingo",
+      province: "Distrito Nacional",
+      countryCode: "DOM",
+      responsibleUserId: null,
+      allowsNegativeInventory: false,
+      isDefault: false,
+      isTransit: false,
+      isVirtual: false,
+      isActive: true
+    },
+    session
+  );
+
+  smokeStep("CRUD warehouse search");
+  const foundWarehouse = await findCatalogRecord("warehouses", warehouseCode, session);
+
+  if (!foundWarehouse) {
+    fail(`Created warehouse ${warehouseCode} was not found by search.`);
+  }
+
   smokeStep("CRUD item create");
   await createCatalogRecord(
     "items",
@@ -325,6 +383,7 @@ async function validateCrud(session) {
       categoryId: category.id,
       brandId: brand.id,
       unitOfMeasureId: unit.id,
+      defaultWarehouseId: warehouse.id,
       inventoryType: "PRODUCT",
       itemType: "NORMAL",
       allowNegativeInventory: false,

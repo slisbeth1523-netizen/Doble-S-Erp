@@ -98,7 +98,12 @@ VALUES
   ('inventory', 'inventory.brands.create', 'Local create brands'),
   ('inventory', 'inventory.brands.update', 'Local update brands'),
   ('inventory', 'inventory.brands.activate', 'Local activate brands'),
-  ('inventory', 'inventory.brands.deactivate', 'Local deactivate brands');
+  ('inventory', 'inventory.brands.deactivate', 'Local deactivate brands'),
+  ('inventory', 'inventory.warehouses.read', 'Local read warehouses'),
+  ('inventory', 'inventory.warehouses.create', 'Local create warehouses'),
+  ('inventory', 'inventory.warehouses.update', 'Local update warehouses'),
+  ('inventory', 'inventory.warehouses.activate', 'Local activate warehouses'),
+  ('inventory', 'inventory.warehouses.deactivate', 'Local deactivate warehouses');
 
 INSERT INTO security.Permissions (ModuleCode, ActionCode, Description, IsActive)
 SELECT p.ModuleCode, p.ActionCode, p.Description, 1
@@ -133,6 +138,8 @@ DECLARE @PaymentTermId UNIQUEIDENTIFIER = '77777777-7777-7777-7777-777777777777'
 DECLARE @TaxCategoryId UNIQUEIDENTIFIER = '88888888-8888-8888-8888-888888888888';
 DECLARE @CategoryId UNIQUEIDENTIFIER = '99999999-9999-9999-9999-999999999999';
 DECLARE @BrandId UNIQUEIDENTIFIER = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+DECLARE @WarehouseId UNIQUEIDENTIFIER = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee';
+DECLARE @TransitWarehouseId UNIQUEIDENTIFIER = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeef';
 DECLARE @CustomerId UNIQUEIDENTIFIER = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 DECLARE @SupplierId UNIQUEIDENTIFIER = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
 DECLARE @ItemId UNIQUEIDENTIFIER = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
@@ -227,6 +234,36 @@ BEGIN
   );
 END;
 
+IF OBJECT_ID('inventory.Warehouses', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM inventory.Warehouses WHERE WarehouseId = @WarehouseId)
+BEGIN
+  INSERT INTO inventory.Warehouses (
+    WarehouseId, TenantId, CompanyId, Code, Name, Description, WarehouseType,
+    City, Province, CountryCode, AllowsNegativeInventory, IsDefault, IsTransit,
+    IsVirtual, IsActive, CreatedBy
+  )
+  VALUES (
+    @WarehouseId, @TenantId, @CompanyId, 'ALM-PRINCIPAL', 'Almacen Principal',
+    'Almacen principal local de prueba', 'NORMAL', 'Santo Domingo',
+    'Distrito Nacional', 'DOM', 0, 1, 0, 0, 1, @UserId
+  );
+END;
+
+IF OBJECT_ID('inventory.Warehouses', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM inventory.Warehouses WHERE WarehouseId = @TransitWarehouseId)
+BEGIN
+  INSERT INTO inventory.Warehouses (
+    WarehouseId, TenantId, CompanyId, Code, Name, Description, WarehouseType,
+    City, Province, CountryCode, AllowsNegativeInventory, IsDefault, IsTransit,
+    IsVirtual, IsActive, CreatedBy
+  )
+  VALUES (
+    @TransitWarehouseId, @TenantId, @CompanyId, 'ALM-TRANSITO', 'Almacen de Transito',
+    'Almacen de transito local de prueba', 'TRANSIT', 'Santo Domingo',
+    'Distrito Nacional', 'DOM', 0, 0, 1, 0, 1, @UserId
+  );
+END;
+
 IF OBJECT_ID('crm.Customers', 'U') IS NOT NULL
    AND NOT EXISTS (SELECT 1 FROM crm.Customers WHERE CustomerId = @CustomerId)
 BEGIN
@@ -267,6 +304,7 @@ BEGIN
   INSERT INTO inventory.Items (
     ItemId, TenantId, CompanyId, Code, Description, ShortDescription, Barcode,
     AlternateCode, CategoryId, BrandId, UnitOfMeasureId, TaxCategoryId,
+    DefaultWarehouseId,
     InventoryType, ItemType, AllowNegativeInventory, TrackInventory, TrackLot,
     TrackSerial, IsService, IsManufactured, CostMethod, StandardCost,
     AverageCost, LastCost, BasePrice, MinimumPrice, MaximumDiscountPercent,
@@ -275,9 +313,20 @@ BEGIN
   VALUES (
     @ItemId, @TenantId, @CompanyId, 'ART-DEMO', 'Articulo demo local',
     'Articulo demo', '000000000001', 'ART-ALT-DEMO', @CategoryId, @BrandId,
-    @UnitId, @TaxCategoryId, 'PRODUCT', 'NORMAL', 0, 1, 0, 0, 0, 0,
+    @UnitId, @TaxCategoryId, @WarehouseId, 'PRODUCT', 'NORMAL', 0, 1, 0, 0, 0, 0,
     'AVERAGE', 100, 100, 100, 150, 120, 0, 0, 0, 'Articulo local de prueba',
     1, @UserId
   );
+END;
+
+IF OBJECT_ID('inventory.Items', 'U') IS NOT NULL
+   AND COL_LENGTH('inventory.Items', 'DefaultWarehouseId') IS NOT NULL
+   AND EXISTS (SELECT 1 FROM inventory.Items WHERE ItemId = @ItemId)
+BEGIN
+  UPDATE inventory.Items
+  SET DefaultWarehouseId = COALESCE(DefaultWarehouseId, @WarehouseId),
+      UpdatedBy = @UserId,
+      UpdatedAt = SYSUTCDATETIME()
+  WHERE ItemId = @ItemId;
 END;
 GO

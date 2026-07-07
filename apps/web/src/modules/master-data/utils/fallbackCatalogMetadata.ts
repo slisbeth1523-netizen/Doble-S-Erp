@@ -142,6 +142,7 @@ const catalogFields: Record<string, FieldInput[]> = {
     { field: "categoryId", label: "Categoría", type: "lookup", lookupCatalog: "categories", sortable: true },
     { field: "brandId", label: "Marca", type: "lookup", lookupCatalog: "brands", sortable: true },
     { field: "unitOfMeasureId", label: "Unidad", type: "lookup", lookupCatalog: "units-of-measure" },
+    { field: "defaultWarehouseId", label: "Almacen por defecto", type: "lookup", lookupCatalog: "warehouses", visibleInGrid: false },
     { field: "taxCategoryId", label: "Categoría fiscal", type: "lookup", lookupCatalog: "tax-categories", visibleInGrid: false },
     { field: "inventoryType", label: "Tipo inventario", defaultValue: "PRODUCT", visibleInGrid: false },
     { field: "trackInventory", label: "Controla inventario", type: "boolean", defaultValue: true, visibleInGrid: false },
@@ -163,6 +164,34 @@ const catalogFields: Record<string, FieldInput[]> = {
     ...technicalFields.slice(0, 3),
     { field: "website", label: "Sitio web", validation: { maxLength: 250, nullable: true }, width: 220 },
     { field: "countryCode", label: "País", validation: { maxLength: 3, nullable: true }, width: 90 },
+    technicalFields[3]!
+  ],
+  warehouses: [
+    ...technicalFields.slice(0, 3),
+    {
+      field: "warehouseType",
+      label: "Tipo almacen",
+      required: true,
+      defaultValue: "NORMAL",
+      sortable: true,
+      validation: {
+        required: true,
+        maxLength: 40,
+        regex: "^(NORMAL|PRODUCTION|CONSIGNMENT|TRANSIT|VIRTUAL)$",
+        nullable: false
+      },
+      width: 150
+    },
+    { field: "addressLine1", label: "Direccion 1", visibleInGrid: false, validation: { maxLength: 250, nullable: true } },
+    { field: "addressLine2", label: "Direccion 2", visibleInGrid: false, validation: { maxLength: 250, nullable: true } },
+    { field: "city", label: "Ciudad", searchable: true, validation: { maxLength: 120, nullable: true }, width: 150 },
+    { field: "province", label: "Provincia", searchable: true, validation: { maxLength: 120, nullable: true }, width: 150 },
+    { field: "countryCode", label: "Pais", visibleInGrid: false, validation: { maxLength: 3, nullable: true } },
+    { field: "responsibleUserId", label: "Responsable", type: "lookup", visibleInGrid: false, visibleInForm: false },
+    { field: "allowsNegativeInventory", label: "Permite negativo", type: "boolean", defaultValue: false, visibleInGrid: false },
+    { field: "isDefault", label: "Predeterminado", type: "boolean", defaultValue: false, width: 130, align: "center", format: "boolean" },
+    { field: "isTransit", label: "Transito", type: "boolean", defaultValue: false, width: 110, align: "center", format: "boolean" },
+    { field: "isVirtual", label: "Virtual", type: "boolean", defaultValue: false, width: 100, align: "center", format: "boolean" },
     technicalFields[3]!
   ],
   currencies: technicalFields,
