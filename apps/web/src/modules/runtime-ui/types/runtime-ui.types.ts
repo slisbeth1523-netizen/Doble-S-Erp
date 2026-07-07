@@ -78,6 +78,7 @@ export type CatalogMetadata = {
     displayName: string;
     tenantScoped: boolean;
     companyScoped: boolean;
+    readOnly?: boolean;
   };
   fields: RuntimeField[];
   grid: {

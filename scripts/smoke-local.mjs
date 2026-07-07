@@ -1,3 +1,7 @@
+import sql from "mssql";
+
+import { getSqlConfig } from "./local-env.mjs";
+
 const apiUrl = normalizeUrl(process.env.SMOKE_API_URL ?? process.env.VITE_API_URL ?? "http://localhost:4001/api");
 const demoEmail = process.env.SMOKE_DEMO_EMAIL ?? process.env.VITE_DEMO_EMAIL ?? "demo@dobles.local";
 const demoPassword = process.env.SMOKE_DEMO_PASSWORD ?? process.env.VITE_DEMO_PASSWORD ?? "Demo12345!";
@@ -9,7 +13,8 @@ const requiredCatalogs = [
   { code: "categories", seedCode: "GENERAL" },
   { code: "brands", seedCode: "DOBLES" },
   { code: "units-of-measure", seedCode: "UND" },
-  { code: "warehouses", seedCode: "ALM-PRINCIPAL" }
+  { code: "warehouses", seedCode: "ALM-PRINCIPAL" },
+  { code: "inventory-stocks", seedCode: "ART-DEMO" }
 ];
 
 const smokeRun = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
@@ -114,6 +119,46 @@ async function findCatalogRecord(catalog, search, session) {
   );
 
   return (body.data ?? []).find((item) => item.code === search);
+}
+
+async function ensureZeroStockRecord(session, item, warehouse) {
+  if (!session.user.companyId) {
+    fail("Cannot create QA stock without company context.");
+  }
+
+  const pool = await sql.connect(getSqlConfig());
+
+  try {
+    await pool
+      .request()
+      .input("TenantId", sql.UniqueIdentifier, session.user.tenantId)
+      .input("CompanyId", sql.UniqueIdentifier, session.user.companyId)
+      .input("ItemId", sql.UniqueIdentifier, item.id)
+      .input("WarehouseId", sql.UniqueIdentifier, warehouse.id)
+      .input("UserId", sql.UniqueIdentifier, session.user.userId ?? null)
+      .query(`
+        IF NOT EXISTS (
+          SELECT 1
+          FROM inventory.ItemStocks
+          WHERE TenantId = @TenantId
+            AND CompanyId = @CompanyId
+            AND ItemId = @ItemId
+            AND WarehouseId = @WarehouseId
+        )
+        BEGIN
+          INSERT INTO inventory.ItemStocks (
+            TenantId, CompanyId, ItemId, WarehouseId, QuantityOnHand,
+            QuantityReserved, AverageCost, LastCost, StandardCost, IsActive, CreatedBy
+          )
+          VALUES (
+            @TenantId, @CompanyId, @ItemId, @WarehouseId, 0,
+            0, 0, 0, 0, 1, @UserId
+          );
+        END;
+      `);
+  } finally {
+    await pool.close();
+  }
 }
 
 async function validateBackendBasics() {
@@ -221,6 +266,46 @@ async function validateCatalogs(session) {
 
       if (missingFields.length) {
         fail(`warehouses metadata is missing fields: ${missingFields.join(", ")}.`);
+      }
+    }
+
+    if (catalog.code === "inventory-stocks") {
+      const fields = metadata.data.fields.map((field) => field.field);
+      const missingFields = [
+        "itemCode",
+        "itemDescription",
+        "warehouseCode",
+        "warehouseName",
+        "quantityOnHand",
+        "quantityReserved",
+        "quantityAvailable",
+        "averageCost",
+        "lastCost",
+        "standardCost",
+        "lastMovementAt",
+        "isActive"
+      ].filter((field) => !fields.includes(field));
+
+      if (missingFields.length) {
+        fail(`inventory-stocks metadata is missing fields: ${missingFields.join(", ")}.`);
+      }
+
+      if (metadata.data.catalog.readOnly !== true) {
+        fail("inventory-stocks metadata did not report readOnly=true.");
+      }
+
+      const createAction = metadata.data.actions.find((action) => action.action === "create");
+
+      if (createAction?.available !== false) {
+        fail("inventory-stocks create action must be unavailable.");
+      }
+
+      const available = Number(seedRecord.quantityAvailable ?? 0);
+      const onHand = Number(seedRecord.quantityOnHand ?? 0);
+      const reserved = Number(seedRecord.quantityReserved ?? 0);
+
+      if (available !== onHand - reserved) {
+        fail("inventory-stocks QuantityAvailable did not match QuantityOnHand - QuantityReserved.");
       }
     }
   }
@@ -372,7 +457,7 @@ async function validateCrud(session) {
   }
 
   smokeStep("CRUD item create");
-  await createCatalogRecord(
+  const item = await createCatalogRecord(
     "items",
     {
       code: itemCode,
@@ -406,6 +491,28 @@ async function validateCrud(session) {
     },
     session
   );
+
+  smokeStep("inventory stock zero create");
+  await ensureZeroStockRecord(session, item, warehouse);
+
+  smokeStep("inventory stock zero search");
+  const foundStock = await findCatalogRecord("inventory-stocks", itemCode, session);
+
+  if (!foundStock) {
+    fail(`Created inventory stock for ${itemCode} was not found by search.`);
+  }
+
+  const stockAvailable = Number(foundStock.quantityAvailable ?? 0);
+  const stockOnHand = Number(foundStock.quantityOnHand ?? 0);
+  const stockReserved = Number(foundStock.quantityReserved ?? 0);
+
+  if (stockOnHand !== 0 || stockReserved !== 0 || stockAvailable !== 0) {
+    fail(`Created inventory stock for ${itemCode} was not seeded with zero quantities.`);
+  }
+
+  if (stockAvailable !== stockOnHand - stockReserved) {
+    fail(`Created inventory stock for ${itemCode} has an invalid available quantity.`);
+  }
 }
 
 async function main() {

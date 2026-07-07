@@ -1,4 +1,4 @@
-import { ConflictError, ValidationError } from "../../../errors/index.js";
+import { ConflictError, ForbiddenError, ValidationError } from "../../../errors/index.js";
 import { BaseService } from "../../../services/BaseService.js";
 import { auditEvent } from "../../../utils/audit.js";
 import { logger } from "../../../utils/logger.js";
@@ -35,7 +35,8 @@ export class BaseCatalogService extends BaseService {
         code: definition.catalogCode,
         displayName: definition.displayName,
         tenantScoped: definition.tenantScoped,
-        companyScoped: definition.companyScoped
+        companyScoped: definition.companyScoped,
+        readOnly: definition.readOnly ?? false
       },
       fields,
       grid: {
@@ -151,6 +152,7 @@ export class BaseCatalogService extends BaseService {
   }
 
   async create(definition: CatalogDefinition, context: CatalogContext, input: CatalogWriteInput) {
+    this.ensureWritable(definition);
     const normalizedInput = {
       ...input,
       tenantId: context.tenantId,
@@ -176,6 +178,7 @@ export class BaseCatalogService extends BaseService {
     id: string,
     input: CatalogWriteInput
   ) {
+    this.ensureWritable(definition);
     const normalizedInput = {
       ...input,
       tenantId: context.tenantId,
@@ -197,6 +200,7 @@ export class BaseCatalogService extends BaseService {
   }
 
   async activate(definition: CatalogDefinition, context: CatalogContext, id: string) {
+    this.ensureWritable(definition);
     const item = await this.repository.setActive(definition, context.tenantId, id, true, context.userId);
     const found = this.ensureFound(item, `${definition.displayName} item not found`);
     await this.audit(definition, context, "MASTER_DATA_ITEM_ACTIVATED", id);
@@ -204,6 +208,7 @@ export class BaseCatalogService extends BaseService {
   }
 
   async deactivate(definition: CatalogDefinition, context: CatalogContext, id: string) {
+    this.ensureWritable(definition);
     const item = await this.repository.setActive(definition, context.tenantId, id, false, context.userId);
     const found = this.ensureFound(item, `${definition.displayName} item not found`);
     await this.audit(definition, context, "MASTER_DATA_ITEM_DEACTIVATED", id);
@@ -231,15 +236,27 @@ export class BaseCatalogService extends BaseService {
   }
 
   private getRuntimeActions(definition: CatalogDefinition) {
+    const writeAvailable = !definition.readOnly;
+
     return [
-      { action: "create", permission: definition.permissions.create },
-      { action: "update", permission: definition.permissions.update },
-      { action: "activate", permission: definition.permissions.activate },
-      { action: "deactivate", permission: definition.permissions.deactivate },
+      { action: "create", permission: definition.permissions.create, available: writeAvailable },
+      { action: "update", permission: definition.permissions.update, available: writeAvailable },
+      { action: "activate", permission: definition.permissions.activate, available: writeAvailable },
+      { action: "deactivate", permission: definition.permissions.deactivate, available: writeAvailable },
       { action: "lookup", permission: definition.permissions.lookup },
-      { action: "export", permission: definition.permissions.export },
-      { action: "import", permission: definition.permissions.import }
+      { action: "export", permission: definition.permissions.export, available: !definition.readOnly },
+      { action: "import", permission: definition.permissions.import, available: !definition.readOnly }
     ];
+  }
+
+  private ensureWritable(definition: CatalogDefinition) {
+    if (definition.readOnly) {
+      throw new ForbiddenError(
+        `${definition.displayName} is read-only in this runtime phase`,
+        { catalog: definition.catalogCode },
+        "CATALOG_READ_ONLY"
+      );
+    }
   }
 
   private validatePayload(definition: CatalogDefinition, input: CatalogWriteInput) {
