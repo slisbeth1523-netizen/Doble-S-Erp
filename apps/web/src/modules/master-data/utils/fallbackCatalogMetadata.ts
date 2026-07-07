@@ -218,6 +218,36 @@ const catalogFields: Record<string, FieldInput[]> = {
     { field: "lastMovementAt", label: "Ultimo movimiento", type: "datetime", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 160 },
     { field: "isActive", label: "Activo", type: "boolean", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 96, align: "center", format: "boolean" }
   ],
+  "inventory-movements": [
+    { field: "movementNumber", label: "Movimiento", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 150 },
+    { field: "movementType", label: "Tipo", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 190 },
+    { field: "movementDate", label: "Fecha", type: "datetime", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 170 },
+    { field: "status", label: "Estado", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 110 },
+    { field: "sourceModule", label: "Modulo origen", editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 140 },
+    { field: "sourceDocumentNumber", label: "Documento origen", searchable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 170 },
+    { field: "reference", label: "Referencia", searchable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 180 },
+    { field: "lineCount", label: "Lineas", type: "number", editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 90, align: "right" },
+    { field: "totalQuantity", label: "Cantidad total", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 140, align: "right" },
+    { field: "totalCost", label: "Costo total", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 130, align: "right", format: "currency" },
+    { field: "postedAt", label: "Posteado", type: "datetime", editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 160 },
+    { field: "voidedAt", label: "Anulado", type: "datetime", editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 160 },
+    { field: "isActive", label: "Activo", type: "boolean", editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 96, align: "center", format: "boolean" }
+  ],
+  "inventory-movement-lines": [
+    { field: "movementNumber", label: "Movimiento", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 150 },
+    { field: "movementType", label: "Tipo", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 190 },
+    { field: "status", label: "Estado", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 110 },
+    { field: "lineNumber", label: "Linea", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 1, nullable: false }, width: 90, align: "right" },
+    { field: "itemCode", label: "Articulo", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 130 },
+    { field: "itemDescription", label: "Descripcion articulo", searchable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 260 },
+    { field: "warehouseCode", label: "Almacen", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 140 },
+    { field: "quantity", label: "Cantidad", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 120, align: "right" },
+    { field: "unitCost", label: "Costo unitario", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 140, align: "right", format: "currency" },
+    { field: "totalCost", label: "Costo total", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 130, align: "right", format: "currency" },
+    { field: "lotNumber", label: "Lote", editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 130 },
+    { field: "serialNumber", label: "Serie", editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 130 },
+    { field: "expirationDate", label: "Vencimiento", type: "date", editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 130 }
+  ],
   currencies: technicalFields,
   "units-of-measure": [
     ...technicalFields.slice(0, 3),
@@ -293,7 +323,7 @@ function buildFormField(field: RuntimeField, input: FieldInput): RuntimeFormFiel
 
 export function getFallbackCatalogMetadata(catalog: string): CatalogMetadata | null {
   const inputs = catalogFields[catalog];
-  const catalogReadOnly = catalog === "inventory-stocks";
+  const catalogReadOnly = ["inventory-stocks", "inventory-movements", "inventory-movement-lines"].includes(catalog);
   const catalogActions = catalogReadOnly ? readOnlyActions : actions;
 
   if (!inputs) {

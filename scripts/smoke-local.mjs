@@ -14,7 +14,9 @@ const requiredCatalogs = [
   { code: "brands", seedCode: "DOBLES" },
   { code: "units-of-measure", seedCode: "UND" },
   { code: "warehouses", seedCode: "ALM-PRINCIPAL" },
-  { code: "inventory-stocks", seedCode: "ART-DEMO" }
+  { code: "inventory-stocks", seedCode: "ART-DEMO" },
+  { code: "inventory-movements", seedCode: "MOV-DEMO-001" },
+  { code: "inventory-movement-lines", seedCode: "MOV-DEMO-001" }
 ];
 
 const smokeRun = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
@@ -158,6 +160,58 @@ async function ensureZeroStockRecord(session, item, warehouse) {
       `);
   } finally {
     await pool.close();
+  }
+}
+
+async function getDemoStockSnapshot(session) {
+  if (!session.user.companyId) {
+    fail("Cannot validate demo stock without company context.");
+  }
+
+  const pool = await sql.connect(getSqlConfig());
+
+  try {
+    const result = await pool
+      .request()
+      .input("TenantId", sql.UniqueIdentifier, session.user.tenantId)
+      .input("CompanyId", sql.UniqueIdentifier, session.user.companyId)
+      .query(`
+        SELECT
+          stock.QuantityOnHand,
+          stock.QuantityReserved,
+          stock.QuantityAvailable
+        FROM inventory.ItemStocks stock
+        INNER JOIN inventory.Items item
+          ON item.ItemId = stock.ItemId
+        INNER JOIN inventory.Warehouses warehouse
+          ON warehouse.WarehouseId = stock.WarehouseId
+        WHERE stock.TenantId = @TenantId
+          AND stock.CompanyId = @CompanyId
+          AND item.Code = 'ART-DEMO'
+          AND warehouse.Code = 'ALM-PRINCIPAL';
+      `);
+
+    const row = result.recordset[0];
+
+    if (!row) {
+      fail("Demo inventory stock ART-DEMO + ALM-PRINCIPAL was not found.");
+    }
+
+    return {
+      quantityOnHand: Number(row.QuantityOnHand ?? 0),
+      quantityReserved: Number(row.QuantityReserved ?? 0),
+      quantityAvailable: Number(row.QuantityAvailable ?? 0)
+    };
+  } finally {
+    await pool.close();
+  }
+}
+
+async function validateDemoMovementDoesNotAffectStock(session) {
+  const stock = await getDemoStockSnapshot(session);
+
+  if (stock.quantityOnHand !== 0 || stock.quantityReserved !== 0 || stock.quantityAvailable !== 0) {
+    fail("MOV-DEMO-001 must not update inventory.ItemStocks quantities.");
   }
 }
 
@@ -306,6 +360,85 @@ async function validateCatalogs(session) {
 
       if (available !== onHand - reserved) {
         fail("inventory-stocks QuantityAvailable did not match QuantityOnHand - QuantityReserved.");
+      }
+    }
+
+    if (catalog.code === "inventory-movements") {
+      const fields = metadata.data.fields.map((field) => field.field);
+      const missingFields = [
+        "movementNumber",
+        "movementType",
+        "movementDate",
+        "status",
+        "sourceModule",
+        "sourceDocumentNumber",
+        "reference",
+        "lineCount",
+        "totalQuantity",
+        "totalCost",
+        "postedAt",
+        "voidedAt",
+        "isActive"
+      ].filter((field) => !fields.includes(field));
+
+      if (missingFields.length) {
+        fail(`inventory-movements metadata is missing fields: ${missingFields.join(", ")}.`);
+      }
+
+      if (metadata.data.catalog.readOnly !== true) {
+        fail("inventory-movements metadata did not report readOnly=true.");
+      }
+
+      const unavailableActions = ["create", "update", "activate", "deactivate"]
+        .map((actionName) => metadata.data.actions.find((action) => action.action === actionName))
+        .filter((action) => action?.available !== false);
+
+      if (unavailableActions.length) {
+        fail("inventory-movements write actions must be unavailable.");
+      }
+
+      if (seedRecord.status !== "DRAFT") {
+        fail("MOV-DEMO-001 must stay in DRAFT status.");
+      }
+
+      if (Number(seedRecord.lineCount ?? 0) < 1 || Number(seedRecord.totalQuantity ?? 0) < 1) {
+        fail("MOV-DEMO-001 must include a visible demo line quantity.");
+      }
+
+      await validateDemoMovementDoesNotAffectStock(session);
+    }
+
+    if (catalog.code === "inventory-movement-lines") {
+      const fields = metadata.data.fields.map((field) => field.field);
+      const missingFields = [
+        "movementNumber",
+        "movementType",
+        "status",
+        "lineNumber",
+        "itemCode",
+        "itemDescription",
+        "warehouseCode",
+        "quantity",
+        "unitCost",
+        "totalCost"
+      ].filter((field) => !fields.includes(field));
+
+      if (missingFields.length) {
+        fail(`inventory-movement-lines metadata is missing fields: ${missingFields.join(", ")}.`);
+      }
+
+      if (metadata.data.catalog.readOnly !== true) {
+        fail("inventory-movement-lines metadata did not report readOnly=true.");
+      }
+
+      const createAction = metadata.data.actions.find((action) => action.action === "create");
+
+      if (createAction?.available !== false) {
+        fail("inventory-movement-lines create action must be unavailable.");
+      }
+
+      if (seedRecord.itemCode !== "ART-DEMO" || seedRecord.warehouseCode !== "ALM-PRINCIPAL") {
+        fail("MOV-DEMO-001 line must reference ART-DEMO + ALM-PRINCIPAL.");
       }
     }
   }
