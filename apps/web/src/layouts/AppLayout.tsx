@@ -32,7 +32,8 @@ const navigation: NavigationItem[] = [
     path: "/master-data/inventory-stocks",
     children: [
       { label: "Existencias", path: "/master-data/inventory-stocks" },
-      { label: "Movimientos", path: "/master-data/inventory-movements" }
+      { label: "Movimientos", path: "/master-data/inventory-movements" },
+      { label: "Ajustes", path: "/inventory/adjustments" }
     ]
   },
   { label: "Workflows", path: "/workflows" },
@@ -68,6 +69,10 @@ function breadcrumb(path: string) {
     }
 
     return ["Doble S ERP", "Catalogos", getCatalogLabel(segments[1] ?? "")];
+  }
+
+  if (segments[0] === "inventory" && segments[1] === "adjustments") {
+    return ["Doble S ERP", "Inventario", "Ajustes"];
   }
 
   const labels: Record<string, string> = {

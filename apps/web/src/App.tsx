@@ -4,6 +4,7 @@ import { AppLayout } from "./layouts/AppLayout.js";
 import { MasterDataRuntimePage } from "./modules/master-data/pages/MasterDataRuntimePage.js";
 import { DashboardPreview } from "./pages/DashboardPreview.js";
 import { EventsPreview } from "./pages/EventsPreview.js";
+import { InventoryAdjustmentsPreview } from "./pages/InventoryAdjustmentsPreview.js";
 import { SecurityPreview } from "./pages/SecurityPreview.js";
 import { SettingsPreview } from "./pages/SettingsPreview.js";
 import { WorkflowsPreview } from "./pages/WorkflowsPreview.js";
@@ -33,6 +34,10 @@ export function App() {
 
     if (path === "/events") {
       return <EventsPreview />;
+    }
+
+    if (path === "/inventory/adjustments") {
+      return <InventoryAdjustmentsPreview />;
     }
 
     if (path === "/security") {
