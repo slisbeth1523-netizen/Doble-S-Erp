@@ -5,6 +5,7 @@ import { MasterDataRuntimePage } from "./modules/master-data/pages/MasterDataRun
 import { DashboardPreview } from "./pages/DashboardPreview.js";
 import { EventsPreview } from "./pages/EventsPreview.js";
 import { InventoryAdjustmentsPreview } from "./pages/InventoryAdjustmentsPreview.js";
+import { InventoryPhysicalCountsPreview } from "./pages/InventoryPhysicalCountsPreview.js";
 import { SecurityPreview } from "./pages/SecurityPreview.js";
 import { SettingsPreview } from "./pages/SettingsPreview.js";
 import { WorkflowsPreview } from "./pages/WorkflowsPreview.js";
@@ -38,6 +39,10 @@ export function App() {
 
     if (path === "/inventory/adjustments") {
       return <InventoryAdjustmentsPreview />;
+    }
+
+    if (path === "/inventory/physical-counts") {
+      return <InventoryPhysicalCountsPreview />;
     }
 
     if (path === "/security") {

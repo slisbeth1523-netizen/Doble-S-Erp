@@ -133,6 +133,44 @@ async function createInventoryAdjustment(payload, session) {
   return body.data;
 }
 
+async function createPhysicalCount(payload, session) {
+  const body = await expectOk("/inventory/physical-counts", {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function addPhysicalCountLine(physicalCountId, payload, session) {
+  const body = await expectOk(`/inventory/physical-counts/${physicalCountId}/lines`, {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function completePhysicalCount(physicalCountId, session) {
+  const body = await expectOk(`/inventory/physical-counts/${physicalCountId}/complete`, {
+    method: "POST",
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
+async function createPhysicalCountAdjustment(physicalCountId, session) {
+  const body = await expectOk(`/inventory/physical-counts/${physicalCountId}/create-adjustment`, {
+    method: "POST",
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
 async function expectInventoryMovementPostFailure(movementId, session) {
   const result = await request(`/inventory/movements/${movementId}/post`, {
     method: "POST",
@@ -753,6 +791,107 @@ async function validateInventoryAdjustmentApiFlow(session) {
   }
 }
 
+async function validatePhysicalCountFlow(session) {
+  const references = await getDemoInventoryReferences(session);
+  const differenceQuantity = 2;
+  const initialStock = await getStockSnapshot(session, "ART-DEMO", "ALM-PRINCIPAL");
+
+  smokeStep("inventory physical count create");
+  const physicalCount = await createPhysicalCount(
+    {
+      warehouseId: references.warehouseId,
+      reference: `Smoke physical count ${smokeRun}`,
+      notes: "Conteo fisico generado por smoke local"
+    },
+    session
+  );
+
+  if (physicalCount.status !== "DRAFT" || Number(physicalCount.lineCount ?? 0) !== 0) {
+    fail("Physical count was not created as DRAFT without lines.");
+  }
+
+  smokeStep("inventory physical count line");
+  const countLine = await addPhysicalCountLine(
+    physicalCount.id,
+    {
+      itemId: references.itemId,
+      countedQuantity: initialStock.quantityOnHand + differenceQuantity,
+      unitCost: 75,
+      notes: "Linea de conteo smoke local"
+    },
+    session
+  );
+
+  if (
+    Number(countLine.snapshotQuantity ?? 0) !== initialStock.quantityOnHand ||
+    Number(countLine.countedQuantity ?? 0) !== initialStock.quantityOnHand + differenceQuantity ||
+    Number(countLine.differenceQuantity ?? 0) !== differenceQuantity
+  ) {
+    fail("Physical count line did not keep the expected stock snapshot and positive difference.");
+  }
+
+  smokeStep("inventory physical count complete");
+  const completedCount = await completePhysicalCount(physicalCount.id, session);
+
+  if (
+    completedCount.status !== "COMPLETED" ||
+    Number(completedCount.lineCount ?? 0) !== 1 ||
+    Number(completedCount.totalDifferenceQuantity ?? 0) !== differenceQuantity
+  ) {
+    fail("Physical count did not complete with the expected difference.");
+  }
+
+  const stockAfterComplete = await getStockSnapshot(session, "ART-DEMO", "ALM-PRINCIPAL");
+
+  if (stockAfterComplete.quantityOnHand !== initialStock.quantityOnHand) {
+    fail("Completing a physical count changed stock before adjustment posting.");
+  }
+
+  smokeStep("inventory physical count adjustment draft");
+  const physicalCountAdjustment = await createPhysicalCountAdjustment(physicalCount.id, session);
+  const generatedCount = physicalCountAdjustment.physicalCount;
+  const generatedAdjustment = physicalCountAdjustment.adjustment;
+
+  if (generatedCount.status !== "ADJUSTMENT_CREATED" || !generatedCount.adjustmentMovementId) {
+    fail("Physical count did not link the generated adjustment movement.");
+  }
+
+  if (
+    generatedAdjustment.status !== "DRAFT" ||
+    generatedAdjustment.movementType !== "ADJUSTMENT_IN"
+  ) {
+    fail("Physical count adjustment was not created as ADJUSTMENT_IN + DRAFT.");
+  }
+
+  const stockAfterAdjustmentDraft = await getStockSnapshot(session, "ART-DEMO", "ALM-PRINCIPAL");
+
+  if (stockAfterAdjustmentDraft.quantityOnHand !== initialStock.quantityOnHand) {
+    fail("Generating a physical count adjustment changed stock before posting.");
+  }
+
+  smokeStep("inventory physical count adjustment post");
+  const postedAdjustment = await postInventoryMovement(generatedAdjustment.id, session);
+
+  if (postedAdjustment.status !== "POSTED" || postedAdjustment.movementType !== "ADJUSTMENT_IN") {
+    fail("Physical count generated adjustment did not post as ADJUSTMENT_IN + POSTED.");
+  }
+
+  const stockAfterPost = await getStockSnapshot(session, "ART-DEMO", "ALM-PRINCIPAL");
+
+  if (stockAfterPost.quantityOnHand !== initialStock.quantityOnHand + differenceQuantity) {
+    fail("Posting the physical count adjustment did not increase stock by the expected difference.");
+  }
+
+  smokeStep("inventory physical count adjustment repost rejected");
+  await expectInventoryMovementPostFailure(generatedAdjustment.id, session);
+
+  const stockAfterRetry = await getStockSnapshot(session, "ART-DEMO", "ALM-PRINCIPAL");
+
+  if (stockAfterRetry.quantityOnHand !== stockAfterPost.quantityOnHand) {
+    fail("Reposting the physical count adjustment duplicated stock.");
+  }
+}
+
 async function validateBackendBasics() {
   smokeStep("GET /health");
   await expectOk("/health");
@@ -1188,6 +1327,7 @@ async function validateCrud(session) {
   await validateInventoryPostingFlow(session);
   await validateInventoryTransferFlow(session);
   await validateInventoryAdjustmentApiFlow(session);
+  await validatePhysicalCountFlow(session);
 }
 
 async function main() {
