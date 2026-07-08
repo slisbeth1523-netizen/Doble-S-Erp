@@ -147,6 +147,8 @@ DECLARE @InventoryMovementId UNIQUEIDENTIFIER = 'abababab-abab-abab-abab-abababa
 DECLARE @InventoryMovementLineId UNIQUEIDENTIFIER = 'abababab-abab-abab-abab-abababababac';
 DECLARE @PostQaMovementId UNIQUEIDENTIFIER = 'abababab-abab-abab-abab-abababababad';
 DECLARE @PostQaMovementLineId UNIQUEIDENTIFIER = 'abababab-abab-abab-abab-abababababae';
+DECLARE @TransferQaMovementId UNIQUEIDENTIFIER = 'abababab-abab-abab-abab-abababababaf';
+DECLARE @TransferQaMovementLineId UNIQUEIDENTIFIER = 'abababab-abab-abab-abab-abababababb0';
 DECLARE @CustomerId UNIQUEIDENTIFIER = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 DECLARE @SupplierId UNIQUEIDENTIFIER = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
 DECLARE @ItemId UNIQUEIDENTIFIER = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
@@ -462,6 +464,42 @@ BEGIN
     @PostQaMovementLineId, @PostQaMovementId, @TenantId, @CompanyId,
     1, @ItemId, @WarehouseId, @UnitId, 2, 100,
     'Linea QA posteable local', @UserId
+  );
+END;
+
+IF OBJECT_ID('inventory.InventoryMovements', 'U') IS NOT NULL
+   AND OBJECT_ID('inventory.InventoryMovementLines', 'U') IS NOT NULL
+   AND EXISTS (SELECT 1 FROM inventory.Items WHERE ItemId = @ItemId)
+   AND EXISTS (SELECT 1 FROM inventory.Warehouses WHERE WarehouseId = @WarehouseId)
+   AND EXISTS (SELECT 1 FROM inventory.Warehouses WHERE WarehouseId = @TransitWarehouseId)
+   AND NOT EXISTS (
+     SELECT 1
+     FROM inventory.InventoryMovements
+     WHERE TenantId = @TenantId
+       AND CompanyId = @CompanyId
+       AND MovementNumber = 'MOV-TRANSFER-QA-001'
+   )
+BEGIN
+  INSERT INTO inventory.InventoryMovements (
+    InventoryMovementId, TenantId, CompanyId, MovementNumber, MovementType,
+    MovementDate, Status, SourceModule, SourceDocumentNumber, Reference,
+    Notes, IsActive, CreatedBy
+  )
+  VALUES (
+    @TransferQaMovementId, @TenantId, @CompanyId, 'MOV-TRANSFER-QA-001', 'TRANSFER',
+    SYSUTCDATETIME(), 'DRAFT', 'LOCAL_SEED', NULL, 'Movimiento QA transferible',
+    'Movimiento demo para validar transferencia controlada sin posteo automatico', 1, @UserId
+  );
+
+  INSERT INTO inventory.InventoryMovementLines (
+    InventoryMovementLineId, InventoryMovementId, TenantId, CompanyId,
+    LineNumber, ItemId, WarehouseId, ToWarehouseId, UnitOfMeasureId, Quantity, UnitCost,
+    Notes, CreatedBy
+  )
+  VALUES (
+    @TransferQaMovementLineId, @TransferQaMovementId, @TenantId, @CompanyId,
+    1, @ItemId, @WarehouseId, @TransitWarehouseId, @UnitId, 1, 0,
+    'Linea QA transferible local', @UserId
   );
 END;
 GO
