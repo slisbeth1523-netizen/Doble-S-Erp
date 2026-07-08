@@ -145,7 +145,28 @@ async function findCatalogRecord(catalog, search, session) {
   return (body.data ?? []).find((item) => item.code === search);
 }
 
+async function findInventoryStockRuntimeRecord(session, itemCode, warehouseCode) {
+  const body = await expectOk(
+    `/master-data/inventory-stocks?search=${encodeURIComponent(itemCode)}&page=1&pageSize=50`,
+    { headers: authHeaders(session) }
+  );
+
+  return (body.data ?? []).find(
+    (item) => item.itemCode === itemCode && item.warehouseCode === warehouseCode
+  );
+}
+
 async function getStockSnapshot(session, itemCode, warehouseCode) {
+  const snapshot = await getOptionalStockSnapshot(session, itemCode, warehouseCode);
+
+  if (!snapshot) {
+    fail(`Inventory stock ${itemCode} + ${warehouseCode} was not found.`);
+  }
+
+  return snapshot;
+}
+
+async function getOptionalStockSnapshot(session, itemCode, warehouseCode) {
   if (!session.user.companyId) {
     fail("Cannot validate stock without company context.");
   }
@@ -181,7 +202,7 @@ async function getStockSnapshot(session, itemCode, warehouseCode) {
     const row = result.recordset[0];
 
     if (!row) {
-      fail(`Inventory stock ${itemCode} + ${warehouseCode} was not found.`);
+      return null;
     }
 
     return {
@@ -256,6 +277,82 @@ async function createQaPostableMovement(session, movementNumber, quantity, unitC
           @LineId, @MovementId, @TenantId, @CompanyId,
           1, @ItemId, @WarehouseId, @UnitOfMeasureId, @Quantity, @UnitCost,
           'Linea smoke local posteable', @UserId
+        );
+
+        SELECT @MovementId AS movementId, @MovementNumber AS movementNumber;
+      `);
+
+    return result.recordset[0];
+  } finally {
+    await pool.close();
+  }
+}
+
+async function createQaTransferMovement(session, movementNumber, quantity) {
+  if (!session.user.companyId) {
+    fail("Cannot create QA transfer movement without company context.");
+  }
+
+  const pool = await sql.connect(getSqlConfig());
+
+  try {
+    const result = await pool
+      .request()
+      .input("TenantId", sql.UniqueIdentifier, session.user.tenantId)
+      .input("CompanyId", sql.UniqueIdentifier, session.user.companyId)
+      .input("UserId", sql.UniqueIdentifier, session.user.userId ?? null)
+      .input("MovementNumber", sql.NVarChar(40), movementNumber)
+      .input("Quantity", sql.Decimal(18, 6), quantity)
+      .query(`
+        DECLARE @MovementId UNIQUEIDENTIFIER = NEWID();
+        DECLARE @LineId UNIQUEIDENTIFIER = NEWID();
+        DECLARE @ItemId UNIQUEIDENTIFIER;
+        DECLARE @OriginWarehouseId UNIQUEIDENTIFIER;
+        DECLARE @DestinationWarehouseId UNIQUEIDENTIFIER;
+        DECLARE @UnitOfMeasureId UNIQUEIDENTIFIER;
+
+        SELECT @ItemId = ItemId, @UnitOfMeasureId = UnitOfMeasureId
+        FROM inventory.Items
+        WHERE TenantId = @TenantId
+          AND CompanyId = @CompanyId
+          AND Code = 'ART-DEMO';
+
+        SELECT @OriginWarehouseId = WarehouseId
+        FROM inventory.Warehouses
+        WHERE TenantId = @TenantId
+          AND CompanyId = @CompanyId
+          AND Code = 'ALM-PRINCIPAL';
+
+        SELECT @DestinationWarehouseId = WarehouseId
+        FROM inventory.Warehouses
+        WHERE TenantId = @TenantId
+          AND CompanyId = @CompanyId
+          AND Code = 'ALM-TRANSITO';
+
+        IF @ItemId IS NULL OR @OriginWarehouseId IS NULL OR @DestinationWarehouseId IS NULL
+        BEGIN
+          THROW 51000, 'Cannot create QA transfer movement without ART-DEMO, ALM-PRINCIPAL and ALM-TRANSITO.', 1;
+        END;
+
+        INSERT INTO inventory.InventoryMovements (
+          InventoryMovementId, TenantId, CompanyId, MovementNumber, MovementType,
+          MovementDate, Status, SourceModule, Reference, Notes, IsActive, CreatedBy
+        )
+        VALUES (
+          @MovementId, @TenantId, @CompanyId, @MovementNumber, 'TRANSFER',
+          SYSUTCDATETIME(), 'DRAFT', 'SMOKE_LOCAL', 'Smoke transfer QA',
+          'Movimiento generado por smoke local para validar transferencia idempotente', 1, @UserId
+        );
+
+        INSERT INTO inventory.InventoryMovementLines (
+          InventoryMovementLineId, InventoryMovementId, TenantId, CompanyId,
+          LineNumber, ItemId, WarehouseId, ToWarehouseId, UnitOfMeasureId, Quantity, UnitCost,
+          Notes, CreatedBy
+        )
+        VALUES (
+          @LineId, @MovementId, @TenantId, @CompanyId,
+          1, @ItemId, @OriginWarehouseId, @DestinationWarehouseId, @UnitOfMeasureId, @Quantity, 0,
+          'Linea smoke local transferible', @UserId
         );
 
         SELECT @MovementId AS movementId, @MovementNumber AS movementNumber;
@@ -398,6 +495,102 @@ async function validateInventoryPostingFlow(session) {
 
   if (stockAfterRetry.quantityOnHand !== updatedStock.quantityOnHand) {
     fail("Reposting the same inventory movement duplicated stock.");
+  }
+}
+
+async function ensureTransferSourceStock(session, requiredQuantity) {
+  const sourceStock = await getStockSnapshot(session, "ART-DEMO", "ALM-PRINCIPAL");
+  const availableToTransfer = sourceStock.quantityOnHand - sourceStock.quantityReserved;
+
+  if (sourceStock.quantityOnHand >= requiredQuantity && availableToTransfer >= requiredQuantity) {
+    return;
+  }
+
+  const replenishmentQuantity = requiredQuantity - availableToTransfer;
+  const movementNumber = `MOV-TRANSFER-STOCK-${smokeRun}`;
+  const movement = await createQaPostableMovement(session, movementNumber, replenishmentQuantity, 100);
+
+  smokeStep("inventory transfer source stock replenish");
+  await postInventoryMovement(movement.movementId, session);
+}
+
+async function validateInventoryTransferFlow(session) {
+  const quantityToTransfer = 1;
+
+  await ensureTransferSourceStock(session, quantityToTransfer);
+
+  const movementNumber = `MOV-TRANSFER-${smokeRun}`;
+  const initialOriginStock = await getStockSnapshot(session, "ART-DEMO", "ALM-PRINCIPAL");
+  const initialDestinationStock =
+    (await getOptionalStockSnapshot(session, "ART-DEMO", "ALM-TRANSITO")) ?? {
+      quantityOnHand: 0,
+      quantityReserved: 0,
+      quantityAvailable: 0,
+      averageCost: 0,
+      lastCost: 0,
+      lastMovementAt: null
+    };
+  const movement = await createQaTransferMovement(session, movementNumber, quantityToTransfer);
+
+  smokeStep("inventory transfer movement post");
+  const posted = await postInventoryMovement(movement.movementId, session);
+
+  if (posted.status !== "POSTED" || posted.movementType !== "TRANSFER" || !posted.postedAt) {
+    fail("Inventory transfer post did not return TRANSFER + POSTED status with PostedAt.");
+  }
+
+  const postedMovement = await findCatalogRecord("inventory-movements", movementNumber, session);
+
+  if (!postedMovement || postedMovement.status !== "POSTED" || postedMovement.movementType !== "TRANSFER") {
+    fail(`Posted inventory transfer ${movementNumber} was not visible as TRANSFER + POSTED in runtime metadata.`);
+  }
+
+  const updatedOriginStock = await getStockSnapshot(session, "ART-DEMO", "ALM-PRINCIPAL");
+  const updatedDestinationStock = await getStockSnapshot(session, "ART-DEMO", "ALM-TRANSITO");
+
+  if (updatedOriginStock.quantityOnHand !== initialOriginStock.quantityOnHand - quantityToTransfer) {
+    fail("Inventory transfer did not decrease origin QuantityOnHand by the expected quantity.");
+  }
+
+  if (updatedDestinationStock.quantityOnHand !== initialDestinationStock.quantityOnHand + quantityToTransfer) {
+    fail("Inventory transfer did not increase destination QuantityOnHand by the expected quantity.");
+  }
+
+  if (!updatedOriginStock.lastMovementAt || !updatedDestinationStock.lastMovementAt) {
+    fail("Inventory transfer did not update LastMovementAt for origin and destination stocks.");
+  }
+
+  const originRuntimeRecord = await findInventoryStockRuntimeRecord(
+    session,
+    "ART-DEMO",
+    "ALM-PRINCIPAL"
+  );
+  const destinationRuntimeRecord = await findInventoryStockRuntimeRecord(
+    session,
+    "ART-DEMO",
+    "ALM-TRANSITO"
+  );
+
+  if (!originRuntimeRecord) {
+    fail("/master-data/inventory-stocks did not reflect the transfer origin stock.");
+  }
+
+  if (!destinationRuntimeRecord) {
+    fail("/master-data/inventory-stocks did not reflect the transfer destination stock.");
+  }
+
+  smokeStep("inventory transfer repost rejected");
+  await expectInventoryMovementPostFailure(movement.movementId, session);
+
+  const originStockAfterRetry = await getStockSnapshot(session, "ART-DEMO", "ALM-PRINCIPAL");
+  const destinationStockAfterRetry = await getStockSnapshot(session, "ART-DEMO", "ALM-TRANSITO");
+
+  if (originStockAfterRetry.quantityOnHand !== updatedOriginStock.quantityOnHand) {
+    fail("Reposting the same inventory transfer duplicated origin stock movement.");
+  }
+
+  if (destinationStockAfterRetry.quantityOnHand !== updatedDestinationStock.quantityOnHand) {
+    fail("Reposting the same inventory transfer duplicated destination stock movement.");
   }
 }
 
@@ -834,6 +1027,7 @@ async function validateCrud(session) {
   }
 
   await validateInventoryPostingFlow(session);
+  await validateInventoryTransferFlow(session);
 }
 
 async function main() {

@@ -28,6 +28,7 @@ type MovementLineRow = {
   InventoryMovementLineId: string;
   ItemId: string;
   WarehouseId: string;
+  ToWarehouseId: string | null;
   Quantity: number;
   UnitCost: number;
   LineNumber: number;
@@ -182,15 +183,6 @@ export class InventoryPostingRepository extends BaseSqlRepository {
       });
     }
 
-    if (movement.MovementType === "TRANSFER") {
-      throw new AppError({
-        statusCode: 400,
-        code: "INVENTORY_TRANSFER_POSTING_NOT_IMPLEMENTED",
-        message: "Transfer posting not implemented yet.",
-        isOperational: true
-      });
-    }
-
     if (placeholderMovementTypes.includes(movement.MovementType)) {
       throw new AppError({
         statusCode: 400,
@@ -218,6 +210,7 @@ export class InventoryPostingRepository extends BaseSqlRepository {
           InventoryMovementLineId,
           ItemId,
           WarehouseId,
+          ToWarehouseId,
           Quantity,
           UnitCost,
           LineNumber
@@ -243,22 +236,29 @@ export class InventoryPostingRepository extends BaseSqlRepository {
   ) {
     const quantity = Number(line.Quantity);
     const unitCost = Number(line.UnitCost);
-    const stock = await this.lockStock(transaction, input, line);
 
     if (inboundMovementTypes.includes(movementType)) {
+      const stock = await this.lockStock(transaction, input, line.ItemId, line.WarehouseId);
       await this.postInboundLine(transaction, input, line, stock, quantity, unitCost);
       return;
     }
 
     if (movementType === "ADJUSTMENT_OUT") {
+      const stock = await this.lockStock(transaction, input, line.ItemId, line.WarehouseId);
       await this.postOutboundLine(transaction, input, line, stock, quantity);
+      return;
+    }
+
+    if (movementType === "TRANSFER") {
+      await this.postTransferLine(transaction, input, line, quantity);
     }
   }
 
   private async lockStock(
     transaction: sql.Transaction,
     input: InventoryPostingInput,
-    line: MovementLineRow
+    itemId: string,
+    warehouseId: string
   ) {
     const rows = await this.queryInTransaction<StockRow>(
       transaction,
@@ -279,8 +279,8 @@ export class InventoryPostingRepository extends BaseSqlRepository {
       [
         { name: "TenantId", value: input.tenantId },
         { name: "CompanyId", value: input.companyId },
-        { name: "ItemId", value: line.ItemId },
-        { name: "WarehouseId", value: line.WarehouseId }
+        { name: "ItemId", value: itemId },
+        { name: "WarehouseId", value: warehouseId }
       ]
     );
 
@@ -431,6 +431,200 @@ export class InventoryPostingRepository extends BaseSqlRepository {
         { name: "QuantityOnHand", value: newQuantity },
         { name: "PostedBy", value: input.postedBy ?? null },
         { name: "ItemStockId", value: stock.ItemStockId }
+      ]
+    );
+  }
+
+  private async postTransferLine(
+    transaction: sql.Transaction,
+    input: InventoryPostingInput,
+    line: MovementLineRow,
+    quantity: number
+  ) {
+    this.validateTransferLine(line, quantity);
+
+    const originStock = await this.lockStock(transaction, input, line.ItemId, line.WarehouseId);
+
+    if (!originStock) {
+      throw new AppError({
+        statusCode: 400,
+        code: "INVENTORY_STOCK_NOT_FOUND",
+        message: `Origin inventory stock does not exist for transfer line ${line.LineNumber}.`,
+        isOperational: true
+      });
+    }
+
+    const destinationStock = await this.lockStock(
+      transaction,
+      input,
+      line.ItemId,
+      line.ToWarehouseId as string
+    );
+
+    await this.decreaseTransferOriginStock(transaction, input, line, originStock, quantity);
+    await this.increaseTransferDestinationStock(
+      transaction,
+      input,
+      line,
+      originStock,
+      destinationStock,
+      quantity
+    );
+  }
+
+  private validateTransferLine(line: MovementLineRow, quantity: number) {
+    if (!line.ToWarehouseId) {
+      throw new AppError({
+        statusCode: 400,
+        code: "INVENTORY_TRANSFER_DESTINATION_REQUIRED",
+        message: `Transfer line ${line.LineNumber} requires a destination warehouse.`,
+        isOperational: true
+      });
+    }
+
+    if (line.ToWarehouseId === line.WarehouseId) {
+      throw new AppError({
+        statusCode: 400,
+        code: "INVENTORY_TRANSFER_SAME_WAREHOUSE",
+        message: `Transfer line ${line.LineNumber} cannot use the same origin and destination warehouse.`,
+        isOperational: true
+      });
+    }
+
+    if (quantity <= 0) {
+      throw new AppError({
+        statusCode: 400,
+        code: "INVENTORY_INVALID_QUANTITY",
+        message: `Transfer line ${line.LineNumber} must have a quantity greater than zero.`,
+        isOperational: true
+      });
+    }
+  }
+
+  private async decreaseTransferOriginStock(
+    transaction: sql.Transaction,
+    input: InventoryPostingInput,
+    line: MovementLineRow,
+    stock: StockRow,
+    quantity: number
+  ) {
+    const oldQuantity = Number(stock.QuantityOnHand);
+    const reserved = Number(stock.QuantityReserved);
+    const newQuantity = oldQuantity - quantity;
+
+    if (newQuantity < 0 || newQuantity < reserved) {
+      throw new AppError({
+        statusCode: 400,
+        code: "INVENTORY_NEGATIVE_STOCK_NOT_ALLOWED",
+        message: `Transfer line ${line.LineNumber} would create negative or unavailable origin stock.`,
+        isOperational: true
+      });
+    }
+
+    await this.queryInTransaction(
+      transaction,
+      `
+        UPDATE inventory.ItemStocks
+        SET QuantityOnHand = @QuantityOnHand,
+            LastMovementAt = SYSUTCDATETIME(),
+            UpdatedAt = SYSUTCDATETIME(),
+            UpdatedBy = @PostedBy
+        WHERE ItemStockId = @ItemStockId;
+      `,
+      [
+        { name: "QuantityOnHand", value: newQuantity },
+        { name: "PostedBy", value: input.postedBy ?? null },
+        { name: "ItemStockId", value: stock.ItemStockId }
+      ]
+    );
+  }
+
+  private async increaseTransferDestinationStock(
+    transaction: sql.Transaction,
+    input: InventoryPostingInput,
+    line: MovementLineRow,
+    originStock: StockRow,
+    destinationStock: StockRow | undefined,
+    quantity: number
+  ) {
+    const incomingAverageCost = Number(originStock.AverageCost);
+    const incomingLastCost = Number(originStock.LastCost);
+    const incomingStandardCost = Number(originStock.StandardCost);
+
+    if (!destinationStock) {
+      await this.queryInTransaction(
+        transaction,
+        `
+          INSERT INTO inventory.ItemStocks (
+            TenantId,
+            CompanyId,
+            ItemId,
+            WarehouseId,
+            QuantityOnHand,
+            QuantityReserved,
+            AverageCost,
+            LastCost,
+            StandardCost,
+            LastMovementAt,
+            IsActive,
+            CreatedBy
+          )
+          VALUES (
+            @TenantId,
+            @CompanyId,
+            @ItemId,
+            @WarehouseId,
+            @Quantity,
+            0,
+            @AverageCost,
+            @LastCost,
+            @StandardCost,
+            SYSUTCDATETIME(),
+            1,
+            @PostedBy
+          );
+        `,
+        [
+          { name: "TenantId", value: input.tenantId },
+          { name: "CompanyId", value: input.companyId },
+          { name: "ItemId", value: line.ItemId },
+          { name: "WarehouseId", value: line.ToWarehouseId as string },
+          { name: "Quantity", value: quantity },
+          { name: "AverageCost", value: incomingAverageCost },
+          { name: "LastCost", value: incomingLastCost },
+          { name: "StandardCost", value: incomingStandardCost },
+          { name: "PostedBy", value: input.postedBy ?? null }
+        ]
+      );
+      return;
+    }
+
+    const oldQuantity = Number(destinationStock.QuantityOnHand);
+    const oldAverageCost = Number(destinationStock.AverageCost);
+    const newQuantity = oldQuantity + quantity;
+    const newAverageCost =
+      oldQuantity === 0
+        ? incomingAverageCost
+        : ((oldQuantity * oldAverageCost) + (quantity * incomingAverageCost)) / newQuantity;
+
+    await this.queryInTransaction(
+      transaction,
+      `
+        UPDATE inventory.ItemStocks
+        SET QuantityOnHand = @QuantityOnHand,
+            AverageCost = @AverageCost,
+            LastCost = @LastCost,
+            LastMovementAt = SYSUTCDATETIME(),
+            UpdatedAt = SYSUTCDATETIME(),
+            UpdatedBy = @PostedBy
+        WHERE ItemStockId = @ItemStockId;
+      `,
+      [
+        { name: "QuantityOnHand", value: newQuantity },
+        { name: "AverageCost", value: newAverageCost },
+        { name: "LastCost", value: incomingLastCost },
+        { name: "PostedBy", value: input.postedBy ?? null },
+        { name: "ItemStockId", value: destinationStock.ItemStockId }
       ]
     );
   }
