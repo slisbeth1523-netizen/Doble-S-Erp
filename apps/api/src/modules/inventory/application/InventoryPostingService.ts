@@ -38,22 +38,29 @@ export class InventoryPostingService extends BaseService {
     context: InventoryPostingContext,
     result: Awaited<ReturnType<typeof this.repository.postMovement>>
   ) {
-    await auditEvent({
-      tenantId: context.tenantId,
-      companyId: context.companyId,
-      userId: context.userId,
-      action: "INVENTORY_MOVEMENT_POSTED",
-      entity: "inventory.InventoryMovements",
-      entityId: result.id,
-      metadata: {
-        movementNumber: result.movementNumber,
-        movementType: result.movementType,
-        lineCount: result.lineCount,
-        totalQuantity: result.totalQuantity,
-        requestId: context.requestId,
-        correlationId: context.correlationId
-      }
-    });
+    try {
+      await auditEvent({
+        tenantId: context.tenantId,
+        companyId: context.companyId,
+        userId: context.userId,
+        action: "INVENTORY_MOVEMENT_POSTED",
+        entity: "inventory.InventoryMovements",
+        entityId: result.id,
+        metadata: {
+          movementNumber: result.movementNumber,
+          movementType: result.movementType,
+          lineCount: result.lineCount,
+          totalQuantity: result.totalQuantity,
+          requestId: context.requestId,
+          correlationId: context.correlationId
+        }
+      });
+    } catch (error) {
+      logger.warn("Inventory movement posted audit could not be recorded", {
+        movementId: result.id,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
 
     try {
       await domainEventPublisher.publish(
