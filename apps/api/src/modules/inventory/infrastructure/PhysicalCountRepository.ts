@@ -65,8 +65,26 @@ export type PhysicalCountAdjustmentPayload = {
   lines: PhysicalCountAdjustmentLine[];
 };
 
+export type PhysicalCountAdjustmentResult = {
+  physicalCount: PhysicalCountResult;
+  adjustment: {
+    id: string;
+    movementNumber: string;
+    movementType: "ADJUSTMENT_IN" | "ADJUSTMENT_OUT";
+    status: "DRAFT";
+    movementDate: Date;
+    lineCount: number;
+    totalQuantity: number;
+    totalCost: number;
+  };
+};
+
 type CountNumberRow = {
   CountNumber: string;
+};
+
+type MovementNumberRow = {
+  MovementNumber: string;
 };
 
 type CountHeaderRow = {
@@ -115,6 +133,17 @@ type LineRow = {
   CountedQuantity: number;
   DifferenceQuantity: number;
   UnitCost: number;
+};
+
+type CreatedMovementRow = {
+  InventoryMovementId: string;
+  MovementNumber: string;
+  MovementType: "ADJUSTMENT_IN" | "ADJUSTMENT_OUT";
+  Status: "DRAFT";
+  MovementDate: Date;
+  LineCount: number;
+  TotalQuantity: number;
+  TotalCost: number;
 };
 
 export class PhysicalCountRepository extends BaseSqlRepository {
@@ -318,27 +347,161 @@ export class PhysicalCountRepository extends BaseSqlRepository {
     });
   }
 
-  getAdjustmentPayload(input: PhysicalCountContextInput & { physicalCountId: string }) {
+  createAdjustmentFromPhysicalCount(
+    input: PhysicalCountContextInput & { physicalCountId: string }
+  ): Promise<PhysicalCountAdjustmentResult> {
     return this.executeInTransaction(async (transaction) => {
       const count = await this.lockPhysicalCount(transaction, input, input.physicalCountId);
+      const adjustmentPayload = await this.buildAdjustmentPayload(transaction, input, count);
+      const movementId = randomUUID();
+      const movementNumber = await this.generateAdjustmentMovementNumber(transaction, input);
+      const movementDate = new Date();
 
-      if (count.Status !== "COMPLETED") {
-        throw new AppError({
-          statusCode: 409,
-          code: "PHYSICAL_COUNT_NOT_COMPLETED",
-          message: "Only COMPLETED physical counts can generate adjustments.",
-          isOperational: true
-        });
+      await this.queryInTransaction(
+        transaction,
+        `
+          INSERT INTO inventory.InventoryMovements (
+            InventoryMovementId,
+            TenantId,
+            CompanyId,
+            MovementNumber,
+            MovementType,
+            MovementDate,
+            Status,
+            SourceModule,
+            Reference,
+            Notes,
+            IsActive,
+            CreatedBy
+          )
+          VALUES (
+            @MovementId,
+            @TenantId,
+            @CompanyId,
+            @MovementNumber,
+            @MovementType,
+            @MovementDate,
+            'DRAFT',
+            'INVENTORY_ADJUSTMENT',
+            @Reference,
+            @Notes,
+            1,
+            @UserId
+          );
+        `,
+        [
+          { name: "MovementId", value: movementId },
+          { name: "TenantId", value: input.tenantId },
+          { name: "CompanyId", value: input.companyId },
+          { name: "MovementNumber", value: movementNumber },
+          { name: "MovementType", value: adjustmentPayload.movementType },
+          { name: "MovementDate", value: movementDate },
+          { name: "Reference", value: adjustmentPayload.reference },
+          { name: "Notes", value: adjustmentPayload.notes },
+          { name: "UserId", value: input.userId ?? null }
+        ]
+      );
+
+      for (const [index, line] of adjustmentPayload.lines.entries()) {
+        await this.queryInTransaction(
+          transaction,
+          `
+            INSERT INTO inventory.InventoryMovementLines (
+              InventoryMovementLineId,
+              InventoryMovementId,
+              TenantId,
+              CompanyId,
+              LineNumber,
+              ItemId,
+              WarehouseId,
+              UnitOfMeasureId,
+              Quantity,
+              UnitCost,
+              Notes,
+              CreatedBy
+            )
+            VALUES (
+              @LineId,
+              @MovementId,
+              @TenantId,
+              @CompanyId,
+              @LineNumber,
+              @ItemId,
+              @WarehouseId,
+              @UnitOfMeasureId,
+              @Quantity,
+              @UnitCost,
+              @Notes,
+              @UserId
+            );
+          `,
+          [
+            { name: "LineId", value: randomUUID() },
+            { name: "MovementId", value: movementId },
+            { name: "TenantId", value: input.tenantId },
+            { name: "CompanyId", value: input.companyId },
+            { name: "LineNumber", value: index + 1 },
+            { name: "ItemId", value: line.itemId },
+            { name: "WarehouseId", value: line.warehouseId },
+            { name: "UnitOfMeasureId", value: line.unitOfMeasureId ?? null },
+            { name: "Quantity", value: line.quantity },
+            { name: "UnitCost", value: line.unitCost },
+            { name: "Notes", value: line.notes ?? null },
+            { name: "UserId", value: input.userId ?? null }
+          ]
+        );
       }
 
-      if (count.AdjustmentMovementId) {
-        throw new AppError({
-          statusCode: 409,
-          code: "PHYSICAL_COUNT_ADJUSTMENT_ALREADY_CREATED",
-          message: "Physical count already has an adjustment movement.",
-          isOperational: true
-        });
-      }
+      await this.queryInTransaction(
+        transaction,
+        `
+          UPDATE inventory.PhysicalCounts
+          SET Status = 'ADJUSTMENT_CREATED',
+              AdjustmentMovementId = @AdjustmentMovementId,
+              UpdatedAt = SYSUTCDATETIME(),
+              UpdatedBy = @UserId
+          WHERE PhysicalCountId = @PhysicalCountId
+            AND TenantId = @TenantId
+            AND CompanyId = @CompanyId;
+        `,
+        [
+          { name: "AdjustmentMovementId", value: movementId },
+          { name: "PhysicalCountId", value: input.physicalCountId },
+          { name: "TenantId", value: input.tenantId },
+          { name: "CompanyId", value: input.companyId },
+          { name: "UserId", value: input.userId ?? null }
+        ]
+      );
+
+      return {
+        physicalCount: await this.getPhysicalCountSummary(transaction, input, input.physicalCountId),
+        adjustment: await this.getCreatedAdjustment(transaction, movementId)
+      };
+    });
+  }
+
+  private async buildAdjustmentPayload(
+    transaction: sql.Transaction,
+    input: PhysicalCountContextInput & { physicalCountId: string },
+    count: CountHeaderRow
+  ) {
+    if (count.AdjustmentMovementId || count.Status === "ADJUSTMENT_CREATED") {
+      throw new AppError({
+        statusCode: 409,
+        code: "PHYSICAL_COUNT_ADJUSTMENT_ALREADY_CREATED",
+        message: "Physical count already has an adjustment movement.",
+        isOperational: true
+      });
+    }
+
+    if (count.Status !== "COMPLETED") {
+      throw new AppError({
+        statusCode: 409,
+        code: "PHYSICAL_COUNT_NOT_COMPLETED",
+        message: "Only COMPLETED physical counts can generate adjustments.",
+        isOperational: true
+      });
+    }
 
       const lines = await this.queryInTransaction<LineRow>(
         transaction,
@@ -404,45 +567,6 @@ export class PhysicalCountRepository extends BaseSqlRepository {
           notes: `Diferencia conteo ${count.CountNumber}, linea ${line.LineNumber}`
         }))
       } satisfies PhysicalCountAdjustmentPayload;
-    });
-  }
-
-  attachAdjustmentMovement(input: PhysicalCountContextInput & { physicalCountId: string; adjustmentMovementId: string }) {
-    return this.executeInTransaction(async (transaction) => {
-      const count = await this.lockPhysicalCount(transaction, input, input.physicalCountId);
-
-      if (count.Status !== "COMPLETED") {
-        throw new AppError({
-          statusCode: 409,
-          code: "PHYSICAL_COUNT_NOT_COMPLETED",
-          message: "Only COMPLETED physical counts can attach adjustment movements.",
-          isOperational: true
-        });
-      }
-
-      await this.queryInTransaction(
-        transaction,
-        `
-          UPDATE inventory.PhysicalCounts
-          SET Status = 'ADJUSTMENT_CREATED',
-              AdjustmentMovementId = @AdjustmentMovementId,
-              UpdatedAt = SYSUTCDATETIME(),
-              UpdatedBy = @UserId
-          WHERE PhysicalCountId = @PhysicalCountId
-            AND TenantId = @TenantId
-            AND CompanyId = @CompanyId;
-        `,
-        [
-          { name: "AdjustmentMovementId", value: input.adjustmentMovementId },
-          { name: "PhysicalCountId", value: input.physicalCountId },
-          { name: "TenantId", value: input.tenantId },
-          { name: "CompanyId", value: input.companyId },
-          { name: "UserId", value: input.userId ?? null }
-        ]
-      );
-
-      return this.getPhysicalCountSummary(transaction, input, input.physicalCountId);
-    });
   }
 
   private async queryInTransaction<TRecord>(
@@ -720,6 +844,56 @@ export class PhysicalCountRepository extends BaseSqlRepository {
     };
   }
 
+  private async getCreatedAdjustment(transaction: sql.Transaction, movementId: string) {
+    const rows = await this.queryInTransaction<CreatedMovementRow>(
+      transaction,
+      `
+        SELECT
+          movement.InventoryMovementId,
+          movement.MovementNumber,
+          movement.MovementType,
+          movement.Status,
+          movement.MovementDate,
+          COUNT(line.InventoryMovementLineId) AS LineCount,
+          COALESCE(SUM(line.Quantity), 0) AS TotalQuantity,
+          COALESCE(SUM(line.TotalCost), 0) AS TotalCost
+        FROM inventory.InventoryMovements movement
+        INNER JOIN inventory.InventoryMovementLines line
+          ON line.InventoryMovementId = movement.InventoryMovementId
+        WHERE movement.InventoryMovementId = @MovementId
+        GROUP BY
+          movement.InventoryMovementId,
+          movement.MovementNumber,
+          movement.MovementType,
+          movement.Status,
+          movement.MovementDate;
+      `,
+      [{ name: "MovementId", value: movementId }]
+    );
+
+    const created = rows[0];
+
+    if (!created) {
+      throw new AppError({
+        statusCode: 500,
+        code: "PHYSICAL_COUNT_ADJUSTMENT_CREATE_FAILED",
+        message: "Physical count adjustment could not be created.",
+        isOperational: true
+      });
+    }
+
+    return {
+      id: created.InventoryMovementId,
+      movementNumber: created.MovementNumber,
+      movementType: created.MovementType,
+      status: created.Status,
+      movementDate: created.MovementDate,
+      lineCount: Number(created.LineCount),
+      totalQuantity: Number(created.TotalQuantity),
+      totalCost: Number(created.TotalCost)
+    };
+  }
+
   private async generateCountNumber(transaction: sql.Transaction, input: PhysicalCountContextInput) {
     for (let attempt = 0; attempt < 8; attempt += 1) {
       const countNumber = this.buildCountNumber();
@@ -752,12 +926,52 @@ export class PhysicalCountRepository extends BaseSqlRepository {
     });
   }
 
+  private async generateAdjustmentMovementNumber(transaction: sql.Transaction, input: PhysicalCountContextInput) {
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const movementNumber = this.buildAdjustmentMovementNumber();
+      const rows = await this.queryInTransaction<MovementNumberRow>(
+        transaction,
+        `
+          SELECT MovementNumber
+          FROM inventory.InventoryMovements WITH (UPDLOCK, HOLDLOCK)
+          WHERE TenantId = @TenantId
+            AND CompanyId = @CompanyId
+            AND MovementNumber = @MovementNumber;
+        `,
+        [
+          { name: "TenantId", value: input.tenantId },
+          { name: "CompanyId", value: input.companyId },
+          { name: "MovementNumber", value: movementNumber }
+        ]
+      );
+
+      if (!rows[0]) {
+        return movementNumber;
+      }
+    }
+
+    throw new AppError({
+      statusCode: 409,
+      code: "PHYSICAL_COUNT_ADJUSTMENT_NUMBER_COLLISION",
+      message: "Could not generate a unique physical count adjustment number.",
+      isOperational: true
+    });
+  }
+
   private buildCountNumber() {
     const now = new Date();
     const timestamp = now.toISOString().replace(/[-:TZ.]/g, "").slice(0, 14);
     const suffix = randomUUID().replace(/-/g, "").slice(0, 4).toUpperCase();
 
     return `CF-${timestamp.slice(0, 8)}-${timestamp.slice(8, 14)}-${suffix}`;
+  }
+
+  private buildAdjustmentMovementNumber() {
+    const now = new Date();
+    const timestamp = now.toISOString().replace(/[-:TZ.]/g, "").slice(0, 14);
+    const suffix = randomUUID().replace(/-/g, "").slice(0, 4).toUpperCase();
+
+    return `AJU-${timestamp.slice(0, 8)}-${timestamp.slice(8, 14)}-${suffix}`;
   }
 }
 

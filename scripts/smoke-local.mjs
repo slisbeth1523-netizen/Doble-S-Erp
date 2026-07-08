@@ -171,6 +171,19 @@ async function createPhysicalCountAdjustment(physicalCountId, session) {
   return body.data;
 }
 
+async function expectPhysicalCountAdjustmentFailure(physicalCountId, session) {
+  const result = await request(`/inventory/physical-counts/${physicalCountId}/create-adjustment`, {
+    method: "POST",
+    headers: authHeaders(session)
+  });
+
+  if (result.response.ok || result.body?.success !== false) {
+    fail(`Recreating physical count adjustment for ${physicalCountId} must fail in a controlled way.`);
+  }
+
+  return result.body;
+}
+
 async function expectInventoryMovementPostFailure(movementId, session) {
   const result = await request(`/inventory/movements/${movementId}/post`, {
     method: "POST",
@@ -446,6 +459,34 @@ async function getDemoInventoryReferences(session) {
     }
 
     return row;
+  } finally {
+    await pool.close();
+  }
+}
+
+async function countPhysicalCountAdjustments(session, countNumber) {
+  if (!session.user.companyId) {
+    fail("Cannot count physical count adjustments without company context.");
+  }
+
+  const pool = await sql.connect(getSqlConfig());
+
+  try {
+    const result = await pool
+      .request()
+      .input("TenantId", sql.UniqueIdentifier, session.user.tenantId)
+      .input("CompanyId", sql.UniqueIdentifier, session.user.companyId)
+      .input("Reference", sql.NVarChar(120), `Conteo fisico ${countNumber}`)
+      .query(`
+        SELECT COUNT(1) AS AdjustmentCount
+        FROM inventory.InventoryMovements
+        WHERE TenantId = @TenantId
+          AND CompanyId = @CompanyId
+          AND SourceModule = 'INVENTORY_ADJUSTMENT'
+          AND Reference = @Reference;
+      `);
+
+    return Number(result.recordset[0]?.AdjustmentCount ?? 0);
   } finally {
     await pool.close();
   }
@@ -867,6 +908,21 @@ async function validatePhysicalCountFlow(session) {
 
   if (stockAfterAdjustmentDraft.quantityOnHand !== initialStock.quantityOnHand) {
     fail("Generating a physical count adjustment changed stock before posting.");
+  }
+
+  const adjustmentCountAfterCreate = await countPhysicalCountAdjustments(session, generatedCount.countNumber);
+
+  if (adjustmentCountAfterCreate !== 1) {
+    fail("Physical count adjustment generation did not create exactly one adjustment movement.");
+  }
+
+  smokeStep("inventory physical count adjustment recreate rejected");
+  await expectPhysicalCountAdjustmentFailure(physicalCount.id, session);
+
+  const adjustmentCountAfterRetry = await countPhysicalCountAdjustments(session, generatedCount.countNumber);
+
+  if (adjustmentCountAfterRetry !== 1) {
+    fail("Retrying physical count adjustment generation duplicated adjustment movements.");
   }
 
   smokeStep("inventory physical count adjustment post");

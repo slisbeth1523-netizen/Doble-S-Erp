@@ -1,5 +1,4 @@
 import { BaseService } from "../../../services/BaseService.js";
-import { inventoryAdjustmentService } from "./InventoryAdjustmentService.js";
 import {
   physicalCountRepository,
   type PhysicalCountContextInput
@@ -16,10 +15,7 @@ export type PhysicalCountContext = {
 };
 
 export class PhysicalCountService extends BaseService {
-  constructor(
-    private readonly repository = physicalCountRepository,
-    private readonly adjustmentService = inventoryAdjustmentService
-  ) {
+  constructor(private readonly repository = physicalCountRepository) {
     super();
   }
 
@@ -49,28 +45,11 @@ export class PhysicalCountService extends BaseService {
     });
   }
 
-  async createAdjustmentFromPhysicalCount(context: PhysicalCountContext, physicalCountId: string) {
-    const repositoryContext = this.toRepositoryContext(context);
-    const adjustmentPayload = await this.repository.getAdjustmentPayload({
-      ...repositoryContext,
+  createAdjustmentFromPhysicalCount(context: PhysicalCountContext, physicalCountId: string) {
+    return this.repository.createAdjustmentFromPhysicalCount({
+      ...this.toRepositoryContext(context),
       physicalCountId
     });
-    const adjustment = await this.adjustmentService.createAdjustment(context, {
-      movementType: adjustmentPayload.movementType,
-      reference: adjustmentPayload.reference,
-      notes: adjustmentPayload.notes,
-      lines: adjustmentPayload.lines
-    });
-    const physicalCount = await this.repository.attachAdjustmentMovement({
-      ...repositoryContext,
-      physicalCountId,
-      adjustmentMovementId: adjustment.id
-    });
-
-    return {
-      physicalCount,
-      adjustment
-    };
   }
 
   private toRepositoryContext(context: PhysicalCountContext): PhysicalCountContextInput {
