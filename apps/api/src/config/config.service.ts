@@ -3,11 +3,21 @@ import { z } from "zod";
 
 dotenv.config();
 
+const defaultCorsOrigins =
+  "http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174";
+
+function parseCorsOrigins(value: string) {
+  return value
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+}
+
 const configSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   API_PORT: z.coerce.number().int().positive().default(4001),
   API_PREFIX: z.string().default("/api"),
-  CORS_ORIGIN: z.string().default("*"),
+  CORS_ORIGIN: z.string().default(defaultCorsOrigins),
   JWT_SECRET: z.string().min(32, "JWT_SECRET must have at least 32 characters"),
   JWT_EXPIRES_IN: z.string().default("8h"),
   SQLSERVER_HOST: z.string().min(1, "SQLSERVER_HOST is required"),
@@ -33,7 +43,7 @@ const values = {
   },
   app: {
     nodeEnv: parsed.data.NODE_ENV,
-    corsOrigin: parsed.data.CORS_ORIGIN
+    corsOrigin: parseCorsOrigins(parsed.data.CORS_ORIGIN)
   },
   jwt: {
     secret: parsed.data.JWT_SECRET,

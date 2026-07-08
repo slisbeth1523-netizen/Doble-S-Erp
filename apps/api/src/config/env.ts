@@ -4,6 +4,7 @@ export const env = {
   nodeEnv: config.get("app.nodeEnv"),
   apiPort: config.get("api.port"),
   apiPrefix: config.get("api.prefix"),
+  corsOrigin: config.get("app.corsOrigin"),
   jwtSecret: config.get("jwt.secret"),
   jwtExpiresIn: config.get("jwt.expiresIn"),
   sqlServer: {

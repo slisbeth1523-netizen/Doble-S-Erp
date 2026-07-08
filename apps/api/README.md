@@ -7,7 +7,8 @@ Backend base de Doble S ERP con Node.js, Express, TypeScript, JWT y SQL Server.
 1. Copiar `.env.example` a `.env`.
 2. Completar credenciales reales de SQL Server.
 3. Usar un `JWT_SECRET` seguro de al menos 32 caracteres.
-4. Ejecutar la migracion inicial en `database/sqlserver/migrations/001_initial_saas_foundation.sql`.
+4. Configurar `CORS_ORIGIN` con un origen unico o una lista separada por coma, por ejemplo `http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174`.
+5. Ejecutar la migracion inicial en `database/sqlserver/migrations/001_initial_saas_foundation.sql`.
 
 ## Endpoints base
 
