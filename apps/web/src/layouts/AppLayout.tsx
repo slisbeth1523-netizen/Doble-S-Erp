@@ -30,7 +30,10 @@ const navigation: NavigationItem[] = [
   {
     label: "Inventario",
     path: "/master-data/inventory-stocks",
-    children: [{ label: "Existencias", path: "/master-data/inventory-stocks" }]
+    children: [
+      { label: "Existencias", path: "/master-data/inventory-stocks" },
+      { label: "Movimientos", path: "/master-data/inventory-movements" }
+    ]
   },
   { label: "Workflows", path: "/workflows" },
   { label: "Eventos", path: "/events" },
@@ -60,7 +63,7 @@ function breadcrumb(path: string) {
   const segments = path === "/" ? ["dashboard"] : path.split("/").filter(Boolean);
 
   if (segments[0] === "master-data") {
-    if (segments[1] === "inventory-stocks") {
+    if (segments[1] === "inventory-stocks" || segments[1] === "inventory-movements") {
       return ["Doble S ERP", "Inventario", getCatalogLabel(segments[1] ?? "")];
     }
 

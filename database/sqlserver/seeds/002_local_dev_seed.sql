@@ -104,7 +104,8 @@ VALUES
   ('inventory', 'inventory.warehouses.update', 'Local update warehouses'),
   ('inventory', 'inventory.warehouses.activate', 'Local activate warehouses'),
   ('inventory', 'inventory.warehouses.deactivate', 'Local deactivate warehouses'),
-  ('inventory', 'inventory.stocks.read', 'Local read inventory stocks');
+  ('inventory', 'inventory.stocks.read', 'Local read inventory stocks'),
+  ('inventory', 'inventory.movements.read', 'Local read inventory movements');
 
 INSERT INTO security.Permissions (ModuleCode, ActionCode, Description, IsActive)
 SELECT p.ModuleCode, p.ActionCode, p.Description, 1
@@ -141,6 +142,8 @@ DECLARE @CategoryId UNIQUEIDENTIFIER = '99999999-9999-9999-9999-999999999999';
 DECLARE @BrandId UNIQUEIDENTIFIER = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 DECLARE @WarehouseId UNIQUEIDENTIFIER = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee';
 DECLARE @TransitWarehouseId UNIQUEIDENTIFIER = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeef';
+DECLARE @InventoryMovementId UNIQUEIDENTIFIER = 'abababab-abab-abab-abab-abababababab';
+DECLARE @InventoryMovementLineId UNIQUEIDENTIFIER = 'abababab-abab-abab-abab-abababababac';
 DECLARE @CustomerId UNIQUEIDENTIFIER = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 DECLARE @SupplierId UNIQUEIDENTIFIER = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
 DECLARE @ItemId UNIQUEIDENTIFIER = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
@@ -352,5 +355,75 @@ BEGIN
     0, COALESCE(AverageCost, 0), COALESCE(LastCost, 0), COALESCE(StandardCost, 0), 1, @UserId
   FROM inventory.Items
   WHERE ItemId = @ItemId;
+END;
+
+IF OBJECT_ID('inventory.InventoryMovements', 'U') IS NOT NULL
+   AND OBJECT_ID('inventory.InventoryMovementLines', 'U') IS NOT NULL
+   AND EXISTS (SELECT 1 FROM inventory.Items WHERE ItemId = @ItemId)
+   AND EXISTS (SELECT 1 FROM inventory.Warehouses WHERE WarehouseId = @WarehouseId)
+   AND NOT EXISTS (
+     SELECT 1
+     FROM inventory.InventoryMovements
+     WHERE TenantId = @TenantId
+       AND CompanyId = @CompanyId
+       AND MovementNumber = 'MOV-DEMO-001'
+   )
+BEGIN
+  INSERT INTO inventory.InventoryMovements (
+    InventoryMovementId, TenantId, CompanyId, MovementNumber, MovementType,
+    MovementDate, Status, SourceModule, SourceDocumentNumber, Reference,
+    Notes, IsActive, CreatedBy
+  )
+  VALUES (
+    @InventoryMovementId, @TenantId, @CompanyId, 'MOV-DEMO-001', 'OPENING',
+    SYSUTCDATETIME(), 'DRAFT', 'LOCAL_SEED', NULL, 'Movimiento demo local',
+    'Documento base para validar movimientos sin afectar existencias', 1, @UserId
+  );
+
+  INSERT INTO inventory.InventoryMovementLines (
+    InventoryMovementLineId, InventoryMovementId, TenantId, CompanyId,
+    LineNumber, ItemId, WarehouseId, UnitOfMeasureId, Quantity, UnitCost,
+    Notes, CreatedBy
+  )
+  VALUES (
+    @InventoryMovementLineId, @InventoryMovementId, @TenantId, @CompanyId,
+    1, @ItemId, @WarehouseId, @UnitId, 1, 0,
+    'Linea demo local sin posteo de existencias', @UserId
+  );
+END;
+
+IF OBJECT_ID('inventory.InventoryMovements', 'U') IS NOT NULL
+   AND OBJECT_ID('inventory.InventoryMovementLines', 'U') IS NOT NULL
+   AND EXISTS (
+     SELECT 1
+     FROM inventory.InventoryMovements
+     WHERE TenantId = @TenantId
+       AND CompanyId = @CompanyId
+       AND MovementNumber = 'MOV-DEMO-001'
+   )
+   AND NOT EXISTS (
+     SELECT 1
+     FROM inventory.InventoryMovementLines line
+     INNER JOIN inventory.InventoryMovements movement
+       ON movement.InventoryMovementId = line.InventoryMovementId
+     WHERE movement.TenantId = @TenantId
+       AND movement.CompanyId = @CompanyId
+       AND movement.MovementNumber = 'MOV-DEMO-001'
+       AND line.LineNumber = 1
+   )
+BEGIN
+  INSERT INTO inventory.InventoryMovementLines (
+    InventoryMovementLineId, InventoryMovementId, TenantId, CompanyId,
+    LineNumber, ItemId, WarehouseId, UnitOfMeasureId, Quantity, UnitCost,
+    Notes, CreatedBy
+  )
+  SELECT
+    @InventoryMovementLineId, movement.InventoryMovementId, @TenantId, @CompanyId,
+    1, @ItemId, @WarehouseId, @UnitId, 1, 0,
+    'Linea demo local sin posteo de existencias', @UserId
+  FROM inventory.InventoryMovements movement
+  WHERE movement.TenantId = @TenantId
+    AND movement.CompanyId = @CompanyId
+    AND movement.MovementNumber = 'MOV-DEMO-001';
 END;
 GO
