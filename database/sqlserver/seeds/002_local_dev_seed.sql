@@ -106,7 +106,8 @@ VALUES
   ('inventory', 'inventory.warehouses.deactivate', 'Local deactivate warehouses'),
   ('inventory', 'inventory.stocks.read', 'Local read inventory stocks'),
   ('inventory', 'inventory.movements.read', 'Local read inventory movements'),
-  ('inventory', 'inventory.movements.post', 'Local post inventory movements');
+  ('inventory', 'inventory.movements.post', 'Local post inventory movements'),
+  ('inventory', 'inventory.adjustments.create', 'Local create inventory adjustments');
 
 INSERT INTO security.Permissions (ModuleCode, ActionCode, Description, IsActive)
 SELECT p.ModuleCode, p.ActionCode, p.Description, 1

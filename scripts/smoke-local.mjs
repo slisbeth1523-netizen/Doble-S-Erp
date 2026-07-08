@@ -123,6 +123,16 @@ async function postInventoryMovement(movementId, session) {
   return body.data;
 }
 
+async function createInventoryAdjustment(payload, session) {
+  const body = await expectOk("/inventory/adjustments", {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
 async function expectInventoryMovementPostFailure(movementId, session) {
   const result = await request(`/inventory/movements/${movementId}/post`, {
     method: "POST",
@@ -364,6 +374,45 @@ async function createQaTransferMovement(session, movementNumber, quantity) {
   }
 }
 
+async function getDemoInventoryReferences(session) {
+  if (!session.user.companyId) {
+    fail("Cannot get demo inventory references without company context.");
+  }
+
+  const pool = await sql.connect(getSqlConfig());
+
+  try {
+    const result = await pool
+      .request()
+      .input("TenantId", sql.UniqueIdentifier, session.user.tenantId)
+      .input("CompanyId", sql.UniqueIdentifier, session.user.companyId)
+      .query(`
+        SELECT
+          item.ItemId AS itemId,
+          item.UnitOfMeasureId AS unitOfMeasureId,
+          warehouse.WarehouseId AS warehouseId
+        FROM inventory.Items item
+        CROSS JOIN inventory.Warehouses warehouse
+        WHERE item.TenantId = @TenantId
+          AND item.CompanyId = @CompanyId
+          AND item.Code = 'ART-DEMO'
+          AND warehouse.TenantId = @TenantId
+          AND warehouse.CompanyId = @CompanyId
+          AND warehouse.Code = 'ALM-PRINCIPAL';
+      `);
+
+    const row = result.recordset[0];
+
+    if (!row?.itemId || !row?.warehouseId) {
+      fail("Cannot validate inventory adjustments without ART-DEMO and ALM-PRINCIPAL IDs.");
+    }
+
+    return row;
+  } finally {
+    await pool.close();
+  }
+}
+
 async function ensureZeroStockRecord(session, item, warehouse) {
   if (!session.user.companyId) {
     fail("Cannot create QA stock without company context.");
@@ -591,6 +640,116 @@ async function validateInventoryTransferFlow(session) {
 
   if (destinationStockAfterRetry.quantityOnHand !== updatedDestinationStock.quantityOnHand) {
     fail("Reposting the same inventory transfer duplicated destination stock movement.");
+  }
+}
+
+async function validateInventoryAdjustmentApiFlow(session) {
+  const references = await getDemoInventoryReferences(session);
+
+  const initialStock = await getStockSnapshot(session, "ART-DEMO", "ALM-PRINCIPAL");
+
+  smokeStep("inventory adjustment in create");
+  const adjustmentIn = await createInventoryAdjustment(
+    {
+      movementType: "ADJUSTMENT_IN",
+      reference: `Smoke adjustment in ${smokeRun}`,
+      notes: "Ajuste de entrada generado por smoke local",
+      lines: [
+        {
+          itemId: references.itemId,
+          warehouseId: references.warehouseId,
+          unitOfMeasureId: references.unitOfMeasureId,
+          quantity: 3,
+          unitCost: 50,
+          notes: "Entrada smoke local"
+        }
+      ]
+    },
+    session
+  );
+
+  if (adjustmentIn.status !== "DRAFT" || adjustmentIn.movementType !== "ADJUSTMENT_IN") {
+    fail("Inventory adjustment in was not created as ADJUSTMENT_IN + DRAFT.");
+  }
+
+  const stockAfterCreateIn = await getStockSnapshot(session, "ART-DEMO", "ALM-PRINCIPAL");
+
+  if (stockAfterCreateIn.quantityOnHand !== initialStock.quantityOnHand) {
+    fail("Creating an inventory adjustment in changed stock before posting.");
+  }
+
+  smokeStep("inventory adjustment in post");
+  const postedIn = await postInventoryMovement(adjustmentIn.id, session);
+
+  if (postedIn.status !== "POSTED" || postedIn.movementType !== "ADJUSTMENT_IN") {
+    fail("Inventory adjustment in did not post as ADJUSTMENT_IN + POSTED.");
+  }
+
+  const stockAfterPostIn = await getStockSnapshot(session, "ART-DEMO", "ALM-PRINCIPAL");
+
+  if (stockAfterPostIn.quantityOnHand !== initialStock.quantityOnHand + 3) {
+    fail("Posting an inventory adjustment in did not increase stock by 3.");
+  }
+
+  smokeStep("inventory adjustment in repost rejected");
+  await expectInventoryMovementPostFailure(adjustmentIn.id, session);
+
+  const stockAfterRetryIn = await getStockSnapshot(session, "ART-DEMO", "ALM-PRINCIPAL");
+
+  if (stockAfterRetryIn.quantityOnHand !== stockAfterPostIn.quantityOnHand) {
+    fail("Reposting the inventory adjustment in duplicated stock.");
+  }
+
+  smokeStep("inventory adjustment out create");
+  const adjustmentOut = await createInventoryAdjustment(
+    {
+      movementType: "ADJUSTMENT_OUT",
+      reference: `Smoke adjustment out ${smokeRun}`,
+      notes: "Ajuste de salida generado por smoke local",
+      lines: [
+        {
+          itemId: references.itemId,
+          warehouseId: references.warehouseId,
+          unitOfMeasureId: references.unitOfMeasureId,
+          quantity: 1,
+          unitCost: 0,
+          notes: "Salida smoke local"
+        }
+      ]
+    },
+    session
+  );
+
+  if (adjustmentOut.status !== "DRAFT" || adjustmentOut.movementType !== "ADJUSTMENT_OUT") {
+    fail("Inventory adjustment out was not created as ADJUSTMENT_OUT + DRAFT.");
+  }
+
+  const stockAfterCreateOut = await getStockSnapshot(session, "ART-DEMO", "ALM-PRINCIPAL");
+
+  if (stockAfterCreateOut.quantityOnHand !== stockAfterPostIn.quantityOnHand) {
+    fail("Creating an inventory adjustment out changed stock before posting.");
+  }
+
+  smokeStep("inventory adjustment out post");
+  const postedOut = await postInventoryMovement(adjustmentOut.id, session);
+
+  if (postedOut.status !== "POSTED" || postedOut.movementType !== "ADJUSTMENT_OUT") {
+    fail("Inventory adjustment out did not post as ADJUSTMENT_OUT + POSTED.");
+  }
+
+  const stockAfterPostOut = await getStockSnapshot(session, "ART-DEMO", "ALM-PRINCIPAL");
+
+  if (stockAfterPostOut.quantityOnHand !== stockAfterPostIn.quantityOnHand - 1) {
+    fail("Posting an inventory adjustment out did not decrease stock by 1.");
+  }
+
+  smokeStep("inventory adjustment out repost rejected");
+  await expectInventoryMovementPostFailure(adjustmentOut.id, session);
+
+  const stockAfterRetryOut = await getStockSnapshot(session, "ART-DEMO", "ALM-PRINCIPAL");
+
+  if (stockAfterRetryOut.quantityOnHand !== stockAfterPostOut.quantityOnHand) {
+    fail("Reposting the inventory adjustment out duplicated stock.");
   }
 }
 
@@ -1028,6 +1187,7 @@ async function validateCrud(session) {
 
   await validateInventoryPostingFlow(session);
   await validateInventoryTransferFlow(session);
+  await validateInventoryAdjustmentApiFlow(session);
 }
 
 async function main() {
