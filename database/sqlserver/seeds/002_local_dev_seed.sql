@@ -107,7 +107,11 @@ VALUES
   ('inventory', 'inventory.stocks.read', 'Local read inventory stocks'),
   ('inventory', 'inventory.movements.read', 'Local read inventory movements'),
   ('inventory', 'inventory.movements.post', 'Local post inventory movements'),
-  ('inventory', 'inventory.adjustments.create', 'Local create inventory adjustments');
+  ('inventory', 'inventory.adjustments.create', 'Local create inventory adjustments'),
+  ('inventory', 'inventory.physical-counts.create', 'Local create physical counts'),
+  ('inventory', 'inventory.physical-counts.count', 'Local count physical inventory lines'),
+  ('inventory', 'inventory.physical-counts.complete', 'Local complete physical counts'),
+  ('inventory', 'inventory.physical-counts.adjust', 'Local create physical count adjustments');
 
 INSERT INTO security.Permissions (ModuleCode, ActionCode, Description, IsActive)
 SELECT p.ModuleCode, p.ActionCode, p.Description, 1
