@@ -114,6 +114,28 @@ async function setCatalogRecordActive(catalog, id, active, session) {
   return body.data;
 }
 
+async function postInventoryMovement(movementId, session) {
+  const body = await expectOk(`/inventory/movements/${movementId}/post`, {
+    method: "POST",
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
+async function expectInventoryMovementPostFailure(movementId, session) {
+  const result = await request(`/inventory/movements/${movementId}/post`, {
+    method: "POST",
+    headers: authHeaders(session)
+  });
+
+  if (result.response.ok || result.body?.success !== false) {
+    fail(`Reposting inventory movement ${movementId} must fail in a controlled way.`);
+  }
+
+  return result.body;
+}
+
 async function findCatalogRecord(catalog, search, session) {
   const body = await expectOk(
     `/master-data/${catalog}?search=${encodeURIComponent(search)}&page=1&pageSize=10`,
@@ -121,6 +143,128 @@ async function findCatalogRecord(catalog, search, session) {
   );
 
   return (body.data ?? []).find((item) => item.code === search);
+}
+
+async function getStockSnapshot(session, itemCode, warehouseCode) {
+  if (!session.user.companyId) {
+    fail("Cannot validate stock without company context.");
+  }
+
+  const pool = await sql.connect(getSqlConfig());
+
+  try {
+    const result = await pool
+      .request()
+      .input("TenantId", sql.UniqueIdentifier, session.user.tenantId)
+      .input("CompanyId", sql.UniqueIdentifier, session.user.companyId)
+      .input("ItemCode", sql.NVarChar(80), itemCode)
+      .input("WarehouseCode", sql.NVarChar(80), warehouseCode)
+      .query(`
+        SELECT
+          stock.QuantityOnHand,
+          stock.QuantityReserved,
+          stock.QuantityAvailable,
+          stock.AverageCost,
+          stock.LastCost,
+          stock.LastMovementAt
+        FROM inventory.ItemStocks stock
+        INNER JOIN inventory.Items item
+          ON item.ItemId = stock.ItemId
+        INNER JOIN inventory.Warehouses warehouse
+          ON warehouse.WarehouseId = stock.WarehouseId
+        WHERE stock.TenantId = @TenantId
+          AND stock.CompanyId = @CompanyId
+          AND item.Code = @ItemCode
+          AND warehouse.Code = @WarehouseCode;
+      `);
+
+    const row = result.recordset[0];
+
+    if (!row) {
+      fail(`Inventory stock ${itemCode} + ${warehouseCode} was not found.`);
+    }
+
+    return {
+      quantityOnHand: Number(row.QuantityOnHand ?? 0),
+      quantityReserved: Number(row.QuantityReserved ?? 0),
+      quantityAvailable: Number(row.QuantityAvailable ?? 0),
+      averageCost: Number(row.AverageCost ?? 0),
+      lastCost: Number(row.LastCost ?? 0),
+      lastMovementAt: row.LastMovementAt
+    };
+  } finally {
+    await pool.close();
+  }
+}
+
+async function createQaPostableMovement(session, movementNumber, quantity, unitCost) {
+  if (!session.user.companyId) {
+    fail("Cannot create QA posting movement without company context.");
+  }
+
+  const pool = await sql.connect(getSqlConfig());
+
+  try {
+    const result = await pool
+      .request()
+      .input("TenantId", sql.UniqueIdentifier, session.user.tenantId)
+      .input("CompanyId", sql.UniqueIdentifier, session.user.companyId)
+      .input("UserId", sql.UniqueIdentifier, session.user.userId ?? null)
+      .input("MovementNumber", sql.NVarChar(40), movementNumber)
+      .input("Quantity", sql.Decimal(18, 6), quantity)
+      .input("UnitCost", sql.Decimal(18, 6), unitCost)
+      .query(`
+        DECLARE @MovementId UNIQUEIDENTIFIER = NEWID();
+        DECLARE @LineId UNIQUEIDENTIFIER = NEWID();
+        DECLARE @ItemId UNIQUEIDENTIFIER;
+        DECLARE @WarehouseId UNIQUEIDENTIFIER;
+        DECLARE @UnitOfMeasureId UNIQUEIDENTIFIER;
+
+        SELECT @ItemId = ItemId, @UnitOfMeasureId = UnitOfMeasureId
+        FROM inventory.Items
+        WHERE TenantId = @TenantId
+          AND CompanyId = @CompanyId
+          AND Code = 'ART-DEMO';
+
+        SELECT @WarehouseId = WarehouseId
+        FROM inventory.Warehouses
+        WHERE TenantId = @TenantId
+          AND CompanyId = @CompanyId
+          AND Code = 'ALM-PRINCIPAL';
+
+        IF @ItemId IS NULL OR @WarehouseId IS NULL
+        BEGIN
+          THROW 51000, 'Cannot create QA posting movement without ART-DEMO and ALM-PRINCIPAL.', 1;
+        END;
+
+        INSERT INTO inventory.InventoryMovements (
+          InventoryMovementId, TenantId, CompanyId, MovementNumber, MovementType,
+          MovementDate, Status, SourceModule, Reference, Notes, IsActive, CreatedBy
+        )
+        VALUES (
+          @MovementId, @TenantId, @CompanyId, @MovementNumber, 'ADJUSTMENT_IN',
+          SYSUTCDATETIME(), 'DRAFT', 'SMOKE_LOCAL', 'Smoke posting QA',
+          'Movimiento generado por smoke local para validar posteo idempotente', 1, @UserId
+        );
+
+        INSERT INTO inventory.InventoryMovementLines (
+          InventoryMovementLineId, InventoryMovementId, TenantId, CompanyId,
+          LineNumber, ItemId, WarehouseId, UnitOfMeasureId, Quantity, UnitCost,
+          Notes, CreatedBy
+        )
+        VALUES (
+          @LineId, @MovementId, @TenantId, @CompanyId,
+          1, @ItemId, @WarehouseId, @UnitOfMeasureId, @Quantity, @UnitCost,
+          'Linea smoke local posteable', @UserId
+        );
+
+        SELECT @MovementId AS movementId, @MovementNumber AS movementNumber;
+      `);
+
+    return result.recordset[0];
+  } finally {
+    await pool.close();
+  }
 }
 
 async function ensureZeroStockRecord(session, item, warehouse) {
@@ -208,10 +352,52 @@ async function getDemoStockSnapshot(session) {
 }
 
 async function validateDemoMovementDoesNotAffectStock(session) {
-  const stock = await getDemoStockSnapshot(session);
+  await getDemoStockSnapshot(session);
+}
 
-  if (stock.quantityOnHand !== 0 || stock.quantityReserved !== 0 || stock.quantityAvailable !== 0) {
-    fail("MOV-DEMO-001 must not update inventory.ItemStocks quantities.");
+async function validateInventoryPostingFlow(session) {
+  const quantityToPost = 2;
+  const unitCost = 100;
+  const movementNumber = `MOV-POST-${smokeRun}`;
+  const initialStock = await getStockSnapshot(session, "ART-DEMO", "ALM-PRINCIPAL");
+  const movement = await createQaPostableMovement(session, movementNumber, quantityToPost, unitCost);
+
+  smokeStep("inventory movement post");
+  const posted = await postInventoryMovement(movement.movementId, session);
+
+  if (posted.status !== "POSTED" || !posted.postedAt) {
+    fail("Inventory movement post did not return POSTED status with PostedAt.");
+  }
+
+  const postedMovement = await findCatalogRecord("inventory-movements", movementNumber, session);
+
+  if (!postedMovement || postedMovement.status !== "POSTED" || !postedMovement.postedAt) {
+    fail(`Posted inventory movement ${movementNumber} was not visible as POSTED in runtime metadata.`);
+  }
+
+  const updatedStock = await getStockSnapshot(session, "ART-DEMO", "ALM-PRINCIPAL");
+
+  if (updatedStock.quantityOnHand !== initialStock.quantityOnHand + quantityToPost) {
+    fail("Inventory posting did not increase ItemStocks.QuantityOnHand by the expected quantity.");
+  }
+
+  if (!updatedStock.lastMovementAt) {
+    fail("Inventory posting did not update ItemStocks.LastMovementAt.");
+  }
+
+  const stockRuntimeRecord = await findCatalogRecord("inventory-stocks", "ART-DEMO", session);
+
+  if (!stockRuntimeRecord || Number(stockRuntimeRecord.quantityOnHand) !== updatedStock.quantityOnHand) {
+    fail("/master-data/inventory-stocks did not reflect the posted stock quantity.");
+  }
+
+  smokeStep("inventory movement repost rejected");
+  await expectInventoryMovementPostFailure(movement.movementId, session);
+
+  const stockAfterRetry = await getStockSnapshot(session, "ART-DEMO", "ALM-PRINCIPAL");
+
+  if (stockAfterRetry.quantityOnHand !== updatedStock.quantityOnHand) {
+    fail("Reposting the same inventory movement duplicated stock.");
   }
 }
 
@@ -646,6 +832,8 @@ async function validateCrud(session) {
   if (stockAvailable !== stockOnHand - stockReserved) {
     fail(`Created inventory stock for ${itemCode} has an invalid available quantity.`);
   }
+
+  await validateInventoryPostingFlow(session);
 }
 
 async function main() {

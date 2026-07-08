@@ -105,7 +105,8 @@ VALUES
   ('inventory', 'inventory.warehouses.activate', 'Local activate warehouses'),
   ('inventory', 'inventory.warehouses.deactivate', 'Local deactivate warehouses'),
   ('inventory', 'inventory.stocks.read', 'Local read inventory stocks'),
-  ('inventory', 'inventory.movements.read', 'Local read inventory movements');
+  ('inventory', 'inventory.movements.read', 'Local read inventory movements'),
+  ('inventory', 'inventory.movements.post', 'Local post inventory movements');
 
 INSERT INTO security.Permissions (ModuleCode, ActionCode, Description, IsActive)
 SELECT p.ModuleCode, p.ActionCode, p.Description, 1
@@ -144,6 +145,8 @@ DECLARE @WarehouseId UNIQUEIDENTIFIER = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee';
 DECLARE @TransitWarehouseId UNIQUEIDENTIFIER = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeef';
 DECLARE @InventoryMovementId UNIQUEIDENTIFIER = 'abababab-abab-abab-abab-abababababab';
 DECLARE @InventoryMovementLineId UNIQUEIDENTIFIER = 'abababab-abab-abab-abab-abababababac';
+DECLARE @PostQaMovementId UNIQUEIDENTIFIER = 'abababab-abab-abab-abab-abababababad';
+DECLARE @PostQaMovementLineId UNIQUEIDENTIFIER = 'abababab-abab-abab-abab-abababababae';
 DECLARE @CustomerId UNIQUEIDENTIFIER = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 DECLARE @SupplierId UNIQUEIDENTIFIER = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
 DECLARE @ItemId UNIQUEIDENTIFIER = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
@@ -425,5 +428,40 @@ BEGIN
   WHERE movement.TenantId = @TenantId
     AND movement.CompanyId = @CompanyId
     AND movement.MovementNumber = 'MOV-DEMO-001';
+END;
+
+IF OBJECT_ID('inventory.InventoryMovements', 'U') IS NOT NULL
+   AND OBJECT_ID('inventory.InventoryMovementLines', 'U') IS NOT NULL
+   AND EXISTS (SELECT 1 FROM inventory.Items WHERE ItemId = @ItemId)
+   AND EXISTS (SELECT 1 FROM inventory.Warehouses WHERE WarehouseId = @WarehouseId)
+   AND NOT EXISTS (
+     SELECT 1
+     FROM inventory.InventoryMovements
+     WHERE TenantId = @TenantId
+       AND CompanyId = @CompanyId
+       AND MovementNumber = 'MOV-POST-QA-001'
+   )
+BEGIN
+  INSERT INTO inventory.InventoryMovements (
+    InventoryMovementId, TenantId, CompanyId, MovementNumber, MovementType,
+    MovementDate, Status, SourceModule, SourceDocumentNumber, Reference,
+    Notes, IsActive, CreatedBy
+  )
+  VALUES (
+    @PostQaMovementId, @TenantId, @CompanyId, 'MOV-POST-QA-001', 'ADJUSTMENT_IN',
+    SYSUTCDATETIME(), 'DRAFT', 'LOCAL_SEED', NULL, 'Movimiento QA posteable',
+    'Movimiento demo para validar posteo manual controlado', 1, @UserId
+  );
+
+  INSERT INTO inventory.InventoryMovementLines (
+    InventoryMovementLineId, InventoryMovementId, TenantId, CompanyId,
+    LineNumber, ItemId, WarehouseId, UnitOfMeasureId, Quantity, UnitCost,
+    Notes, CreatedBy
+  )
+  VALUES (
+    @PostQaMovementLineId, @PostQaMovementId, @TenantId, @CompanyId,
+    1, @ItemId, @WarehouseId, @UnitId, 2, 100,
+    'Linea QA posteable local', @UserId
+  );
 END;
 GO
