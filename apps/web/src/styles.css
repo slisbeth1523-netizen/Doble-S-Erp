@@ -571,6 +571,51 @@ p {
   gap: 12px;
 }
 
+.inventory-operations-page .ui-card {
+  display: grid;
+  gap: 14px;
+}
+
+.inventory-operation-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.operation-form,
+.operation-summary {
+  display: grid;
+  gap: 12px;
+}
+
+.operation-form label {
+  display: grid;
+  gap: 6px;
+}
+
+.operation-form label span,
+.operation-summary span {
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.operation-form label span {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.operation-form-row,
+.operation-button-row {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.operation-summary strong {
+  color: var(--text);
+  font-size: 1.15rem;
+}
+
 .runtime-field strong {
   color: var(--red);
   margin-left: 4px;
@@ -621,6 +666,9 @@ p {
 
   .metric-grid,
   .content-grid,
+  .inventory-operation-grid,
+  .operation-form-row,
+  .operation-button-row,
   .runtime-layout-two {
     grid-template-columns: 1fr;
   }
