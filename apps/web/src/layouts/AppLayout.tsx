@@ -113,6 +113,77 @@ function breadcrumb(path: string) {
   return ["Doble S ERP", ...segments.map((segment) => labels[segment] ?? segment.replaceAll("-", " "))];
 }
 
+function renderIcon(label: string) {
+  const commonProps = {
+    width: 16,
+    height: 16,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 2.5,
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    style: { marginRight: "10px", flexShrink: 0 }
+  } as const;
+
+  switch (label) {
+    case "Dashboard":
+      return (
+        <svg {...commonProps}>
+          <rect x="3" y="3" width="7" height="9"></rect>
+          <rect x="14" y="3" width="7" height="5"></rect>
+          <rect x="14" y="12" width="7" height="9"></rect>
+          <rect x="3" y="16" width="7" height="5"></rect>
+        </svg>
+      );
+    case "Catalogos":
+      return (
+        <svg {...commonProps}>
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+        </svg>
+      );
+    case "Inventario":
+      return (
+        <svg {...commonProps}>
+          <polyline points="21 8 21 21 3 21 3 8"></polyline>
+          <rect x="1" y="3" width="22" height="5"></rect>
+          <line x1="10" y1="12" x2="14" y2="12"></line>
+        </svg>
+      );
+    case "Workflows":
+      return (
+        <svg {...commonProps}>
+          <line x1="6" y1="3" x2="6" y2="15"></line>
+          <circle cx="18" cy="6" r="3"></circle>
+          <circle cx="6" cy="18" r="3"></circle>
+          <path d="M18 9a9 9 0 0 1-9 9"></path>
+        </svg>
+      );
+    case "Eventos":
+      return (
+        <svg {...commonProps}>
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+        </svg>
+      );
+    case "Seguridad":
+      return (
+        <svg {...commonProps}>
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+        </svg>
+      );
+    case "Configuracion":
+      return (
+        <svg {...commonProps}>
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
+      );
+    default:
+      return null;
+  }
+}
+
 export function AppLayout({ children, currentPath, onNavigate }: AppLayoutProps) {
   const crumbs = breadcrumb(currentPath);
 
@@ -135,7 +206,8 @@ export function AppLayout({ children, currentPath, onNavigate }: AppLayoutProps)
                 onClick={() => onNavigate(item.path)}
                 type="button"
               >
-                {item.label}
+                {renderIcon(item.label)}
+                <span>{item.label}</span>
               </button>
               {item.children ? (
                 <div className="nav-children">
@@ -148,6 +220,15 @@ export function AppLayout({ children, currentPath, onNavigate }: AppLayoutProps)
                       onClick={() => onNavigate(child.path)}
                       type="button"
                     >
+                      <span style={{
+                        display: "inline-block",
+                        width: "5px",
+                        height: "5px",
+                        borderRadius: "50%",
+                        background: "currentColor",
+                        marginRight: "8px",
+                        opacity: currentPath === child.path ? 1 : 0.45
+                      }}></span>
                       {child.label}
                     </button>
                   ))}
