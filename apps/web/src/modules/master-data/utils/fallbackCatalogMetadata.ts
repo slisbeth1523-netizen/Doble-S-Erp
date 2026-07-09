@@ -248,6 +248,24 @@ const catalogFields: Record<string, FieldInput[]> = {
     { field: "serialNumber", label: "Serie", editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 130 },
     { field: "expirationDate", label: "Vencimiento", type: "date", editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 130 }
   ],
+  "inventory-ledger": [
+    { field: "movementNumber", label: "Movimiento", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 150 },
+    { field: "movementType", label: "Tipo", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 180 },
+    { field: "ledgerDirection", label: "Direccion", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 110, align: "center" },
+    { field: "movementDate", label: "Fecha", type: "datetime", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 170 },
+    { field: "postedAt", label: "Posteado", type: "datetime", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 170 },
+    { field: "itemCode", label: "Articulo", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 130 },
+    { field: "itemDescription", label: "Descripcion articulo", searchable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 240 },
+    { field: "warehouseCode", label: "Almacen", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 130 },
+    { field: "warehouseName", label: "Nombre almacen", searchable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 200 },
+    { field: "quantityIn", label: "Entrada", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 110, align: "right" },
+    { field: "quantityOut", label: "Salida", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 110, align: "right" },
+    { field: "quantityBalanceImpact", label: "Impacto", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 120, align: "right" },
+    { field: "unitCost", label: "Costo unitario", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 140, align: "right", format: "currency" },
+    { field: "totalCost", label: "Costo total", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 130, align: "right", format: "currency" },
+    { field: "sourceDocumentNumber", label: "Documento origen", searchable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 170 },
+    { field: "reference", label: "Referencia", searchable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 180 }
+  ],
   currencies: technicalFields,
   "units-of-measure": [
     ...technicalFields.slice(0, 3),
@@ -323,7 +341,7 @@ function buildFormField(field: RuntimeField, input: FieldInput): RuntimeFormFiel
 
 export function getFallbackCatalogMetadata(catalog: string): CatalogMetadata | null {
   const inputs = catalogFields[catalog];
-  const catalogReadOnly = ["inventory-stocks", "inventory-movements", "inventory-movement-lines"].includes(catalog);
+  const catalogReadOnly = ["inventory-stocks", "inventory-movements", "inventory-movement-lines", "inventory-ledger"].includes(catalog);
   const catalogActions = catalogReadOnly ? readOnlyActions : actions;
 
   if (!inputs) {

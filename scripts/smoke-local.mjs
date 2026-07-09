@@ -217,6 +217,15 @@ async function findInventoryStockRuntimeRecord(session, itemCode, warehouseCode)
   );
 }
 
+async function findInventoryLedgerRuntimeRecords(session, movementNumber) {
+  const body = await expectOk(
+    `/master-data/inventory-ledger?search=${encodeURIComponent(movementNumber)}&page=1&pageSize=20`,
+    { headers: authHeaders(session) }
+  );
+
+  return (body.data ?? []).filter((item) => item.movementNumber === movementNumber);
+}
+
 async function getStockSnapshot(session, itemCode, warehouseCode) {
   const snapshot = await getOptionalStockSnapshot(session, itemCode, warehouseCode);
 
@@ -279,7 +288,80 @@ async function getOptionalStockSnapshot(session, itemCode, warehouseCode) {
   }
 }
 
-async function createQaPostableMovement(session, movementNumber, quantity, unitCost) {
+async function getInventoryLedgerEntries(session, movementNumber) {
+  if (!session.user.companyId) {
+    fail("Cannot validate inventory ledger without company context.");
+  }
+
+  const pool = await sql.connect(getSqlConfig());
+
+  try {
+    const result = await pool
+      .request()
+      .input("TenantId", sql.UniqueIdentifier, session.user.tenantId)
+      .input("CompanyId", sql.UniqueIdentifier, session.user.companyId)
+      .input("MovementNumber", sql.NVarChar(40), movementNumber)
+      .query(`
+        SELECT
+          MovementNumber,
+          MovementType,
+          LedgerDirection,
+          WarehouseCode,
+          QuantityIn,
+          QuantityOut,
+          QuantityBalanceImpact
+        FROM inventory.V_InventoryLedger
+        WHERE TenantId = @TenantId
+          AND CompanyId = @CompanyId
+          AND MovementNumber = @MovementNumber
+        ORDER BY LedgerDirection, WarehouseCode;
+      `);
+
+    return result.recordset.map((row) => ({
+      movementNumber: row.MovementNumber,
+      movementType: row.MovementType,
+      ledgerDirection: row.LedgerDirection,
+      warehouseCode: row.WarehouseCode,
+      quantityIn: Number(row.QuantityIn ?? 0),
+      quantityOut: Number(row.QuantityOut ?? 0),
+      quantityBalanceImpact: Number(row.QuantityBalanceImpact ?? 0)
+    }));
+  } finally {
+    await pool.close();
+  }
+}
+
+async function assertInventoryLedgerEntries(session, movementNumber, expectedEntries) {
+  const entries = await getInventoryLedgerEntries(session, movementNumber);
+
+  if (entries.length !== expectedEntries.length) {
+    fail(`Inventory ledger for ${movementNumber} expected ${expectedEntries.length} entries but found ${entries.length}.`);
+  }
+
+  for (const expected of expectedEntries) {
+    const found = entries.find(
+      (entry) =>
+        entry.movementType === expected.movementType &&
+        entry.ledgerDirection === expected.ledgerDirection &&
+        entry.warehouseCode === expected.warehouseCode &&
+        entry.quantityIn === expected.quantityIn &&
+        entry.quantityOut === expected.quantityOut &&
+        entry.quantityBalanceImpact === expected.quantityBalanceImpact
+    );
+
+    if (!found) {
+      fail(`Inventory ledger for ${movementNumber} did not include ${JSON.stringify(expected)}.`);
+    }
+  }
+
+  const runtimeEntries = await findInventoryLedgerRuntimeRecords(session, movementNumber);
+
+  if (runtimeEntries.length !== expectedEntries.length) {
+    fail(`/master-data/inventory-ledger did not return ${expectedEntries.length} entries for ${movementNumber}.`);
+  }
+}
+
+async function createQaPostableMovement(session, movementNumber, quantity, unitCost, movementType = "ADJUSTMENT_IN") {
   if (!session.user.companyId) {
     fail("Cannot create QA posting movement without company context.");
   }
@@ -293,6 +375,7 @@ async function createQaPostableMovement(session, movementNumber, quantity, unitC
       .input("CompanyId", sql.UniqueIdentifier, session.user.companyId)
       .input("UserId", sql.UniqueIdentifier, session.user.userId ?? null)
       .input("MovementNumber", sql.NVarChar(40), movementNumber)
+      .input("MovementType", sql.NVarChar(40), movementType)
       .input("Quantity", sql.Decimal(18, 6), quantity)
       .input("UnitCost", sql.Decimal(18, 6), unitCost)
       .query(`
@@ -324,7 +407,7 @@ async function createQaPostableMovement(session, movementNumber, quantity, unitC
           MovementDate, Status, SourceModule, Reference, Notes, IsActive, CreatedBy
         )
         VALUES (
-          @MovementId, @TenantId, @CompanyId, @MovementNumber, 'ADJUSTMENT_IN',
+          @MovementId, @TenantId, @CompanyId, @MovementNumber, @MovementType,
           SYSUTCDATETIME(), 'DRAFT', 'SMOKE_LOCAL', 'Smoke posting QA',
           'Movimiento generado por smoke local para validar posteo idempotente', 1, @UserId
         );
@@ -616,6 +699,17 @@ async function validateInventoryPostingFlow(session) {
     fail("/master-data/inventory-stocks did not reflect the posted stock quantity.");
   }
 
+  await assertInventoryLedgerEntries(session, movementNumber, [
+    {
+      movementType: "ADJUSTMENT_IN",
+      ledgerDirection: "IN",
+      warehouseCode: "ALM-PRINCIPAL",
+      quantityIn: quantityToPost,
+      quantityOut: 0,
+      quantityBalanceImpact: quantityToPost
+    }
+  ]);
+
   smokeStep("inventory movement repost rejected");
   await expectInventoryMovementPostFailure(movement.movementId, session);
 
@@ -624,6 +718,52 @@ async function validateInventoryPostingFlow(session) {
   if (stockAfterRetry.quantityOnHand !== updatedStock.quantityOnHand) {
     fail("Reposting the same inventory movement duplicated stock.");
   }
+
+  await assertInventoryLedgerEntries(session, movementNumber, [
+    {
+      movementType: "ADJUSTMENT_IN",
+      ledgerDirection: "IN",
+      warehouseCode: "ALM-PRINCIPAL",
+      quantityIn: quantityToPost,
+      quantityOut: 0,
+      quantityBalanceImpact: quantityToPost
+    }
+  ]);
+
+  const openingQuantity = 1;
+  const openingMovementNumber = `MOV-OPEN-${smokeRun}`;
+  const stockBeforeOpening = await getStockSnapshot(session, "ART-DEMO", "ALM-PRINCIPAL");
+  const openingMovement = await createQaPostableMovement(
+    session,
+    openingMovementNumber,
+    openingQuantity,
+    90,
+    "OPENING"
+  );
+
+  smokeStep("inventory opening movement post");
+  const postedOpening = await postInventoryMovement(openingMovement.movementId, session);
+
+  if (postedOpening.status !== "POSTED" || postedOpening.movementType !== "OPENING") {
+    fail("Inventory opening movement did not post as OPENING + POSTED.");
+  }
+
+  const stockAfterOpening = await getStockSnapshot(session, "ART-DEMO", "ALM-PRINCIPAL");
+
+  if (stockAfterOpening.quantityOnHand !== stockBeforeOpening.quantityOnHand + openingQuantity) {
+    fail("Posting an opening movement did not increase stock by the expected quantity.");
+  }
+
+  await assertInventoryLedgerEntries(session, openingMovementNumber, [
+    {
+      movementType: "OPENING",
+      ledgerDirection: "IN",
+      warehouseCode: "ALM-PRINCIPAL",
+      quantityIn: openingQuantity,
+      quantityOut: 0,
+      quantityBalanceImpact: openingQuantity
+    }
+  ]);
 }
 
 async function ensureTransferSourceStock(session, requiredQuantity) {
@@ -707,6 +847,25 @@ async function validateInventoryTransferFlow(session) {
     fail("/master-data/inventory-stocks did not reflect the transfer destination stock.");
   }
 
+  await assertInventoryLedgerEntries(session, movementNumber, [
+    {
+      movementType: "TRANSFER",
+      ledgerDirection: "IN",
+      warehouseCode: "ALM-TRANSITO",
+      quantityIn: quantityToTransfer,
+      quantityOut: 0,
+      quantityBalanceImpact: quantityToTransfer
+    },
+    {
+      movementType: "TRANSFER",
+      ledgerDirection: "OUT",
+      warehouseCode: "ALM-PRINCIPAL",
+      quantityIn: 0,
+      quantityOut: quantityToTransfer,
+      quantityBalanceImpact: -quantityToTransfer
+    }
+  ]);
+
   smokeStep("inventory transfer repost rejected");
   await expectInventoryMovementPostFailure(movement.movementId, session);
 
@@ -720,6 +879,25 @@ async function validateInventoryTransferFlow(session) {
   if (destinationStockAfterRetry.quantityOnHand !== updatedDestinationStock.quantityOnHand) {
     fail("Reposting the same inventory transfer duplicated destination stock movement.");
   }
+
+  await assertInventoryLedgerEntries(session, movementNumber, [
+    {
+      movementType: "TRANSFER",
+      ledgerDirection: "IN",
+      warehouseCode: "ALM-TRANSITO",
+      quantityIn: quantityToTransfer,
+      quantityOut: 0,
+      quantityBalanceImpact: quantityToTransfer
+    },
+    {
+      movementType: "TRANSFER",
+      ledgerDirection: "OUT",
+      warehouseCode: "ALM-PRINCIPAL",
+      quantityIn: 0,
+      quantityOut: quantityToTransfer,
+      quantityBalanceImpact: -quantityToTransfer
+    }
+  ]);
 }
 
 async function validateInventoryAdjustmentApiFlow(session) {
@@ -770,6 +948,17 @@ async function validateInventoryAdjustmentApiFlow(session) {
     fail("Posting an inventory adjustment in did not increase stock by 3.");
   }
 
+  await assertInventoryLedgerEntries(session, adjustmentIn.movementNumber, [
+    {
+      movementType: "ADJUSTMENT_IN",
+      ledgerDirection: "IN",
+      warehouseCode: "ALM-PRINCIPAL",
+      quantityIn: 3,
+      quantityOut: 0,
+      quantityBalanceImpact: 3
+    }
+  ]);
+
   smokeStep("inventory adjustment in repost rejected");
   await expectInventoryMovementPostFailure(adjustmentIn.id, session);
 
@@ -778,6 +967,17 @@ async function validateInventoryAdjustmentApiFlow(session) {
   if (stockAfterRetryIn.quantityOnHand !== stockAfterPostIn.quantityOnHand) {
     fail("Reposting the inventory adjustment in duplicated stock.");
   }
+
+  await assertInventoryLedgerEntries(session, adjustmentIn.movementNumber, [
+    {
+      movementType: "ADJUSTMENT_IN",
+      ledgerDirection: "IN",
+      warehouseCode: "ALM-PRINCIPAL",
+      quantityIn: 3,
+      quantityOut: 0,
+      quantityBalanceImpact: 3
+    }
+  ]);
 
   smokeStep("inventory adjustment out create");
   const adjustmentOut = await createInventoryAdjustment(
@@ -822,6 +1022,17 @@ async function validateInventoryAdjustmentApiFlow(session) {
     fail("Posting an inventory adjustment out did not decrease stock by 1.");
   }
 
+  await assertInventoryLedgerEntries(session, adjustmentOut.movementNumber, [
+    {
+      movementType: "ADJUSTMENT_OUT",
+      ledgerDirection: "OUT",
+      warehouseCode: "ALM-PRINCIPAL",
+      quantityIn: 0,
+      quantityOut: 1,
+      quantityBalanceImpact: -1
+    }
+  ]);
+
   smokeStep("inventory adjustment out repost rejected");
   await expectInventoryMovementPostFailure(adjustmentOut.id, session);
 
@@ -830,6 +1041,17 @@ async function validateInventoryAdjustmentApiFlow(session) {
   if (stockAfterRetryOut.quantityOnHand !== stockAfterPostOut.quantityOnHand) {
     fail("Reposting the inventory adjustment out duplicated stock.");
   }
+
+  await assertInventoryLedgerEntries(session, adjustmentOut.movementNumber, [
+    {
+      movementType: "ADJUSTMENT_OUT",
+      ledgerDirection: "OUT",
+      warehouseCode: "ALM-PRINCIPAL",
+      quantityIn: 0,
+      quantityOut: 1,
+      quantityBalanceImpact: -1
+    }
+  ]);
 }
 
 async function validatePhysicalCountFlow(session) {
@@ -937,6 +1159,17 @@ async function validatePhysicalCountFlow(session) {
   if (stockAfterPost.quantityOnHand !== initialStock.quantityOnHand + differenceQuantity) {
     fail("Posting the physical count adjustment did not increase stock by the expected difference.");
   }
+
+  await assertInventoryLedgerEntries(session, generatedAdjustment.movementNumber, [
+    {
+      movementType: "ADJUSTMENT_IN",
+      ledgerDirection: "IN",
+      warehouseCode: "ALM-PRINCIPAL",
+      quantityIn: differenceQuantity,
+      quantityOut: 0,
+      quantityBalanceImpact: differenceQuantity
+    }
+  ]);
 
   smokeStep("inventory physical count adjustment repost rejected");
   await expectInventoryMovementPostFailure(generatedAdjustment.id, session);
@@ -1177,6 +1410,35 @@ async function validateCatalogs(session) {
   }
 }
 
+async function validateInventoryLedgerMetadata(session) {
+  smokeStep("metadata inventory-ledger");
+  const metadata = await expectOk("/master-data/inventory-ledger/metadata", {
+    headers: authHeaders(session)
+  });
+
+  if (metadata.data?.catalog?.readOnly !== true) {
+    fail("inventory-ledger metadata must be read-only.");
+  }
+
+  const fields = metadata.data.fields.map((field) => field.field);
+  const missingFields = [
+    "movementNumber",
+    "movementType",
+    "ledgerDirection",
+    "movementDate",
+    "postedAt",
+    "itemCode",
+    "warehouseCode",
+    "quantityIn",
+    "quantityOut",
+    "quantityBalanceImpact"
+  ].filter((field) => !fields.includes(field));
+
+  if (missingFields.length) {
+    fail(`inventory-ledger metadata is missing fields: ${missingFields.join(", ")}.`);
+  }
+}
+
 async function validateCrud(session) {
   const suffix = smokeRun;
   const customerCode = `QA-CUST-${suffix}`;
@@ -1391,6 +1653,7 @@ async function main() {
   await validateBackendBasics();
   const session = await loginDemo();
   await validateCatalogs(session);
+  await validateInventoryLedgerMetadata(session);
   await validateCrud(session);
   console.log("smoke: local runtime validation OK");
 }
