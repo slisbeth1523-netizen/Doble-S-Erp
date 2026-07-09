@@ -171,6 +171,35 @@ async function createPhysicalCountAdjustment(physicalCountId, session) {
   return body.data;
 }
 
+async function createPurchaseOrder(payload, session) {
+  const body = await expectOk("/purchasing/purchase-orders", {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function approvePurchaseOrder(purchaseOrderId, session) {
+  const body = await expectOk(`/purchasing/purchase-orders/${purchaseOrderId}/approve`, {
+    method: "POST",
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
+async function cancelPurchaseOrder(purchaseOrderId, reason, session) {
+  const body = await expectOk(`/purchasing/purchase-orders/${purchaseOrderId}/cancel`, {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify({ reason })
+  });
+
+  return body.data;
+}
+
 async function expectPhysicalCountAdjustmentFailure(physicalCountId, session) {
   const result = await request(`/inventory/physical-counts/${physicalCountId}/create-adjustment`, {
     method: "POST",
@@ -542,6 +571,75 @@ async function getDemoInventoryReferences(session) {
     }
 
     return row;
+  } finally {
+    await pool.close();
+  }
+}
+
+async function getDemoPurchaseReferences(session) {
+  if (!session.user.companyId) {
+    fail("Cannot get demo purchase references without company context.");
+  }
+
+  const pool = await sql.connect(getSqlConfig());
+
+  try {
+    const result = await pool
+      .request()
+      .input("TenantId", sql.UniqueIdentifier, session.user.tenantId)
+      .input("CompanyId", sql.UniqueIdentifier, session.user.companyId)
+      .query(`
+        SELECT
+          supplier.SupplierId AS supplierId,
+          item.ItemId AS itemId,
+          item.UnitOfMeasureId AS unitOfMeasureId,
+          warehouse.WarehouseId AS warehouseId
+        FROM purchasing.Suppliers supplier
+        CROSS JOIN inventory.Items item
+        CROSS JOIN inventory.Warehouses warehouse
+        WHERE supplier.TenantId = @TenantId
+          AND supplier.CompanyId = @CompanyId
+          AND supplier.Code = 'SUP-DEMO'
+          AND item.TenantId = @TenantId
+          AND item.CompanyId = @CompanyId
+          AND item.Code = 'ART-DEMO'
+          AND warehouse.TenantId = @TenantId
+          AND warehouse.CompanyId = @CompanyId
+          AND warehouse.Code = 'ALM-PRINCIPAL';
+      `);
+
+    const row = result.recordset[0];
+
+    if (!row?.supplierId || !row?.itemId || !row?.warehouseId) {
+      fail("Cannot validate purchase orders without SUP-DEMO, ART-DEMO and ALM-PRINCIPAL IDs.");
+    }
+
+    return row;
+  } finally {
+    await pool.close();
+  }
+}
+
+async function countInventoryMovements(session) {
+  if (!session.user.companyId) {
+    fail("Cannot count inventory movements without company context.");
+  }
+
+  const pool = await sql.connect(getSqlConfig());
+
+  try {
+    const result = await pool
+      .request()
+      .input("TenantId", sql.UniqueIdentifier, session.user.tenantId)
+      .input("CompanyId", sql.UniqueIdentifier, session.user.companyId)
+      .query(`
+        SELECT COUNT(1) AS MovementCount
+        FROM inventory.InventoryMovements
+        WHERE TenantId = @TenantId
+          AND CompanyId = @CompanyId;
+      `);
+
+    return Number(result.recordset[0]?.MovementCount ?? 0);
   } finally {
     await pool.close();
   }
@@ -1439,6 +1537,130 @@ async function validateInventoryLedgerMetadata(session) {
   }
 }
 
+async function validatePurchaseOrderMetadata(session) {
+  for (const catalog of ["purchase-orders", "purchase-order-lines"]) {
+    smokeStep(`metadata ${catalog}`);
+    const metadata = await expectOk(`/master-data/${catalog}/metadata`, {
+      headers: authHeaders(session)
+    });
+
+    if (metadata.data?.catalog?.readOnly !== true) {
+      fail(`${catalog} metadata must be read-only.`);
+    }
+
+    const fields = metadata.data.fields.map((field) => field.field);
+    const expectedFields =
+      catalog === "purchase-orders"
+        ? ["purchaseOrderNumber", "supplierCode", "supplierName", "status", "orderDate", "totalAmount"]
+        : ["purchaseOrderNumber", "status", "lineNumber", "itemCode", "warehouseCode", "quantity", "lineTotal"];
+    const missingFields = expectedFields.filter((field) => !fields.includes(field));
+
+    if (missingFields.length) {
+      fail(`${catalog} metadata is missing fields: ${missingFields.join(", ")}.`);
+    }
+  }
+}
+
+async function validatePurchaseOrderFlow(session) {
+  const references = await getDemoPurchaseReferences(session);
+  const initialStock = await getStockSnapshot(session, "ART-DEMO", "ALM-PRINCIPAL");
+  const initialMovementCount = await countInventoryMovements(session);
+  const expectedDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+  smokeStep("purchase order create");
+  const purchaseOrder = await createPurchaseOrder(
+    {
+      supplierId: references.supplierId,
+      expectedDate,
+      reference: `Smoke purchase order ${smokeRun}`,
+      notes: "Orden de compra generada por smoke local",
+      lines: [
+        {
+          itemId: references.itemId,
+          warehouseId: references.warehouseId,
+          unitOfMeasureId: references.unitOfMeasureId,
+          quantity: 4,
+          unitCost: 25,
+          notes: "Linea de orden de compra smoke local"
+        }
+      ]
+    },
+    session
+  );
+
+  if (
+    purchaseOrder.status !== "DRAFT" ||
+    Number(purchaseOrder.lineCount ?? 0) !== 1 ||
+    Number(purchaseOrder.totalQuantity ?? 0) !== 4 ||
+    Number(purchaseOrder.totalAmount ?? 0) !== 100
+  ) {
+    fail("Purchase order was not created as DRAFT with the expected totals.");
+  }
+
+  const runtimeOrder = await findCatalogRecord("purchase-orders", purchaseOrder.purchaseOrderNumber, session);
+
+  if (!runtimeOrder || runtimeOrder.status !== "DRAFT") {
+    fail("Created purchase order was not visible as DRAFT in runtime metadata.");
+  }
+
+  const runtimeLine = await findCatalogRecord("purchase-order-lines", purchaseOrder.purchaseOrderNumber, session);
+
+  if (!runtimeLine || Number(runtimeLine.quantity ?? 0) !== 4) {
+    fail("Created purchase order line was not visible in runtime metadata.");
+  }
+
+  const stockAfterCreate = await getStockSnapshot(session, "ART-DEMO", "ALM-PRINCIPAL");
+  const movementCountAfterCreate = await countInventoryMovements(session);
+
+  if (stockAfterCreate.quantityOnHand !== initialStock.quantityOnHand) {
+    fail("Creating a purchase order changed inventory stock.");
+  }
+
+  if (movementCountAfterCreate !== initialMovementCount) {
+    fail("Creating a purchase order created inventory movements.");
+  }
+
+  smokeStep("purchase order approve");
+  const approvedOrder = await approvePurchaseOrder(purchaseOrder.id, session);
+
+  if (approvedOrder.status !== "APPROVED" || !approvedOrder.approvedAt) {
+    fail("Purchase order was not approved correctly.");
+  }
+
+  const stockAfterApprove = await getStockSnapshot(session, "ART-DEMO", "ALM-PRINCIPAL");
+  const movementCountAfterApprove = await countInventoryMovements(session);
+
+  if (stockAfterApprove.quantityOnHand !== initialStock.quantityOnHand) {
+    fail("Approving a purchase order changed inventory stock.");
+  }
+
+  if (movementCountAfterApprove !== initialMovementCount) {
+    fail("Approving a purchase order created inventory movements.");
+  }
+
+  smokeStep("purchase order cancel");
+  const cancelledOrder = await cancelPurchaseOrder(
+    purchaseOrder.id,
+    "Cancelada por smoke local",
+    session
+  );
+
+  if (cancelledOrder.status !== "CANCELLED" || !cancelledOrder.cancelledAt) {
+    fail("Purchase order was not cancelled correctly.");
+  }
+
+  const stockAfterCancel = await getStockSnapshot(session, "ART-DEMO", "ALM-PRINCIPAL");
+  const movementCountAfterCancel = await countInventoryMovements(session);
+
+  if (stockAfterCancel.quantityOnHand !== initialStock.quantityOnHand) {
+    fail("Cancelling a purchase order changed inventory stock.");
+  }
+
+  if (movementCountAfterCancel !== initialMovementCount) {
+    fail("Cancelling a purchase order created inventory movements.");
+  }
+}
+
 async function validateCrud(session) {
   const suffix = smokeRun;
   const customerCode = `QA-CUST-${suffix}`;
@@ -1654,6 +1876,8 @@ async function main() {
   const session = await loginDemo();
   await validateCatalogs(session);
   await validateInventoryLedgerMetadata(session);
+  await validatePurchaseOrderMetadata(session);
+  await validatePurchaseOrderFlow(session);
   await validateCrud(session);
   console.log("smoke: local runtime validation OK");
 }
