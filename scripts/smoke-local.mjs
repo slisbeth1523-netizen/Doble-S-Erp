@@ -200,6 +200,35 @@ async function cancelPurchaseOrder(purchaseOrderId, reason, session) {
   return body.data;
 }
 
+async function createPurchaseReceipt(payload, session) {
+  const body = await expectOk("/purchasing/purchase-receipts", {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function addPurchaseReceiptLine(purchaseReceiptId, payload, session) {
+  const body = await expectOk(`/purchasing/purchase-receipts/${purchaseReceiptId}/lines`, {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function completePurchaseReceipt(purchaseReceiptId, session) {
+  const body = await expectOk(`/purchasing/purchase-receipts/${purchaseReceiptId}/complete`, {
+    method: "POST",
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
 async function expectPhysicalCountAdjustmentFailure(physicalCountId, session) {
   const result = await request(`/inventory/physical-counts/${physicalCountId}/create-adjustment`, {
     method: "POST",
@@ -208,6 +237,19 @@ async function expectPhysicalCountAdjustmentFailure(physicalCountId, session) {
 
   if (result.response.ok || result.body?.success !== false) {
     fail(`Recreating physical count adjustment for ${physicalCountId} must fail in a controlled way.`);
+  }
+
+  return result.body;
+}
+
+async function expectPurchaseReceiptCompleteFailure(purchaseReceiptId, session) {
+  const result = await request(`/purchasing/purchase-receipts/${purchaseReceiptId}/complete`, {
+    method: "POST",
+    headers: authHeaders(session)
+  });
+
+  if (result.response.ok || result.body?.success !== false) {
+    fail(`Reposting purchase receipt ${purchaseReceiptId} must fail in a controlled way.`);
   }
 
   return result.body;
@@ -1561,6 +1603,30 @@ async function validatePurchaseOrderMetadata(session) {
   }
 }
 
+async function validatePurchaseReceiptMetadata(session) {
+  for (const catalog of ["purchase-receipts", "purchase-receipt-lines"]) {
+    smokeStep(`metadata ${catalog}`);
+    const metadata = await expectOk(`/master-data/${catalog}/metadata`, {
+      headers: authHeaders(session)
+    });
+
+    if (metadata.data?.catalog?.readOnly !== true) {
+      fail(`${catalog} metadata must be read-only.`);
+    }
+
+    const fields = metadata.data.fields.map((field) => field.field);
+    const expectedFields =
+      catalog === "purchase-receipts"
+        ? ["purchaseReceiptNumber", "purchaseOrderNumber", "supplierCode", "status", "receiptDate", "totalQuantityReceived"]
+        : ["purchaseReceiptNumber", "purchaseOrderNumber", "status", "lineNumber", "itemCode", "warehouseCode", "quantityReceived"];
+    const missingFields = expectedFields.filter((field) => !fields.includes(field));
+
+    if (missingFields.length) {
+      fail(`${catalog} metadata is missing fields: ${missingFields.join(", ")}.`);
+    }
+  }
+}
+
 async function validatePurchaseOrderFlow(session) {
   const references = await getDemoPurchaseReferences(session);
   const initialStock = await getStockSnapshot(session, "ART-DEMO", "ALM-PRINCIPAL");
@@ -1659,6 +1725,169 @@ async function validatePurchaseOrderFlow(session) {
   if (movementCountAfterCancel !== initialMovementCount) {
     fail("Cancelling a purchase order created inventory movements.");
   }
+}
+
+async function validatePurchaseReceiptFlow(session) {
+  const references = await getDemoPurchaseReferences(session);
+  const receiptQuantity = 2;
+  const unitCost = 30;
+  const initialStock = await getStockSnapshot(session, "ART-DEMO", "ALM-PRINCIPAL");
+  const initialMovementCount = await countInventoryMovements(session);
+  const expectedDate = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+  const purchaseOrder = await createPurchaseOrder(
+    {
+      supplierId: references.supplierId,
+      expectedDate,
+      reference: `Smoke receipt purchase order ${smokeRun}`,
+      notes: "Orden aprobada para validar recepcion de compra",
+      lines: [
+        {
+          itemId: references.itemId,
+          warehouseId: references.warehouseId,
+          unitOfMeasureId: references.unitOfMeasureId,
+          quantity: receiptQuantity,
+          unitCost,
+          notes: "Linea para recepcion smoke local"
+        }
+      ]
+    },
+    session
+  );
+
+  const approvedOrder = await approvePurchaseOrder(purchaseOrder.id, session);
+  const orderLine = approvedOrder.lines?.[0];
+
+  if (approvedOrder.status !== "APPROVED" || !orderLine?.id) {
+    fail("Purchase receipt smoke could not prepare an approved purchase order with lines.");
+  }
+
+  smokeStep("purchase receipt create");
+  const receipt = await createPurchaseReceipt(
+    {
+      purchaseOrderId: approvedOrder.id,
+      reference: `Smoke purchase receipt ${smokeRun}`,
+      notes: "Recepcion de compra generada por smoke local"
+    },
+    session
+  );
+
+  if (receipt.status !== "DRAFT" || receipt.purchaseOrderId !== approvedOrder.id) {
+    fail("Purchase receipt was not created as DRAFT against the approved purchase order.");
+  }
+
+  const runtimeDraftReceipt = await findCatalogRecord("purchase-receipts", receipt.purchaseReceiptNumber, session);
+
+  if (!runtimeDraftReceipt || runtimeDraftReceipt.status !== "DRAFT") {
+    fail("Created purchase receipt was not visible as DRAFT in runtime metadata.");
+  }
+
+  const stockAfterCreate = await getStockSnapshot(session, "ART-DEMO", "ALM-PRINCIPAL");
+  const movementCountAfterCreate = await countInventoryMovements(session);
+
+  if (stockAfterCreate.quantityOnHand !== initialStock.quantityOnHand) {
+    fail("Creating a purchase receipt changed stock before posting.");
+  }
+
+  if (movementCountAfterCreate !== initialMovementCount) {
+    fail("Creating a purchase receipt created inventory movements before posting.");
+  }
+
+  smokeStep("purchase receipt line");
+  const receiptWithLine = await addPurchaseReceiptLine(
+    receipt.id,
+    {
+      purchaseOrderLineId: orderLine.id,
+      quantityReceived: receiptQuantity,
+      unitCost,
+      notes: "Linea recibida por smoke local"
+    },
+    session
+  );
+
+  if (
+    Number(receiptWithLine.lineCount ?? 0) !== 1 ||
+    Number(receiptWithLine.totalQuantityReceived ?? 0) !== receiptQuantity
+  ) {
+    fail("Purchase receipt line was not added with the expected quantity.");
+  }
+
+  const runtimeLine = await findCatalogRecord("purchase-receipt-lines", receipt.purchaseReceiptNumber, session);
+
+  if (!runtimeLine || Number(runtimeLine.quantityReceived ?? 0) !== receiptQuantity) {
+    fail("Created purchase receipt line was not visible in runtime metadata.");
+  }
+
+  const stockAfterLine = await getStockSnapshot(session, "ART-DEMO", "ALM-PRINCIPAL");
+
+  if (stockAfterLine.quantityOnHand !== initialStock.quantityOnHand) {
+    fail("Adding a purchase receipt line changed stock before posting.");
+  }
+
+  smokeStep("purchase receipt complete/post");
+  const postedReceipt = await completePurchaseReceipt(receipt.id, session);
+
+  if (
+    postedReceipt.status !== "POSTED" ||
+    !postedReceipt.postedAt ||
+    !postedReceipt.inventoryMovementId ||
+    !postedReceipt.movementNumber
+  ) {
+    fail("Purchase receipt did not post with an inventory movement link.");
+  }
+
+  const postedMovement = await findCatalogRecord("inventory-movements", postedReceipt.movementNumber, session);
+
+  if (
+    !postedMovement ||
+    postedMovement.status !== "POSTED" ||
+    postedMovement.movementType !== "PURCHASE_RECEIPT_PLACEHOLDER"
+  ) {
+    fail("Purchase receipt movement was not visible as posted PURCHASE_RECEIPT_PLACEHOLDER.");
+  }
+
+  const stockAfterPost = await getStockSnapshot(session, "ART-DEMO", "ALM-PRINCIPAL");
+
+  if (stockAfterPost.quantityOnHand !== initialStock.quantityOnHand + receiptQuantity) {
+    fail("Posting a purchase receipt did not increase ItemStocks by the received quantity.");
+  }
+
+  const movementCountAfterPost = await countInventoryMovements(session);
+
+  if (movementCountAfterPost !== initialMovementCount + 1) {
+    fail("Posting a purchase receipt did not create exactly one inventory movement.");
+  }
+
+  await assertInventoryLedgerEntries(session, postedReceipt.movementNumber, [
+    {
+      movementType: "PURCHASE_RECEIPT_PLACEHOLDER",
+      ledgerDirection: "IN",
+      warehouseCode: "ALM-PRINCIPAL",
+      quantityIn: receiptQuantity,
+      quantityOut: 0,
+      quantityBalanceImpact: receiptQuantity
+    }
+  ]);
+
+  smokeStep("purchase receipt repost rejected");
+  await expectPurchaseReceiptCompleteFailure(receipt.id, session);
+
+  const stockAfterRetry = await getStockSnapshot(session, "ART-DEMO", "ALM-PRINCIPAL");
+
+  if (stockAfterRetry.quantityOnHand !== stockAfterPost.quantityOnHand) {
+    fail("Reposting the same purchase receipt duplicated stock.");
+  }
+
+  await assertInventoryLedgerEntries(session, postedReceipt.movementNumber, [
+    {
+      movementType: "PURCHASE_RECEIPT_PLACEHOLDER",
+      ledgerDirection: "IN",
+      warehouseCode: "ALM-PRINCIPAL",
+      quantityIn: receiptQuantity,
+      quantityOut: 0,
+      quantityBalanceImpact: receiptQuantity
+    }
+  ]);
 }
 
 async function validateCrud(session) {
@@ -1877,7 +2106,9 @@ async function main() {
   await validateCatalogs(session);
   await validateInventoryLedgerMetadata(session);
   await validatePurchaseOrderMetadata(session);
+  await validatePurchaseReceiptMetadata(session);
   await validatePurchaseOrderFlow(session);
+  await validatePurchaseReceiptFlow(session);
   await validateCrud(session);
   console.log("smoke: local runtime validation OK");
 }

@@ -161,6 +161,33 @@ const catalogFields: Record<string, FieldInput[]> = {
     { field: "lineTotal", label: "Total linea", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 130, align: "right", format: "currency" },
     { field: "expectedDate", label: "Fecha esperada", type: "date", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 150 }
   ],
+  "purchase-receipts": [
+    { field: "purchaseReceiptNumber", label: "Recepcion", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 160 },
+    { field: "purchaseOrderNumber", label: "Orden", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 160 },
+    { field: "supplierCode", label: "Proveedor", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 130 },
+    { field: "supplierName", label: "Nombre proveedor", searchable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 240 },
+    { field: "status", label: "Estado", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 110 },
+    { field: "receiptDate", label: "Fecha", type: "datetime", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 170 },
+    { field: "movementNumber", label: "Movimiento", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 160 },
+    { field: "reference", label: "Referencia", searchable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 180 },
+    { field: "lineCount", label: "Lineas", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 90, align: "right" },
+    { field: "totalQuantityReceived", label: "Cantidad recibida", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 150, align: "right" },
+    { field: "totalAmount", label: "Total", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 130, align: "right", format: "currency" },
+    { field: "postedAt", label: "Posteada", type: "datetime", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 160 }
+  ],
+  "purchase-receipt-lines": [
+    { field: "purchaseReceiptNumber", label: "Recepcion", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 160 },
+    { field: "purchaseOrderNumber", label: "Orden", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 160 },
+    { field: "status", label: "Estado", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 110 },
+    { field: "lineNumber", label: "Linea", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 1, nullable: false }, width: 90, align: "right" },
+    { field: "itemCode", label: "Articulo", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 130 },
+    { field: "itemDescription", label: "Descripcion articulo", searchable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 240 },
+    { field: "warehouseCode", label: "Almacen", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 130 },
+    { field: "quantityReceived", label: "Cantidad recibida", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 150, align: "right" },
+    { field: "orderedQuantity", label: "Cantidad ordenada", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 150, align: "right" },
+    { field: "unitCost", label: "Costo unitario", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 140, align: "right", format: "currency" },
+    { field: "lineTotal", label: "Total linea", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 130, align: "right", format: "currency" }
+  ],
   items: [
     { ...technicalFields[0]!, validation: { required: true, minLength: 1, maxLength: 50, nullable: false } },
     {
@@ -373,7 +400,9 @@ export function getFallbackCatalogMetadata(catalog: string): CatalogMetadata | n
     "inventory-movement-lines",
     "inventory-ledger",
     "purchase-orders",
-    "purchase-order-lines"
+    "purchase-order-lines",
+    "purchase-receipts",
+    "purchase-receipt-lines"
   ].includes(catalog);
   const catalogActions = catalogReadOnly ? readOnlyActions : actions;
 

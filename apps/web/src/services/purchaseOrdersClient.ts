@@ -23,6 +23,16 @@ export type PurchaseOrder = {
   lineCount: number;
   totalQuantity: number;
   totalAmount: number;
+  lines?: PurchaseOrderLine[];
+};
+
+export type PurchaseOrderLine = {
+  id: string;
+  itemCode: string;
+  itemDescription: string;
+  warehouseCode: string;
+  quantity: number;
+  unitCost: number;
 };
 
 type RequestOptions = {
