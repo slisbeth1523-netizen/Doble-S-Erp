@@ -16,7 +16,10 @@ export const catalogLabels: Record<string, string> = {
   currencies: "Monedas",
   "units-of-measure": "Unidades de medida",
   "payment-terms": "Condiciones de pago",
-  "tax-categories": "Categorías fiscales"
+  "tax-categories": "Categorías fiscales",
+  "supplier-invoices": "Facturas de proveedores",
+  "supplier-invoice-lines": "Líneas de facturas",
+  "accounts-payable-documents": "Documentos de cuentas por pagar"
 };
 
 export function getCatalogLabel(catalog: string) {

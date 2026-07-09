@@ -10,9 +10,11 @@ export type PurchaseReceiptStatus = "DRAFT" | "POSTED";
 export type PurchaseReceiptLine = {
   id: string;
   purchaseOrderLineId: string;
+  itemId: string;
   itemCode: string;
   itemDescription: string;
   warehouseCode: string;
+  unitOfMeasureId?: string;
   quantityReceived: number;
   orderedQuantity: number;
   unitCost: number;
@@ -66,6 +68,10 @@ export function listApprovedPurchaseOrders() {
 
 export function getPurchaseOrder(purchaseOrderId: string) {
   return requestPurchasing<PurchaseOrder>(`/purchasing/purchase-orders/${purchaseOrderId}`);
+}
+
+export function getPurchaseReceipt(purchaseReceiptId: string) {
+  return requestPurchasing<PurchaseReceipt>(`/purchasing/purchase-receipts/${purchaseReceiptId}`);
 }
 
 export function loadPurchaseReceiptSnapshots() {

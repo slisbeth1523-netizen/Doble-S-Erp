@@ -229,6 +229,48 @@ async function completePurchaseReceipt(purchaseReceiptId, session) {
   return body.data;
 }
 
+async function createSupplierInvoice(payload, session) {
+  const body = await expectOk("/purchasing/supplier-invoices", {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function addSupplierInvoiceLine(supplierInvoiceId, payload, session) {
+  const body = await expectOk(`/purchasing/supplier-invoices/${supplierInvoiceId}/lines`, {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function completeSupplierInvoice(supplierInvoiceId, session) {
+  const body = await expectOk(`/purchasing/supplier-invoices/${supplierInvoiceId}/complete`, {
+    method: "POST",
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
+async function expectSupplierInvoiceCompleteFailure(supplierInvoiceId, session) {
+  const result = await request(`/purchasing/supplier-invoices/${supplierInvoiceId}/complete`, {
+    method: "POST",
+    headers: authHeaders(session)
+  });
+
+  if (result.response.ok || result.body?.success !== false) {
+    fail(`Re-posting supplier invoice for ${supplierInvoiceId} must fail in a controlled way.`);
+  }
+
+  return result.body;
+}
+
 async function expectPhysicalCountAdjustmentFailure(physicalCountId, session) {
   const result = await request(`/inventory/physical-counts/${physicalCountId}/create-adjustment`, {
     method: "POST",
@@ -1888,6 +1930,125 @@ async function validatePurchaseReceiptFlow(session) {
       quantityBalanceImpact: receiptQuantity
     }
   ]);
+
+  return postedReceipt;
+}
+
+async function validateSupplierInvoiceFlow(session, postedReceipt) {
+  const invoiceNumber = `FAC-QA-${smokeRun}`;
+  const receiptLine = postedReceipt.lines[0];
+  if (!receiptLine) {
+    fail("Purchase receipt has no lines to validate supplier invoice.");
+  }
+
+  const initialStock = await getStockSnapshot(session, "ART-DEMO", "ALM-PRINCIPAL");
+  const initialMovementCount = await countInventoryMovements(session);
+
+  smokeStep("supplier invoice create");
+  const invoice = await createSupplierInvoice(
+    {
+      purchaseReceiptId: postedReceipt.id,
+      supplierInvoiceNumber: invoiceNumber,
+      invoiceDate: new Date().toISOString(),
+      dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      reference: `REF-INV-${smokeRun}`,
+      notes: "Factura de proveedor creada por smoke local"
+    },
+    session
+  );
+
+  if (invoice.status !== "DRAFT" || invoice.purchaseReceiptId !== postedReceipt.id) {
+    fail("Supplier invoice was not created as DRAFT against the posted purchase receipt.");
+  }
+
+  const runtimeDraftInvoice = await findCatalogRecord("supplier-invoices", invoice.supplierInvoiceNumber, session);
+  if (!runtimeDraftInvoice || runtimeDraftInvoice.status !== "DRAFT") {
+    fail("Created supplier invoice was not visible as DRAFT in runtime metadata.");
+  }
+
+  smokeStep("supplier invoice line");
+  const invoiceWithLine = await addSupplierInvoiceLine(
+    invoice.id,
+    {
+      itemId: receiptLine.itemId,
+      unitOfMeasureId: receiptLine.unitOfMeasureId,
+      quantity: 1,
+      unitCost: 30,
+      taxAmount: 5.40,
+      notes: "Linea de factura smoke local"
+    },
+    session
+  );
+
+  if (
+    Number(invoiceWithLine.lineCount ?? 0) !== 1 ||
+    Number(invoiceWithLine.totalAmount ?? 0) !== 35.40
+  ) {
+    fail("Supplier invoice line was not added with the expected totals.");
+  }
+
+  const runtimeLine = await findCatalogRecord("supplier-invoice-lines", invoice.supplierInvoiceNumber, session);
+  if (!runtimeLine || Number(runtimeLine.quantity ?? 0) !== 1) {
+    fail("Created supplier invoice line was not visible in runtime metadata.");
+  }
+
+  let quantityValidationFailed = false;
+  try {
+    await addSupplierInvoiceLine(
+      invoice.id,
+      {
+        itemId: receiptLine.itemId,
+        unitOfMeasureId: receiptLine.unitOfMeasureId,
+        quantity: 2,
+        unitCost: 30,
+        taxAmount: 5.40,
+        notes: "Exceeding quantity line"
+      },
+      session
+    );
+  } catch (err) {
+    quantityValidationFailed = true;
+  }
+
+  if (!quantityValidationFailed) {
+    fail("Adding a supplier invoice line exceeding the purchase receipt received quantity should have thrown an error.");
+  }
+
+  smokeStep("supplier invoice complete/post");
+  const postedInvoice = await completeSupplierInvoice(invoice.id, session);
+
+  if (postedInvoice.status !== "POSTED" || !postedInvoice.postedAt) {
+    fail("Supplier invoice did not post successfully.");
+  }
+
+  const stockAfterPost = await getStockSnapshot(session, "ART-DEMO", "ALM-PRINCIPAL");
+  if (stockAfterPost.quantityOnHand !== initialStock.quantityOnHand) {
+    fail("Posting a supplier invoice changed physical inventory stocks!");
+  }
+
+  const movementCountAfterPost = await countInventoryMovements(session);
+  if (movementCountAfterPost !== initialMovementCount) {
+    fail("Posting a supplier invoice created inventory movements!");
+  }
+
+  smokeStep("accounts payable document generated");
+  const cxpDoc = await findCatalogRecord("accounts-payable-documents", `CXP-${invoiceNumber}`, session);
+
+  if (!cxpDoc) {
+    fail(`Accounts payable document CXP-${invoiceNumber} was not found.`);
+  }
+
+  if (
+    cxpDoc.status !== "PENDING" ||
+    Number(cxpDoc.totalAmount ?? 0) !== 35.40 ||
+    Number(cxpDoc.paidAmount ?? 0) !== 0 ||
+    Number(cxpDoc.remainingAmount ?? 0) !== 35.40
+  ) {
+    fail("Accounts payable document was not generated with the correct pending amounts and status.");
+  }
+
+  smokeStep("supplier invoice repost rejected");
+  await expectSupplierInvoiceCompleteFailure(invoice.id, session);
 }
 
 async function validateCrud(session) {
@@ -2108,7 +2269,8 @@ async function main() {
   await validatePurchaseOrderMetadata(session);
   await validatePurchaseReceiptMetadata(session);
   await validatePurchaseOrderFlow(session);
-  await validatePurchaseReceiptFlow(session);
+  const postedReceipt = await validatePurchaseReceiptFlow(session);
+  await validateSupplierInvoiceFlow(session, postedReceipt);
   await validateCrud(session);
   console.log("smoke: local runtime validation OK");
 }

@@ -44,9 +44,17 @@ const navigation: NavigationItem[] = [
     children: [
       { label: "Ordenes de compra", path: "/purchasing/purchase-orders" },
       { label: "Recepciones", path: "/purchasing/purchase-receipts" },
+      { label: "Facturas proveedor", path: "/purchasing/supplier-invoices" },
       { label: "Consulta ordenes", path: "/master-data/purchase-orders" },
       { label: "Consulta recepciones", path: "/master-data/purchase-receipts" },
       { label: "Proveedores", path: "/master-data/suppliers" }
+    ]
+  },
+  {
+    label: "Cuentas por pagar",
+    path: "/accounts-payable/documents",
+    children: [
+      { label: "Documentos", path: "/accounts-payable/documents" }
     ]
   },
   { label: "Workflows", path: "/workflows" },
@@ -82,9 +90,15 @@ function breadcrumb(path: string) {
       segments[1] === "purchase-order-lines" ||
       segments[1] === "purchase-receipts" ||
       segments[1] === "purchase-receipt-lines" ||
+      segments[1] === "supplier-invoices" ||
+      segments[1] === "supplier-invoice-lines" ||
       segments[1] === "suppliers"
     ) {
       return ["Doble S ERP", "Compras", getCatalogLabel(segments[1] ?? "")];
+    }
+
+    if (segments[1] === "accounts-payable-documents") {
+      return ["Doble S ERP", "Cuentas por pagar", "Documentos"];
     }
 
     if (
@@ -112,6 +126,14 @@ function breadcrumb(path: string) {
 
   if (segments[0] === "purchasing" && segments[1] === "purchase-receipts") {
     return ["Doble S ERP", "Compras", "Recepciones"];
+  }
+
+  if (segments[0] === "purchasing" && segments[1] === "supplier-invoices") {
+    return ["Doble S ERP", "Compras", "Facturas proveedor"];
+  }
+
+  if (segments[0] === "accounts-payable" && segments[1] === "documents") {
+    return ["Doble S ERP", "Cuentas por pagar", "Documentos"];
   }
 
   const labels: Record<string, string> = {
@@ -176,6 +198,21 @@ function renderIcon(label: string) {
       return (
         <svg {...commonProps}>
           <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+        </svg>
+      );
+    case "Compras":
+      return (
+        <svg {...commonProps}>
+          <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <path d="M16 10a4 4 0 0 1-8 0"></path>
+        </svg>
+      );
+    case "Cuentas por pagar":
+      return (
+        <svg {...commonProps}>
+          <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+          <line x1="1" y1="10" x2="23" y2="10"></line>
         </svg>
       );
     case "Seguridad":
