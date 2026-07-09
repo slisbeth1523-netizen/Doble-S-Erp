@@ -38,6 +38,15 @@ const navigation: NavigationItem[] = [
       { label: "Conteos fisicos", path: "/inventory/physical-counts" }
     ]
   },
+  {
+    label: "Compras",
+    path: "/purchasing/purchase-orders",
+    children: [
+      { label: "Ordenes de compra", path: "/purchasing/purchase-orders" },
+      { label: "Consulta ordenes", path: "/master-data/purchase-orders" },
+      { label: "Proveedores", path: "/master-data/suppliers" }
+    ]
+  },
   { label: "Workflows", path: "/workflows" },
   { label: "Eventos", path: "/events" },
   { label: "Seguridad", path: "/security" },
@@ -66,6 +75,10 @@ function breadcrumb(path: string) {
   const segments = path === "/" ? ["dashboard"] : path.split("/").filter(Boolean);
 
   if (segments[0] === "master-data") {
+    if (segments[1] === "purchase-orders" || segments[1] === "purchase-order-lines" || segments[1] === "suppliers") {
+      return ["Doble S ERP", "Compras", getCatalogLabel(segments[1] ?? "")];
+    }
+
     if (
       segments[1] === "inventory-stocks" ||
       segments[1] === "inventory-movements" ||
@@ -83,6 +96,10 @@ function breadcrumb(path: string) {
 
   if (segments[0] === "inventory" && segments[1] === "physical-counts") {
     return ["Doble S ERP", "Inventario", "Conteos fisicos"];
+  }
+
+  if (segments[0] === "purchasing" && segments[1] === "purchase-orders") {
+    return ["Doble S ERP", "Compras", "Ordenes de compra"];
   }
 
   const labels: Record<string, string> = {
