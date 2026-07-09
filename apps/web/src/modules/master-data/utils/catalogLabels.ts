@@ -8,6 +8,7 @@ export const catalogLabels: Record<string, string> = {
   "inventory-stocks": "Existencias",
   "inventory-movements": "Movimientos de inventario",
   "inventory-movement-lines": "Lineas de movimientos",
+  "inventory-ledger": "Kardex",
   currencies: "Monedas",
   "units-of-measure": "Unidades de medida",
   "payment-terms": "Condiciones de pago",

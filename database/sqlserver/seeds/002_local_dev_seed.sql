@@ -107,6 +107,7 @@ VALUES
   ('inventory', 'inventory.stocks.read', 'Local read inventory stocks'),
   ('inventory', 'inventory.movements.read', 'Local read inventory movements'),
   ('inventory', 'inventory.movements.post', 'Local post inventory movements'),
+  ('inventory', 'inventory.ledger.read', 'Local read inventory ledger'),
   ('inventory', 'inventory.adjustments.create', 'Local create inventory adjustments'),
   ('inventory', 'inventory.physical-counts.create', 'Local create physical counts'),
   ('inventory', 'inventory.physical-counts.count', 'Local count physical inventory lines'),

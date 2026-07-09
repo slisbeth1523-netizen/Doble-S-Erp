@@ -19,7 +19,11 @@ type MovementRow = {
   CompanyId: string;
   MovementNumber: string;
   MovementType: InventoryMovementType;
+  MovementDate: Date;
   Status: "DRAFT" | "POSTED" | "VOIDED";
+  SourceModule: string | null;
+  SourceDocumentNumber: string | null;
+  Reference: string | null;
   PostedAt: Date | null;
   PostedBy: string | null;
 };
@@ -29,6 +33,7 @@ type MovementLineRow = {
   ItemId: string;
   WarehouseId: string;
   ToWarehouseId: string | null;
+  UnitOfMeasureId: string | null;
   Quantity: number;
   UnitCost: number;
   LineNumber: number;
@@ -45,6 +50,16 @@ type StockRow = {
 
 type ItemCostRow = {
   StandardCost: number | null;
+};
+
+type LedgerDirection = "IN" | "OUT";
+
+type LedgerEntryInput = {
+  line: MovementLineRow;
+  warehouseId: string;
+  direction: LedgerDirection;
+  quantityIn: number;
+  quantityOut: number;
 };
 
 export type InventoryPostingInput = {
@@ -96,6 +111,7 @@ export class InventoryPostingRepository extends BaseSqlRepository {
       }
 
       const postedAt = new Date();
+      await this.recordLedgerEntries(transaction, input, movement, lines, postedAt);
       await this.markMovementPosted(transaction, input, postedAt);
 
       return {
@@ -136,7 +152,11 @@ export class InventoryPostingRepository extends BaseSqlRepository {
           CompanyId,
           MovementNumber,
           MovementType,
+          MovementDate,
           Status,
+          SourceModule,
+          SourceDocumentNumber,
+          Reference,
           PostedAt,
           PostedBy
         FROM inventory.InventoryMovements WITH (UPDLOCK, HOLDLOCK, ROWLOCK)
@@ -211,6 +231,7 @@ export class InventoryPostingRepository extends BaseSqlRepository {
           ItemId,
           WarehouseId,
           ToWarehouseId,
+          UnitOfMeasureId,
           Quantity,
           UnitCost,
           LineNumber
@@ -224,6 +245,169 @@ export class InventoryPostingRepository extends BaseSqlRepository {
         { name: "MovementId", value: input.movementId },
         { name: "TenantId", value: input.tenantId },
         { name: "CompanyId", value: input.companyId }
+      ]
+    );
+  }
+
+  private async recordLedgerEntries(
+    transaction: sql.Transaction,
+    input: InventoryPostingInput,
+    movement: MovementRow,
+    lines: MovementLineRow[],
+    postedAt: Date
+  ) {
+    for (const line of lines) {
+      const entries = this.getLedgerEntriesForLine(movement.MovementType, line);
+
+      for (const entry of entries) {
+        await this.insertLedgerEntry(transaction, input, movement, entry, postedAt);
+      }
+    }
+  }
+
+  private getLedgerEntriesForLine(
+    movementType: InventoryMovementType,
+    line: MovementLineRow
+  ): LedgerEntryInput[] {
+    const quantity = Number(line.Quantity);
+
+    if (movementType === "OPENING" || movementType === "ADJUSTMENT_IN") {
+      return [
+        {
+          line,
+          warehouseId: line.WarehouseId,
+          direction: "IN",
+          quantityIn: quantity,
+          quantityOut: 0
+        }
+      ];
+    }
+
+    if (movementType === "ADJUSTMENT_OUT") {
+      return [
+        {
+          line,
+          warehouseId: line.WarehouseId,
+          direction: "OUT",
+          quantityIn: 0,
+          quantityOut: quantity
+        }
+      ];
+    }
+
+    if (movementType === "TRANSFER" && line.ToWarehouseId) {
+      return [
+        {
+          line,
+          warehouseId: line.WarehouseId,
+          direction: "OUT",
+          quantityIn: 0,
+          quantityOut: quantity
+        },
+        {
+          line,
+          warehouseId: line.ToWarehouseId,
+          direction: "IN",
+          quantityIn: quantity,
+          quantityOut: 0
+        }
+      ];
+    }
+
+    return [];
+  }
+
+  private insertLedgerEntry(
+    transaction: sql.Transaction,
+    input: InventoryPostingInput,
+    movement: MovementRow,
+    entry: LedgerEntryInput,
+    postedAt: Date
+  ) {
+    const unitCost = Number(entry.line.UnitCost);
+    const quantity = Math.max(entry.quantityIn, entry.quantityOut);
+
+    return this.queryInTransaction(
+      transaction,
+      `
+        IF NOT EXISTS (
+          SELECT 1
+          FROM inventory.InventoryLedgerEntries WITH (UPDLOCK, HOLDLOCK)
+          WHERE InventoryMovementLineId = @InventoryMovementLineId
+            AND WarehouseId = @WarehouseId
+            AND LedgerDirection = @LedgerDirection
+        )
+        BEGIN
+          INSERT INTO inventory.InventoryLedgerEntries (
+            TenantId,
+            CompanyId,
+            InventoryMovementId,
+            InventoryMovementLineId,
+            MovementNumber,
+            MovementType,
+            MovementDate,
+            PostedAt,
+            ItemId,
+            WarehouseId,
+            UnitOfMeasureId,
+            LedgerDirection,
+            QuantityIn,
+            QuantityOut,
+            UnitCost,
+            TotalCost,
+            SourceModule,
+            SourceDocumentNumber,
+            Reference,
+            Notes,
+            CreatedBy
+          )
+          VALUES (
+            @TenantId,
+            @CompanyId,
+            @InventoryMovementId,
+            @InventoryMovementLineId,
+            @MovementNumber,
+            @MovementType,
+            @MovementDate,
+            @PostedAt,
+            @ItemId,
+            @WarehouseId,
+            @UnitOfMeasureId,
+            @LedgerDirection,
+            @QuantityIn,
+            @QuantityOut,
+            @UnitCost,
+            @TotalCost,
+            @SourceModule,
+            @SourceDocumentNumber,
+            @Reference,
+            @Notes,
+            @PostedBy
+          );
+        END;
+      `,
+      [
+        { name: "TenantId", value: input.tenantId },
+        { name: "CompanyId", value: input.companyId },
+        { name: "InventoryMovementId", value: movement.InventoryMovementId },
+        { name: "InventoryMovementLineId", value: entry.line.InventoryMovementLineId },
+        { name: "MovementNumber", value: movement.MovementNumber },
+        { name: "MovementType", value: movement.MovementType },
+        { name: "MovementDate", value: movement.MovementDate },
+        { name: "PostedAt", value: postedAt },
+        { name: "ItemId", value: entry.line.ItemId },
+        { name: "WarehouseId", value: entry.warehouseId },
+        { name: "UnitOfMeasureId", value: entry.line.UnitOfMeasureId },
+        { name: "LedgerDirection", value: entry.direction },
+        { name: "QuantityIn", value: entry.quantityIn },
+        { name: "QuantityOut", value: entry.quantityOut },
+        { name: "UnitCost", value: unitCost },
+        { name: "TotalCost", value: quantity * unitCost },
+        { name: "SourceModule", value: movement.SourceModule },
+        { name: "SourceDocumentNumber", value: movement.SourceDocumentNumber },
+        { name: "Reference", value: movement.Reference },
+        { name: "Notes", value: `Ledger generated from inventory posting ${movement.MovementNumber}.` },
+        { name: "PostedBy", value: input.postedBy ?? null }
       ]
     );
   }
