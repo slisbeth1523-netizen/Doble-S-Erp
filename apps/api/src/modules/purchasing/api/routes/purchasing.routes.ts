@@ -8,12 +8,19 @@ import { getRequestContext } from "../../../../utils/requestContext.js";
 import { sendSuccess } from "../../../../utils/responseBuilder.js";
 import { validateRequest } from "../../../../utils/validateRequest.js";
 import { purchaseOrderService } from "../../application/PurchaseOrderService.js";
+import { purchaseReceiptService } from "../../application/PurchaseReceiptService.js";
 import {
   purchaseOrderCancelSchema,
   purchaseOrderCreateSchema,
   purchaseOrderIdParamsSchema,
   purchaseOrderListQuerySchema
 } from "../../validators/purchase-order.validators.js";
+import {
+  purchaseReceiptCreateSchema,
+  purchaseReceiptIdParamsSchema,
+  purchaseReceiptLineCreateSchema,
+  purchaseReceiptListQuerySchema
+} from "../../validators/purchase-receipt.validators.js";
 
 export const purchasingRouter = Router();
 
@@ -94,6 +101,77 @@ purchasingRouter.post(
       purchasingContext(request),
       request.params.id!,
       request.body
+    );
+
+    sendSuccess(response, result);
+  })
+);
+
+purchasingRouter.get(
+  "/purchase-receipts",
+  validateRequest({ query: purchaseReceiptListQuerySchema }),
+  requirePermission("purchasing", "purchasing.purchase-receipts.read"),
+  asyncHandler(async (request, response) => {
+    const result = await purchaseReceiptService.listPurchaseReceipts(
+      purchasingContext(request),
+      request.query
+    );
+
+    sendSuccess(response, result);
+  })
+);
+
+purchasingRouter.get(
+  "/purchase-receipts/:id",
+  validateRequest({ params: purchaseReceiptIdParamsSchema }),
+  requirePermission("purchasing", "purchasing.purchase-receipts.read"),
+  asyncHandler(async (request, response) => {
+    const result = await purchaseReceiptService.getPurchaseReceipt(
+      purchasingContext(request),
+      request.params.id!
+    );
+
+    sendSuccess(response, result);
+  })
+);
+
+purchasingRouter.post(
+  "/purchase-receipts",
+  validateRequest({ body: purchaseReceiptCreateSchema }),
+  requirePermission("purchasing", "purchasing.purchase-receipts.create"),
+  asyncHandler(async (request, response) => {
+    const result = await purchaseReceiptService.createPurchaseReceipt(
+      purchasingContext(request),
+      request.body
+    );
+
+    sendSuccess(response, result, 201);
+  })
+);
+
+purchasingRouter.post(
+  "/purchase-receipts/:id/lines",
+  validateRequest({ params: purchaseReceiptIdParamsSchema, body: purchaseReceiptLineCreateSchema }),
+  requirePermission("purchasing", "purchasing.purchase-receipts.create"),
+  asyncHandler(async (request, response) => {
+    const result = await purchaseReceiptService.addPurchaseReceiptLine(
+      purchasingContext(request),
+      request.params.id!,
+      request.body
+    );
+
+    sendSuccess(response, result, 201);
+  })
+);
+
+purchasingRouter.post(
+  "/purchase-receipts/:id/complete",
+  validateRequest({ params: purchaseReceiptIdParamsSchema }),
+  requirePermission("purchasing", "purchasing.purchase-receipts.post"),
+  asyncHandler(async (request, response) => {
+    const result = await purchaseReceiptService.completePurchaseReceipt(
+      purchasingContext(request),
+      request.params.id!
     );
 
     sendSuccess(response, result);

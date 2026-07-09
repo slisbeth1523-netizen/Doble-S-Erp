@@ -80,9 +80,8 @@ export type InventoryPostingResult = {
   totalQuantity: number;
 };
 
-const inboundMovementTypes: InventoryMovementType[] = ["OPENING", "ADJUSTMENT_IN"];
+const inboundMovementTypes: InventoryMovementType[] = ["OPENING", "ADJUSTMENT_IN", "PURCHASE_RECEIPT_PLACEHOLDER"];
 const placeholderMovementTypes: InventoryMovementType[] = [
-  "PURCHASE_RECEIPT_PLACEHOLDER",
   "SALES_ISSUE_PLACEHOLDER",
   "RETURN_IN_PLACEHOLDER",
   "RETURN_OUT_PLACEHOLDER"
@@ -91,40 +90,47 @@ const placeholderMovementTypes: InventoryMovementType[] = [
 export class InventoryPostingRepository extends BaseSqlRepository {
   postMovement(input: InventoryPostingInput): Promise<InventoryPostingResult> {
     return this.executeInTransaction(async (transaction) => {
-      const movement = await this.lockMovement(transaction, input);
-
-      this.validateMovementForPosting(movement);
-
-      const lines = await this.lockMovementLines(transaction, input);
-
-      if (!lines.length) {
-        throw new AppError({
-          statusCode: 400,
-          code: "INVENTORY_MOVEMENT_HAS_NO_LINES",
-          message: "Inventory movement has no lines to post.",
-          isOperational: true
-        });
-      }
-
-      for (const line of lines) {
-        await this.postLine(transaction, input, movement.MovementType, line);
-      }
-
-      const postedAt = new Date();
-      await this.recordLedgerEntries(transaction, input, movement, lines, postedAt);
-      await this.markMovementPosted(transaction, input, postedAt);
-
-      return {
-        id: movement.InventoryMovementId,
-        movementNumber: movement.MovementNumber,
-        movementType: movement.MovementType,
-        status: "POSTED",
-        postedAt,
-        postedBy: input.postedBy,
-        lineCount: lines.length,
-        totalQuantity: lines.reduce((total, line) => total + Number(line.Quantity), 0)
-      };
+      return this.postMovementInTransaction(transaction, input);
     });
+  }
+
+  async postMovementInTransaction(
+    transaction: sql.Transaction,
+    input: InventoryPostingInput
+  ): Promise<InventoryPostingResult> {
+    const movement = await this.lockMovement(transaction, input);
+
+    this.validateMovementForPosting(movement);
+
+    const lines = await this.lockMovementLines(transaction, input);
+
+    if (!lines.length) {
+      throw new AppError({
+        statusCode: 400,
+        code: "INVENTORY_MOVEMENT_HAS_NO_LINES",
+        message: "Inventory movement has no lines to post.",
+        isOperational: true
+      });
+    }
+
+    for (const line of lines) {
+      await this.postLine(transaction, input, movement.MovementType, line);
+    }
+
+    const postedAt = new Date();
+    await this.recordLedgerEntries(transaction, input, movement, lines, postedAt);
+    await this.markMovementPosted(transaction, input, postedAt);
+
+    return {
+      id: movement.InventoryMovementId,
+      movementNumber: movement.MovementNumber,
+      movementType: movement.MovementType,
+      status: "POSTED",
+      postedAt,
+      postedBy: input.postedBy,
+      lineCount: lines.length,
+      totalQuantity: lines.reduce((total, line) => total + Number(line.Quantity), 0)
+    };
   }
 
   private async queryInTransaction<TRecord>(
@@ -271,7 +277,7 @@ export class InventoryPostingRepository extends BaseSqlRepository {
   ): LedgerEntryInput[] {
     const quantity = Number(line.Quantity);
 
-    if (movementType === "OPENING" || movementType === "ADJUSTMENT_IN") {
+    if (inboundMovementTypes.includes(movementType)) {
       return [
         {
           line,
