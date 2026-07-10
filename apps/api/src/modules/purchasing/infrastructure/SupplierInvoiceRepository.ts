@@ -620,7 +620,7 @@ export class SupplierInvoiceRepository extends BaseSqlRepository {
             @DueDate,
             @TotalAmount,
             0,
-            'PENDING',
+            'OPEN',
             @Notes,
             1,
             @UserId

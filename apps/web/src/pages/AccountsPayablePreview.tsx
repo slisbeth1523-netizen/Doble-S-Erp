@@ -22,7 +22,7 @@ function statusTone(status?: string) {
       return "green";
     case "PARTIALLY_PAID":
       return "blue";
-    case "PENDING":
+    case "OPEN":
       return "amber";
     case "VOIDED":
       return "red";
@@ -83,7 +83,7 @@ export function AccountsPayablePreview() {
           </Card>
           <Card className="metric-card">
             <span>Documentos pendientes</span>
-            <strong>{documents.filter((d) => d.status === "PENDING").length}</strong>
+            <strong>{documents.filter((d) => d.status === "OPEN").length}</strong>
             <small style={{ color: "var(--muted)" }}>CxP sin abonos</small>
           </Card>
         </div>

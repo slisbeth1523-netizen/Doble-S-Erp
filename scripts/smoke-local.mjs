@@ -258,6 +258,48 @@ async function completeSupplierInvoice(supplierInvoiceId, session) {
   return body.data;
 }
 
+async function createSupplierPayment(payload, session) {
+  const body = await expectOk("/accounts-payable/payments", {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function addSupplierPaymentApplication(supplierPaymentId, payload, session) {
+  const body = await expectOk(`/accounts-payable/payments/${supplierPaymentId}/applications`, {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function postSupplierPayment(supplierPaymentId, session) {
+  const body = await expectOk(`/accounts-payable/payments/${supplierPaymentId}/post`, {
+    method: "POST",
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
+async function expectSupplierPaymentPostFailure(supplierPaymentId, session) {
+  const result = await request(`/accounts-payable/payments/${supplierPaymentId}/post`, {
+    method: "POST",
+    headers: authHeaders(session)
+  });
+
+  if (result.response.ok || result.body?.success !== false) {
+    fail(`Re-posting supplier payment for ${supplierPaymentId} must fail in a controlled way.`);
+  }
+
+  return result.body;
+}
+
 async function expectSupplierInvoiceCompleteFailure(supplierInvoiceId, session) {
   const result = await request(`/purchasing/supplier-invoices/${supplierInvoiceId}/complete`, {
     method: "POST",
@@ -699,6 +741,149 @@ async function getDemoPurchaseReferences(session) {
     }
 
     return row;
+  } finally {
+    await pool.close();
+  }
+}
+
+async function createSmokeAccountsPayableDocument(session, totalAmount) {
+  if (!session.user.companyId) {
+    fail("Cannot create AP smoke document without company context.");
+  }
+
+  const references = await getDemoPurchaseReferences(session);
+  const pool = await sql.connect(getSqlConfig());
+  const documentNumber = `CXP-PAY-QA-${smokeRun}`;
+
+  try {
+    const result = await pool
+      .request()
+      .input("TenantId", sql.UniqueIdentifier, session.user.tenantId)
+      .input("CompanyId", sql.UniqueIdentifier, session.user.companyId)
+      .input("UserId", sql.UniqueIdentifier, session.user.userId ?? null)
+      .input("SupplierId", sql.UniqueIdentifier, references.supplierId)
+      .input("DocumentNumber", sql.NVarChar(40), documentNumber)
+      .input("TotalAmount", sql.Decimal(18, 4), totalAmount)
+      .query(`
+        DECLARE @DocumentId UNIQUEIDENTIFIER;
+
+        SELECT @DocumentId = AccountsPayableDocumentId
+        FROM ap.AccountsPayableDocuments
+        WHERE TenantId = @TenantId
+          AND CompanyId = @CompanyId
+          AND DocumentNumber = @DocumentNumber;
+
+        IF @DocumentId IS NULL
+        BEGIN
+          SET @DocumentId = NEWID();
+
+          INSERT INTO ap.AccountsPayableDocuments (
+            AccountsPayableDocumentId,
+            TenantId,
+            CompanyId,
+            DocumentNumber,
+            SupplierId,
+            SourceModule,
+            SourceDocumentId,
+            SourceDocumentNumber,
+            DocumentDate,
+            DueDate,
+            TotalAmount,
+            PaidAmount,
+            Status,
+            Notes,
+            IsActive,
+            CreatedBy
+          )
+          VALUES (
+            @DocumentId,
+            @TenantId,
+            @CompanyId,
+            @DocumentNumber,
+            @SupplierId,
+            'SMOKE',
+            @DocumentId,
+            @DocumentNumber,
+            SYSUTCDATETIME(),
+            DATEADD(day, 30, SYSUTCDATETIME()),
+            @TotalAmount,
+            0,
+            'OPEN',
+            'Documento CxP creado por smoke local para pagos',
+            1,
+            @UserId
+          );
+        END;
+
+        SELECT
+          AccountsPayableDocumentId AS id,
+          DocumentNumber AS documentNumber,
+          SupplierId AS supplierId,
+          TotalAmount AS totalAmount,
+          PaidAmount AS paidAmount,
+          RemainingAmount AS remainingAmount,
+          Status AS status
+        FROM ap.AccountsPayableDocuments
+        WHERE AccountsPayableDocumentId = @DocumentId;
+      `);
+
+    const row = result.recordset[0];
+    return {
+      id: String(row.id).toLowerCase(),
+      documentNumber: row.documentNumber,
+      supplierId: String(row.supplierId).toLowerCase(),
+      totalAmount: Number(row.totalAmount ?? 0),
+      paidAmount: Number(row.paidAmount ?? 0),
+      remainingAmount: Number(row.remainingAmount ?? 0),
+      status: row.status
+    };
+  } finally {
+    await pool.close();
+  }
+}
+
+async function getAccountsPayableDocumentSnapshot(session, accountsPayableDocumentId) {
+  if (!session.user.companyId) {
+    fail("Cannot read AP smoke document without company context.");
+  }
+
+  const pool = await sql.connect(getSqlConfig());
+
+  try {
+    const result = await pool
+      .request()
+      .input("TenantId", sql.UniqueIdentifier, session.user.tenantId)
+      .input("CompanyId", sql.UniqueIdentifier, session.user.companyId)
+      .input("AccountsPayableDocumentId", sql.UniqueIdentifier, accountsPayableDocumentId)
+      .query(`
+        SELECT
+          AccountsPayableDocumentId AS id,
+          DocumentNumber AS documentNumber,
+          SupplierId AS supplierId,
+          TotalAmount AS totalAmount,
+          PaidAmount AS paidAmount,
+          RemainingAmount AS remainingAmount,
+          Status AS status
+        FROM ap.AccountsPayableDocuments
+        WHERE TenantId = @TenantId
+          AND CompanyId = @CompanyId
+          AND AccountsPayableDocumentId = @AccountsPayableDocumentId;
+      `);
+
+    const row = result.recordset[0];
+    if (!row) {
+      fail(`Accounts payable document ${accountsPayableDocumentId} was not found.`);
+    }
+
+    return {
+      id: String(row.id).toLowerCase(),
+      documentNumber: row.documentNumber,
+      supplierId: String(row.supplierId).toLowerCase(),
+      totalAmount: Number(row.totalAmount ?? 0),
+      paidAmount: Number(row.paidAmount ?? 0),
+      remainingAmount: Number(row.remainingAmount ?? 0),
+      status: row.status
+    };
   } finally {
     await pool.close();
   }
@@ -1669,6 +1854,30 @@ async function validatePurchaseReceiptMetadata(session) {
   }
 }
 
+async function validateSupplierPaymentMetadata(session) {
+  for (const catalog of ["supplier-payments", "supplier-payment-applications"]) {
+    smokeStep(`metadata ${catalog}`);
+    const metadata = await expectOk(`/master-data/${catalog}/metadata`, {
+      headers: authHeaders(session)
+    });
+
+    if (metadata.data?.catalog?.readOnly !== true) {
+      fail(`${catalog} metadata must be read-only.`);
+    }
+
+    const fields = metadata.data.fields.map((field) => field.field);
+    const expectedFields =
+      catalog === "supplier-payments"
+        ? ["paymentNumber", "supplierCode", "supplierName", "status", "totalAmount", "appliedAmount"]
+        : ["paymentNumber", "documentNumber", "documentStatus", "appliedAmount", "documentRemainingAmount"];
+    const missingFields = expectedFields.filter((field) => !fields.includes(field));
+
+    if (missingFields.length) {
+      fail(`${catalog} metadata is missing fields: ${missingFields.join(", ")}.`);
+    }
+  }
+}
+
 async function validatePurchaseOrderFlow(session) {
   const references = await getDemoPurchaseReferences(session);
   const initialStock = await getStockSnapshot(session, "ART-DEMO", "ALM-PRINCIPAL");
@@ -2039,16 +2248,136 @@ async function validateSupplierInvoiceFlow(session, postedReceipt) {
   }
 
   if (
-    cxpDoc.status !== "PENDING" ||
+    cxpDoc.status !== "OPEN" ||
     Number(cxpDoc.totalAmount ?? 0) !== 35.40 ||
     Number(cxpDoc.paidAmount ?? 0) !== 0 ||
     Number(cxpDoc.remainingAmount ?? 0) !== 35.40
   ) {
-    fail("Accounts payable document was not generated with the correct pending amounts and status.");
+    fail("Accounts payable document was not generated with the correct open amounts and status.");
   }
 
   smokeStep("supplier invoice repost rejected");
   await expectSupplierInvoiceCompleteFailure(invoice.id, session);
+}
+
+async function validateSupplierPaymentFlow(session) {
+  smokeStep("supplier payment AP document setup");
+  const cxpDocument = await createSmokeAccountsPayableDocument(session, 100);
+  const initialSnapshot = await getAccountsPayableDocumentSnapshot(session, cxpDocument.id);
+
+  if (
+    initialSnapshot.status !== "OPEN" ||
+    Number(initialSnapshot.paidAmount ?? 0) !== 0 ||
+    Number(initialSnapshot.remainingAmount ?? 0) !== 100
+  ) {
+    fail("Smoke AP document was not created as OPEN with full pending balance.");
+  }
+
+  smokeStep("supplier payment partial draft");
+  const partialPayment = await createSupplierPayment(
+    {
+      supplierId: cxpDocument.supplierId,
+      totalAmount: 40,
+      reference: `PAY-PARTIAL-${smokeRun}`,
+      notes: "Pago parcial creado por smoke local"
+    },
+    session
+  );
+
+  if (partialPayment.status !== "DRAFT" || Number(partialPayment.totalAmount ?? 0) !== 40) {
+    fail("Supplier payment was not created as DRAFT with the expected total.");
+  }
+
+  const draftSnapshot = await getAccountsPayableDocumentSnapshot(session, cxpDocument.id);
+  if (Number(draftSnapshot.remainingAmount ?? 0) !== Number(initialSnapshot.remainingAmount ?? 0)) {
+    fail("Creating a supplier payment DRAFT changed the AP document balance.");
+  }
+
+  smokeStep("supplier payment partial application");
+  const partialWithApplication = await addSupplierPaymentApplication(
+    partialPayment.id,
+    {
+      accountsPayableDocumentId: cxpDocument.id,
+      appliedAmount: 40,
+      notes: "Aplicacion parcial smoke local"
+    },
+    session
+  );
+
+  if (Number(partialWithApplication.appliedAmount ?? 0) !== 40 || Number(partialWithApplication.applicationCount ?? 0) !== 1) {
+    fail("Supplier payment application was not registered with the expected amount.");
+  }
+
+  const applicationRuntime = await findCatalogRecord("supplier-payment-applications", partialPayment.paymentNumber, session);
+  if (!applicationRuntime || Number(applicationRuntime.appliedAmount ?? 0) !== 40) {
+    fail("Supplier payment application was not visible in runtime metadata.");
+  }
+
+  smokeStep("supplier payment partial post");
+  const postedPartialPayment = await postSupplierPayment(partialPayment.id, session);
+
+  if (postedPartialPayment.status !== "POSTED" || !postedPartialPayment.postedAt) {
+    fail("Supplier partial payment did not post successfully.");
+  }
+
+  const partialPostedSnapshot = await getAccountsPayableDocumentSnapshot(session, cxpDocument.id);
+  if (
+    Number(partialPostedSnapshot.remainingAmount ?? 0) !== 60 ||
+    Number(partialPostedSnapshot.paidAmount ?? 0) !== 40 ||
+    partialPostedSnapshot.status !== "PARTIALLY_PAID"
+  ) {
+    fail("Partial supplier payment did not reduce AP balance or status correctly.");
+  }
+
+  const paymentRuntime = await findCatalogRecord("supplier-payments", partialPayment.paymentNumber, session);
+  if (!paymentRuntime || paymentRuntime.status !== "POSTED") {
+    fail("Posted supplier payment was not visible in runtime metadata.");
+  }
+
+  smokeStep("supplier payment final draft");
+  const finalPayment = await createSupplierPayment(
+    {
+      supplierId: cxpDocument.supplierId,
+      totalAmount: 60,
+      reference: `PAY-FINAL-${smokeRun}`,
+      notes: "Pago final creado por smoke local"
+    },
+    session
+  );
+
+  await addSupplierPaymentApplication(
+    finalPayment.id,
+    {
+      accountsPayableDocumentId: cxpDocument.id,
+      appliedAmount: 60,
+      notes: "Aplicacion final smoke local"
+    },
+    session
+  );
+
+  smokeStep("supplier payment final post");
+  const postedFinalPayment = await postSupplierPayment(finalPayment.id, session);
+
+  if (postedFinalPayment.status !== "POSTED") {
+    fail("Final supplier payment did not post successfully.");
+  }
+
+  const paidSnapshot = await getAccountsPayableDocumentSnapshot(session, cxpDocument.id);
+  if (
+    Number(paidSnapshot.remainingAmount ?? 0) !== 0 ||
+    Number(paidSnapshot.paidAmount ?? 0) !== 100 ||
+    paidSnapshot.status !== "PAID"
+  ) {
+    fail("Final supplier payment did not settle AP balance to PAID.");
+  }
+
+  smokeStep("supplier payment repost rejected");
+  await expectSupplierPaymentPostFailure(partialPayment.id, session);
+
+  const retrySnapshot = await getAccountsPayableDocumentSnapshot(session, cxpDocument.id);
+  if (Number(retrySnapshot.paidAmount ?? 0) !== 100 || Number(retrySnapshot.remainingAmount ?? 0) !== 0) {
+    fail("Retrying supplier payment post reduced the AP balance a second time.");
+  }
 }
 
 async function validateCrud(session) {
@@ -2268,9 +2597,11 @@ async function main() {
   await validateInventoryLedgerMetadata(session);
   await validatePurchaseOrderMetadata(session);
   await validatePurchaseReceiptMetadata(session);
+  await validateSupplierPaymentMetadata(session);
   await validatePurchaseOrderFlow(session);
   const postedReceipt = await validatePurchaseReceiptFlow(session);
   await validateSupplierInvoiceFlow(session, postedReceipt);
+  await validateSupplierPaymentFlow(session);
   await validateCrud(session);
   console.log("smoke: local runtime validation OK");
 }

@@ -1,5 +1,6 @@
 import { Router } from "express";
 
+import { accountsPayableRouter } from "../modules/accounts-payable/api/routes/accounts-payable.routes.js";
 import { eventsRouter } from "../modules/events/api/routes/events.routes.js";
 import { inventoryRouter } from "../modules/inventory/api/routes/inventory.routes.js";
 import { masterDataRouter } from "../modules/master-data/api/routes/master-data.routes.js";
@@ -20,4 +21,5 @@ apiRouter.use("/security", securityRouter);
 apiRouter.use("/master-data", masterDataRouter);
 apiRouter.use("/inventory", inventoryRouter);
 apiRouter.use("/purchasing", purchasingRouter);
+apiRouter.use("/accounts-payable", accountsPayableRouter);
 apiRouter.use("/workflows", workflowRouter);
