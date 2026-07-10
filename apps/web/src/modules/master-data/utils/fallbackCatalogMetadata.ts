@@ -224,6 +224,30 @@ const catalogFields: Record<string, FieldInput[]> = {
     { field: "appliedAmount", label: "Aplicado", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 130, align: "right", format: "currency" },
     { field: "documentRemainingAmount", label: "Balance doc.", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 140, align: "right", format: "currency" }
   ],
+  "supplier-adjustments": [
+    { field: "adjustmentNumber", label: "Nota", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 160 },
+    { field: "supplierId", label: "Proveedor Id", editable: false, readOnly: true, visibleInGrid: false, visibleInForm: false, validation: { nullable: false } },
+    { field: "supplierCode", label: "Proveedor", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 130 },
+    { field: "supplierName", label: "Nombre proveedor", searchable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 220 },
+    { field: "adjustmentType", label: "Tipo", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 150 },
+    { field: "adjustmentDate", label: "Fecha nota", type: "datetime", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 160 },
+    { field: "status", label: "Estado", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 110 },
+    { field: "amount", label: "Monto", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 130, align: "right", format: "currency" },
+    { field: "appliedAmount", label: "Aplicado", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 130, align: "right", format: "currency" },
+    { field: "generatedDocumentNumber", label: "CxP generada", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 160 },
+    { field: "reference", label: "Referencia", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 170 },
+    { field: "postedAt", label: "Posteado", type: "datetime", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 160 }
+  ],
+  "supplier-adjustment-applications": [
+    { field: "adjustmentNumber", label: "Nota", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 160 },
+    { field: "adjustmentType", label: "Tipo", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 150 },
+    { field: "lineNumber", label: "Linea", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 1, nullable: false }, width: 90, align: "right" },
+    { field: "documentNumber", label: "Documento CxP", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 160 },
+    { field: "supplierCode", label: "Proveedor", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 130 },
+    { field: "documentStatus", label: "Estado doc.", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 120 },
+    { field: "appliedAmount", label: "Aplicado", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 130, align: "right", format: "currency" },
+    { field: "documentRemainingAmount", label: "Balance doc.", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 140, align: "right", format: "currency" }
+  ],
   items: [
     { ...technicalFields[0]!, validation: { required: true, minLength: 1, maxLength: 50, nullable: false } },
     {
@@ -441,7 +465,9 @@ export function getFallbackCatalogMetadata(catalog: string): CatalogMetadata | n
     "purchase-receipt-lines",
     "accounts-payable-documents",
     "supplier-payments",
-    "supplier-payment-applications"
+    "supplier-payment-applications",
+    "supplier-adjustments",
+    "supplier-adjustment-applications"
   ].includes(catalog);
   const catalogActions = catalogReadOnly ? readOnlyActions : actions;
 

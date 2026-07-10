@@ -11,6 +11,7 @@ import { PurchaseReceiptsPreview } from "./pages/PurchaseReceiptsPreview.js";
 import { SupplierInvoicesPreview } from "./pages/SupplierInvoicesPreview.js";
 import { AccountsPayablePreview } from "./pages/AccountsPayablePreview.js";
 import { SupplierPaymentsPreview } from "./pages/SupplierPaymentsPreview.js";
+import { SupplierAdjustmentsPreview } from "./pages/SupplierAdjustmentsPreview.js";
 import { SecurityPreview } from "./pages/SecurityPreview.js";
 import { SettingsPreview } from "./pages/SettingsPreview.js";
 import { WorkflowsPreview } from "./pages/WorkflowsPreview.js";
@@ -68,6 +69,10 @@ export function App() {
 
     if (path === "/accounts-payable/payments") {
       return <SupplierPaymentsPreview />;
+    }
+
+    if (path === "/accounts-payable/supplier-adjustments") {
+      return <SupplierAdjustmentsPreview />;
     }
 
     if (path === "/security") {

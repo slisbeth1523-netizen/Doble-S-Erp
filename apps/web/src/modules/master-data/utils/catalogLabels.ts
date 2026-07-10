@@ -21,7 +21,9 @@ export const catalogLabels: Record<string, string> = {
   "supplier-invoice-lines": "Líneas de facturas",
   "accounts-payable-documents": "Documentos de cuentas por pagar",
   "supplier-payments": "Pagos a proveedores",
-  "supplier-payment-applications": "Aplicaciones de pagos"
+  "supplier-payment-applications": "Aplicaciones de pagos",
+  "supplier-adjustments": "Notas de proveedor",
+  "supplier-adjustment-applications": "Aplicaciones de notas"
 };
 
 export function getCatalogLabel(catalog: string) {

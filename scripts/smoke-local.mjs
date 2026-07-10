@@ -300,6 +300,48 @@ async function expectSupplierPaymentPostFailure(supplierPaymentId, session) {
   return result.body;
 }
 
+async function createSupplierAdjustment(payload, session) {
+  const body = await expectOk("/accounts-payable/adjustments", {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function addSupplierAdjustmentApplication(supplierAdjustmentId, payload, session) {
+  const body = await expectOk(`/accounts-payable/adjustments/${supplierAdjustmentId}/applications`, {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function postSupplierAdjustment(supplierAdjustmentId, session) {
+  const body = await expectOk(`/accounts-payable/adjustments/${supplierAdjustmentId}/post`, {
+    method: "POST",
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
+async function expectSupplierAdjustmentPostFailure(supplierAdjustmentId, session) {
+  const result = await request(`/accounts-payable/adjustments/${supplierAdjustmentId}/post`, {
+    method: "POST",
+    headers: authHeaders(session)
+  });
+
+  if (result.response.ok || result.body?.success !== false) {
+    fail(`Re-posting supplier adjustment for ${supplierAdjustmentId} must fail in a controlled way.`);
+  }
+
+  return result.body;
+}
+
 async function expectSupplierInvoiceCompleteFailure(supplierInvoiceId, session) {
   const result = await request(`/purchasing/supplier-invoices/${supplierInvoiceId}/complete`, {
     method: "POST",
@@ -746,14 +788,14 @@ async function getDemoPurchaseReferences(session) {
   }
 }
 
-async function createSmokeAccountsPayableDocument(session, totalAmount) {
+async function createSmokeAccountsPayableDocument(session, totalAmount, suffix = "PAY") {
   if (!session.user.companyId) {
     fail("Cannot create AP smoke document without company context.");
   }
 
   const references = await getDemoPurchaseReferences(session);
   const pool = await sql.connect(getSqlConfig());
-  const documentNumber = `CXP-PAY-QA-${smokeRun}`;
+  const documentNumber = `CXP-${suffix}-QA-${smokeRun}`;
 
   try {
     const result = await pool
@@ -884,6 +926,34 @@ async function getAccountsPayableDocumentSnapshot(session, accountsPayableDocume
       remainingAmount: Number(row.remainingAmount ?? 0),
       status: row.status
     };
+  } finally {
+    await pool.close();
+  }
+}
+
+async function countGeneratedDebitNoteDocuments(session, sourceDocumentId) {
+  if (!session.user.companyId) {
+    fail("Cannot count AP debit note documents without company context.");
+  }
+
+  const pool = await sql.connect(getSqlConfig());
+
+  try {
+    const result = await pool
+      .request()
+      .input("TenantId", sql.UniqueIdentifier, session.user.tenantId)
+      .input("CompanyId", sql.UniqueIdentifier, session.user.companyId)
+      .input("SourceDocumentId", sql.UniqueIdentifier, sourceDocumentId)
+      .query(`
+        SELECT COUNT(1) AS DocumentCount
+        FROM ap.AccountsPayableDocuments
+        WHERE TenantId = @TenantId
+          AND CompanyId = @CompanyId
+          AND SourceModule = 'SUPPLIER_DEBIT_NOTE'
+          AND SourceDocumentId = @SourceDocumentId;
+      `);
+
+    return Number(result.recordset[0]?.DocumentCount ?? 0);
   } finally {
     await pool.close();
   }
@@ -1878,6 +1948,30 @@ async function validateSupplierPaymentMetadata(session) {
   }
 }
 
+async function validateSupplierAdjustmentMetadata(session) {
+  for (const catalog of ["supplier-adjustments", "supplier-adjustment-applications"]) {
+    smokeStep(`metadata ${catalog}`);
+    const metadata = await expectOk(`/master-data/${catalog}/metadata`, {
+      headers: authHeaders(session)
+    });
+
+    if (metadata.data?.catalog?.readOnly !== true) {
+      fail(`${catalog} metadata must be read-only.`);
+    }
+
+    const fields = metadata.data.fields.map((field) => field.field);
+    const expectedFields =
+      catalog === "supplier-adjustments"
+        ? ["adjustmentNumber", "supplierCode", "supplierName", "adjustmentType", "status", "amount"]
+        : ["adjustmentNumber", "adjustmentType", "documentNumber", "documentStatus", "appliedAmount"];
+    const missingFields = expectedFields.filter((field) => !fields.includes(field));
+
+    if (missingFields.length) {
+      fail(`${catalog} metadata is missing fields: ${missingFields.join(", ")}.`);
+    }
+  }
+}
+
 async function validatePurchaseOrderFlow(session) {
   const references = await getDemoPurchaseReferences(session);
   const initialStock = await getStockSnapshot(session, "ART-DEMO", "ALM-PRINCIPAL");
@@ -2380,6 +2474,132 @@ async function validateSupplierPaymentFlow(session) {
   }
 }
 
+async function validateSupplierAdjustmentFlow(session) {
+  smokeStep("supplier credit note AP document setup");
+  const creditDocument = await createSmokeAccountsPayableDocument(session, 100, "CN");
+  const creditInitialSnapshot = await getAccountsPayableDocumentSnapshot(session, creditDocument.id);
+
+  smokeStep("supplier credit note draft");
+  const creditNote = await createSupplierAdjustment(
+    {
+      supplierId: creditDocument.supplierId,
+      adjustmentType: "CREDIT_NOTE",
+      amount: 30,
+      reference: `CN-${smokeRun}`,
+      notes: "Nota de credito smoke local"
+    },
+    session
+  );
+
+  if (creditNote.status !== "DRAFT" || creditNote.adjustmentType !== "CREDIT_NOTE" || Number(creditNote.amount ?? 0) !== 30) {
+    fail("Supplier credit note was not created as DRAFT with the expected amount.");
+  }
+
+  const creditDraftSnapshot = await getAccountsPayableDocumentSnapshot(session, creditDocument.id);
+  if (Number(creditDraftSnapshot.remainingAmount ?? 0) !== Number(creditInitialSnapshot.remainingAmount ?? 0)) {
+    fail("Creating a supplier credit note DRAFT changed the AP document balance.");
+  }
+
+  smokeStep("supplier credit note application");
+  const creditWithApplication = await addSupplierAdjustmentApplication(
+    creditNote.id,
+    {
+      accountsPayableDocumentId: creditDocument.id,
+      appliedAmount: 30,
+      notes: "Aplicacion nota credito smoke local"
+    },
+    session
+  );
+
+  if (Number(creditWithApplication.appliedAmount ?? 0) !== 30 || Number(creditWithApplication.applicationCount ?? 0) !== 1) {
+    fail("Supplier credit note application was not registered with the expected amount.");
+  }
+
+  const creditApplicationRuntime = await findCatalogRecord("supplier-adjustment-applications", creditNote.adjustmentNumber, session);
+  if (!creditApplicationRuntime || Number(creditApplicationRuntime.appliedAmount ?? 0) !== 30) {
+    fail("Supplier credit note application was not visible in runtime metadata.");
+  }
+
+  smokeStep("supplier credit note post");
+  const postedCreditNote = await postSupplierAdjustment(creditNote.id, session);
+  if (postedCreditNote.status !== "POSTED" || !postedCreditNote.postedAt) {
+    fail("Supplier credit note did not post successfully.");
+  }
+
+  const creditPostedSnapshot = await getAccountsPayableDocumentSnapshot(session, creditDocument.id);
+  if (
+    Number(creditPostedSnapshot.remainingAmount ?? 0) !== 70 ||
+    Number(creditPostedSnapshot.paidAmount ?? 0) !== 30 ||
+    creditPostedSnapshot.status !== "PARTIALLY_PAID"
+  ) {
+    fail("Supplier credit note did not reduce AP balance or status correctly.");
+  }
+
+  const creditRuntime = await findCatalogRecord("supplier-adjustments", creditNote.adjustmentNumber, session);
+  if (!creditRuntime || creditRuntime.status !== "POSTED") {
+    fail("Posted supplier credit note was not visible in runtime metadata.");
+  }
+
+  smokeStep("supplier credit note repost rejected");
+  await expectSupplierAdjustmentPostFailure(creditNote.id, session);
+  const creditRetrySnapshot = await getAccountsPayableDocumentSnapshot(session, creditDocument.id);
+  if (Number(creditRetrySnapshot.paidAmount ?? 0) !== 30 || Number(creditRetrySnapshot.remainingAmount ?? 0) !== 70) {
+    fail("Retrying supplier credit note post reduced the AP balance a second time.");
+  }
+
+  smokeStep("supplier debit note draft");
+  const beforeDebitDocuments = await countGeneratedDebitNoteDocuments(session, creditNote.id);
+  const debitNote = await createSupplierAdjustment(
+    {
+      supplierId: creditDocument.supplierId,
+      adjustmentType: "DEBIT_NOTE",
+      amount: 25,
+      reference: `DN-${smokeRun}`,
+      notes: "Nota de debito smoke local"
+    },
+    session
+  );
+
+  if (debitNote.status !== "DRAFT" || debitNote.adjustmentType !== "DEBIT_NOTE" || Number(debitNote.amount ?? 0) !== 25) {
+    fail("Supplier debit note was not created as DRAFT with the expected amount.");
+  }
+
+  const debitDraftDocumentCount = await countGeneratedDebitNoteDocuments(session, debitNote.id);
+  if (debitDraftDocumentCount !== 0 || beforeDebitDocuments !== 0) {
+    fail("Creating a supplier debit note DRAFT generated AP documents.");
+  }
+
+  smokeStep("supplier debit note post");
+  const postedDebitNote = await postSupplierAdjustment(debitNote.id, session);
+  if (
+    postedDebitNote.status !== "POSTED" ||
+    !postedDebitNote.generatedAccountsPayableDocumentId ||
+    !postedDebitNote.generatedDocumentNumber
+  ) {
+    fail("Supplier debit note did not post with a generated AP document.");
+  }
+
+  const generatedDebitSnapshot = await getAccountsPayableDocumentSnapshot(
+    session,
+    postedDebitNote.generatedAccountsPayableDocumentId
+  );
+  if (
+    Number(generatedDebitSnapshot.totalAmount ?? 0) !== 25 ||
+    Number(generatedDebitSnapshot.paidAmount ?? 0) !== 0 ||
+    Number(generatedDebitSnapshot.remainingAmount ?? 0) !== 25 ||
+    generatedDebitSnapshot.status !== "OPEN"
+  ) {
+    fail("Supplier debit note generated AP document with incorrect amount or status.");
+  }
+
+  smokeStep("supplier debit note repost rejected");
+  await expectSupplierAdjustmentPostFailure(debitNote.id, session);
+  const generatedDebitDocumentCount = await countGeneratedDebitNoteDocuments(session, debitNote.id);
+  if (generatedDebitDocumentCount !== 1) {
+    fail("Retrying supplier debit note post created duplicate AP documents.");
+  }
+}
+
 async function validateCrud(session) {
   const suffix = smokeRun;
   const customerCode = `QA-CUST-${suffix}`;
@@ -2598,10 +2818,12 @@ async function main() {
   await validatePurchaseOrderMetadata(session);
   await validatePurchaseReceiptMetadata(session);
   await validateSupplierPaymentMetadata(session);
+  await validateSupplierAdjustmentMetadata(session);
   await validatePurchaseOrderFlow(session);
   const postedReceipt = await validatePurchaseReceiptFlow(session);
   await validateSupplierInvoiceFlow(session, postedReceipt);
   await validateSupplierPaymentFlow(session);
+  await validateSupplierAdjustmentFlow(session);
   await validateCrud(session);
   console.log("smoke: local runtime validation OK");
 }
