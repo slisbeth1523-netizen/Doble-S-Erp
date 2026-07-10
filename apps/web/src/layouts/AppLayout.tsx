@@ -56,6 +56,7 @@ const navigation: NavigationItem[] = [
     children: [
       { label: "Documentos", path: "/accounts-payable/documents" },
       { label: "Pagos", path: "/accounts-payable/payments" },
+      { label: "Notas proveedor", path: "/accounts-payable/supplier-adjustments" },
       { label: "Consulta pagos", path: "/master-data/supplier-payments" }
     ]
   },
@@ -102,7 +103,9 @@ function breadcrumb(path: string) {
     if (
       segments[1] === "accounts-payable-documents" ||
       segments[1] === "supplier-payments" ||
-      segments[1] === "supplier-payment-applications"
+      segments[1] === "supplier-payment-applications" ||
+      segments[1] === "supplier-adjustments" ||
+      segments[1] === "supplier-adjustment-applications"
     ) {
       return ["Doble S ERP", "Cuentas por pagar", getCatalogLabel(segments[1] ?? "")];
     }
@@ -144,6 +147,10 @@ function breadcrumb(path: string) {
 
   if (segments[0] === "accounts-payable" && segments[1] === "payments") {
     return ["Doble S ERP", "Cuentas por pagar", "Pagos"];
+  }
+
+  if (segments[0] === "accounts-payable" && segments[1] === "supplier-adjustments") {
+    return ["Doble S ERP", "Cuentas por pagar", "Notas proveedor"];
   }
 
   const labels: Record<string, string> = {

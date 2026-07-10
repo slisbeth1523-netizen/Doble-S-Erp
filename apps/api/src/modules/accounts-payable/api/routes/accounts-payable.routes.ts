@@ -7,7 +7,14 @@ import { requirePermission } from "../../../security/api/permission.middleware.j
 import { getRequestContext } from "../../../../utils/requestContext.js";
 import { sendSuccess } from "../../../../utils/responseBuilder.js";
 import { validateRequest } from "../../../../utils/validateRequest.js";
+import { supplierAdjustmentService } from "../../application/SupplierAdjustmentService.js";
 import { supplierPaymentService } from "../../application/SupplierPaymentService.js";
+import {
+  supplierAdjustmentApplicationCreateSchema,
+  supplierAdjustmentCreateSchema,
+  supplierAdjustmentIdParamsSchema,
+  supplierAdjustmentListQuerySchema
+} from "../../validators/supplier-adjustment.validators.js";
 import {
   supplierPaymentApplicationCreateSchema,
   supplierPaymentCreateSchema,
@@ -30,6 +37,77 @@ function accountsPayableContext(request: Parameters<typeof getRequestContext>[0]
     correlationId: context.correlationId
   };
 }
+
+accountsPayableRouter.get(
+  "/adjustments",
+  validateRequest({ query: supplierAdjustmentListQuerySchema }),
+  requirePermission("purchasing", "ap.adjustments.read"),
+  asyncHandler(async (request, response) => {
+    const result = await supplierAdjustmentService.listSupplierAdjustments(
+      accountsPayableContext(request),
+      request.query
+    );
+
+    sendSuccess(response, result);
+  })
+);
+
+accountsPayableRouter.get(
+  "/adjustments/:id",
+  validateRequest({ params: supplierAdjustmentIdParamsSchema }),
+  requirePermission("purchasing", "ap.adjustments.read"),
+  asyncHandler(async (request, response) => {
+    const result = await supplierAdjustmentService.getSupplierAdjustment(
+      accountsPayableContext(request),
+      request.params.id!
+    );
+
+    sendSuccess(response, result);
+  })
+);
+
+accountsPayableRouter.post(
+  "/adjustments",
+  validateRequest({ body: supplierAdjustmentCreateSchema }),
+  requirePermission("purchasing", "ap.adjustments.create"),
+  asyncHandler(async (request, response) => {
+    const result = await supplierAdjustmentService.createSupplierAdjustment(
+      accountsPayableContext(request),
+      request.body
+    );
+
+    sendSuccess(response, result, 201);
+  })
+);
+
+accountsPayableRouter.post(
+  "/adjustments/:id/applications",
+  validateRequest({ params: supplierAdjustmentIdParamsSchema, body: supplierAdjustmentApplicationCreateSchema }),
+  requirePermission("purchasing", "ap.adjustments.update"),
+  asyncHandler(async (request, response) => {
+    const result = await supplierAdjustmentService.addApplication(
+      accountsPayableContext(request),
+      request.params.id!,
+      request.body
+    );
+
+    sendSuccess(response, result, 201);
+  })
+);
+
+accountsPayableRouter.post(
+  "/adjustments/:id/post",
+  validateRequest({ params: supplierAdjustmentIdParamsSchema }),
+  requirePermission("purchasing", "ap.adjustments.post"),
+  asyncHandler(async (request, response) => {
+    const result = await supplierAdjustmentService.postSupplierAdjustment(
+      accountsPayableContext(request),
+      request.params.id!
+    );
+
+    sendSuccess(response, result);
+  })
+);
 
 accountsPayableRouter.get(
   "/payments",
