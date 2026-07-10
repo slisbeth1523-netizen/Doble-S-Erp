@@ -9,6 +9,7 @@ import { sendSuccess } from "../../../../utils/responseBuilder.js";
 import { validateRequest } from "../../../../utils/validateRequest.js";
 import { supplierAdjustmentService } from "../../application/SupplierAdjustmentService.js";
 import { supplierPaymentService } from "../../application/SupplierPaymentService.js";
+import { supplierStatementService } from "../../application/SupplierStatementService.js";
 import {
   supplierAdjustmentApplicationCreateSchema,
   supplierAdjustmentCreateSchema,
@@ -21,6 +22,11 @@ import {
   supplierPaymentIdParamsSchema,
   supplierPaymentListQuerySchema
 } from "../../validators/supplier-payment.validators.js";
+import {
+  supplierAgingQuerySchema,
+  supplierStatementParamsSchema,
+  supplierStatementQuerySchema
+} from "../../validators/supplier-statement.validators.js";
 
 export const accountsPayableRouter = Router();
 
@@ -37,6 +43,64 @@ function accountsPayableContext(request: Parameters<typeof getRequestContext>[0]
     correlationId: context.correlationId
   };
 }
+
+accountsPayableRouter.get(
+  "/statements",
+  validateRequest({ query: supplierStatementQuerySchema }),
+  requirePermission("purchasing", "ap.statements.read"),
+  asyncHandler(async (request, response) => {
+    const result = await supplierStatementService.listStatements(
+      accountsPayableContext(request),
+      request.query
+    );
+
+    sendSuccess(response, result);
+  })
+);
+
+accountsPayableRouter.get(
+  "/statements/:supplierId",
+  validateRequest({ params: supplierStatementParamsSchema, query: supplierStatementQuerySchema }),
+  requirePermission("purchasing", "ap.statements.read"),
+  asyncHandler(async (request, response) => {
+    const result = await supplierStatementService.getSupplierStatement(
+      accountsPayableContext(request),
+      request.params.supplierId!,
+      request.query
+    );
+
+    sendSuccess(response, result);
+  })
+);
+
+accountsPayableRouter.get(
+  "/aging",
+  validateRequest({ query: supplierAgingQuerySchema }),
+  requirePermission("purchasing", "ap.aging.read"),
+  asyncHandler(async (request, response) => {
+    const result = await supplierStatementService.listAging(
+      accountsPayableContext(request),
+      request.query
+    );
+
+    sendSuccess(response, result);
+  })
+);
+
+accountsPayableRouter.get(
+  "/aging/:supplierId",
+  validateRequest({ params: supplierStatementParamsSchema, query: supplierAgingQuerySchema }),
+  requirePermission("purchasing", "ap.aging.read"),
+  asyncHandler(async (request, response) => {
+    const result = await supplierStatementService.getSupplierAging(
+      accountsPayableContext(request),
+      request.params.supplierId!,
+      request.query
+    );
+
+    sendSuccess(response, result);
+  })
+);
 
 accountsPayableRouter.get(
   "/adjustments",
