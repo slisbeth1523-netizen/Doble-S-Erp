@@ -55,6 +55,8 @@ const navigation: NavigationItem[] = [
     path: "/accounts-payable/documents",
     children: [
       { label: "Documentos", path: "/accounts-payable/documents" },
+      { label: "Estado de cuenta", path: "/accounts-payable/statements" },
+      { label: "Antiguedad", path: "/accounts-payable/aging" },
       { label: "Pagos", path: "/accounts-payable/payments" },
       { label: "Notas proveedor", path: "/accounts-payable/supplier-adjustments" },
       { label: "Consulta pagos", path: "/master-data/supplier-payments" }
@@ -102,6 +104,8 @@ function breadcrumb(path: string) {
 
     if (
       segments[1] === "accounts-payable-documents" ||
+      segments[1] === "supplier-statements" ||
+      segments[1] === "supplier-aging" ||
       segments[1] === "supplier-payments" ||
       segments[1] === "supplier-payment-applications" ||
       segments[1] === "supplier-adjustments" ||
@@ -143,6 +147,14 @@ function breadcrumb(path: string) {
 
   if (segments[0] === "accounts-payable" && segments[1] === "documents") {
     return ["Doble S ERP", "Cuentas por pagar", "Documentos"];
+  }
+
+  if (segments[0] === "accounts-payable" && segments[1] === "statements") {
+    return ["Doble S ERP", "Cuentas por pagar", "Estado de cuenta"];
+  }
+
+  if (segments[0] === "accounts-payable" && segments[1] === "aging") {
+    return ["Doble S ERP", "Cuentas por pagar", "Antiguedad"];
   }
 
   if (segments[0] === "accounts-payable" && segments[1] === "payments") {

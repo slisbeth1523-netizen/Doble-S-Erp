@@ -20,6 +20,8 @@ export const catalogLabels: Record<string, string> = {
   "supplier-invoices": "Facturas de proveedores",
   "supplier-invoice-lines": "Líneas de facturas",
   "accounts-payable-documents": "Documentos de cuentas por pagar",
+  "supplier-statements": "Estado de cuenta proveedores",
+  "supplier-aging": "Antiguedad de proveedores",
   "supplier-payments": "Pagos a proveedores",
   "supplier-payment-applications": "Aplicaciones de pagos",
   "supplier-adjustments": "Notas de proveedor",

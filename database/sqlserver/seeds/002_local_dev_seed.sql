@@ -99,6 +99,8 @@ VALUES
   ('purchasing', 'purchasing.supplier-invoices.create', 'Local create supplier invoices'),
   ('purchasing', 'purchasing.supplier-invoices.post', 'Local post supplier invoices'),
   ('purchasing', 'ap.accounts-payable.read', 'Local read AP documents'),
+  ('purchasing', 'ap.statements.read', 'Local read supplier statements'),
+  ('purchasing', 'ap.aging.read', 'Local read supplier aging'),
   ('purchasing', 'ap.payments.read', 'Local read supplier payments'),
   ('purchasing', 'ap.payments.create', 'Local create supplier payments'),
   ('purchasing', 'ap.payments.update', 'Local update supplier payment applications'),

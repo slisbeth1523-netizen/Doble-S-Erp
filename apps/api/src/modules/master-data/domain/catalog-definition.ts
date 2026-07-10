@@ -104,6 +104,32 @@ const commonPermissions = (resource: string): CatalogPermissionSet => ({
   import: `${resource}.import`
 });
 
+function readOnlyField(
+  field: string,
+  dbColumn: string,
+  label: string,
+  type: CatalogFieldType,
+  displayOrder: number,
+  options: Partial<Pick<CatalogFieldDefinition, "searchable" | "sortable" | "visibleInGrid" | "grid">> = {}
+): CatalogFieldDefinition {
+  return {
+    field,
+    dbColumn,
+    label,
+    type,
+    required: false,
+    visibleInGrid: options.visibleInGrid ?? true,
+    visibleInForm: false,
+    searchable: options.searchable ?? false,
+    sortable: options.sortable ?? true,
+    editable: false,
+    readOnly: true,
+    displayOrder,
+    validation: { nullable: true },
+    ...(options.grid ? { grid: options.grid } : {})
+  };
+}
+
 const commonCatalogFields = (companyVisible: boolean): readonly CatalogFieldDefinition[] => [
   {
     field: "code",
@@ -3359,6 +3385,101 @@ const accountsPayableDocumentFields = [
   }
 ] as const satisfies readonly CatalogFieldDefinition[];
 
+const supplierStatementFields = [
+  readOnlyField("documentNumber", "DocumentNumber", "Documento CxP", "text", 10, {
+    searchable: true,
+    grid: { width: 160, align: "left" }
+  }),
+  readOnlyField("supplierId", "SupplierId", "Proveedor Id", "text", 15, { visibleInGrid: false }),
+  readOnlyField("supplierCode", "SupplierCode", "Proveedor", "text", 20, {
+    searchable: true,
+    grid: { width: 130, align: "left" }
+  }),
+  readOnlyField("supplierName", "SupplierName", "Nombre proveedor", "text", 30, {
+    searchable: true,
+    sortable: false,
+    grid: { width: 220, align: "left" }
+  }),
+  readOnlyField("sourceDocumentNumber", "SourceDocumentNumber", "Documento origen", "text", 40, {
+    searchable: true,
+    grid: { width: 170, align: "left" }
+  }),
+  readOnlyField("sourceType", "SourceType", "Tipo origen", "text", 50, {
+    searchable: true,
+    grid: { width: 140, align: "left" }
+  }),
+  readOnlyField("documentDate", "DocumentDate", "Fecha documento", "datetime", 60, {
+    grid: { width: 160, align: "left" }
+  }),
+  readOnlyField("dueDate", "DueDate", "Vence", "datetime", 70, {
+    grid: { width: 150, align: "left" }
+  }),
+  readOnlyField("status", "Status", "Estado", "text", 80, {
+    searchable: true,
+    grid: { width: 130, align: "left" }
+  }),
+  readOnlyField("totalAmount", "TotalAmount", "Total", "number", 90, {
+    grid: { width: 130, align: "right", format: "currency" }
+  }),
+  readOnlyField("paidAmount", "PaidAmount", "Pagado", "number", 100, {
+    grid: { width: 130, align: "right", format: "currency" }
+  }),
+  readOnlyField("remainingAmount", "RemainingAmount", "Saldo", "number", 110, {
+    grid: { width: 130, align: "right", format: "currency" }
+  }),
+  readOnlyField("daysPastDue", "DaysPastDue", "Dias vencidos", "number", 120, {
+    grid: { width: 120, align: "right" }
+  }),
+  readOnlyField("agingBucket", "AgingBucket", "Bucket", "text", 130, {
+    searchable: true,
+    grid: { width: 110, align: "left" }
+  }),
+  readOnlyField("createdAt", "CreatedAt", "Creado", "datetime", 140, { visibleInGrid: false })
+] satisfies readonly CatalogFieldDefinition[];
+
+const supplierAgingFields = [
+  readOnlyField("supplierId", "SupplierId", "Proveedor Id", "text", 5, { visibleInGrid: false }),
+  readOnlyField("supplierCode", "SupplierCode", "Proveedor", "text", 10, {
+    searchable: true,
+    grid: { width: 130, align: "left" }
+  }),
+  readOnlyField("supplierName", "SupplierName", "Nombre proveedor", "text", 20, {
+    searchable: true,
+    sortable: false,
+    grid: { width: 240, align: "left" }
+  }),
+  readOnlyField("currentAmount", "CurrentAmount", "CURRENT", "number", 30, {
+    grid: { width: 130, align: "right", format: "currency" }
+  }),
+  readOnlyField("days1To30Amount", "Days1To30Amount", "1-30", "number", 40, {
+    grid: { width: 130, align: "right", format: "currency" }
+  }),
+  readOnlyField("days31To60Amount", "Days31To60Amount", "31-60", "number", 50, {
+    grid: { width: 130, align: "right", format: "currency" }
+  }),
+  readOnlyField("days61To90Amount", "Days61To90Amount", "61-90", "number", 60, {
+    grid: { width: 130, align: "right", format: "currency" }
+  }),
+  readOnlyField("daysOver90Amount", "DaysOver90Amount", "90+", "number", 70, {
+    grid: { width: 130, align: "right", format: "currency" }
+  }),
+  readOnlyField("totalOpenAmount", "TotalOpenAmount", "Total abierto", "number", 80, {
+    grid: { width: 140, align: "right", format: "currency" }
+  }),
+  readOnlyField("overdueAmount", "OverdueAmount", "Vencido", "number", 90, {
+    grid: { width: 130, align: "right", format: "currency" }
+  }),
+  readOnlyField("notDueAmount", "NotDueAmount", "Por vencer", "number", 100, {
+    grid: { width: 130, align: "right", format: "currency" }
+  }),
+  readOnlyField("openDocumentCount", "OpenDocumentCount", "Docs abiertos", "number", 110, {
+    grid: { width: 120, align: "right" }
+  }),
+  readOnlyField("overdueDocumentCount", "OverdueDocumentCount", "Docs vencidos", "number", 120, {
+    grid: { width: 120, align: "right" }
+  })
+] satisfies readonly CatalogFieldDefinition[];
+
 const supplierPaymentFields = [
   {
     field: "paymentNumber",
@@ -5284,6 +5405,103 @@ export const catalogDefinitions = {
       updatedBy: "UpdatedBy"
     },
     fields: accountsPayableDocumentFields
+  },
+  "supplier-statements": {
+    catalogCode: "supplier-statements",
+    displayName: "Estado de cuenta proveedores",
+    tableName: "ap.V_SupplierStatementDetail",
+    idColumn: "AccountsPayableDocumentId",
+    codeColumn: "DocumentNumber",
+    nameColumn: "SupplierName",
+    descriptionColumn: "SourceDocumentNumber",
+    allowedSearchColumns: [
+      "DocumentNumber",
+      "SourceDocumentNumber",
+      "SourceType",
+      "SupplierCode",
+      "SupplierName",
+      "Status",
+      "AgingBucket"
+    ],
+    allowedSortColumns: [
+      "DocumentNumber",
+      "SupplierCode",
+      "SupplierName",
+      "SourceType",
+      "DocumentDate",
+      "DueDate",
+      "Status",
+      "TotalAmount",
+      "PaidAmount",
+      "RemainingAmount",
+      "DaysPastDue",
+      "AgingBucket",
+      "CreatedAt"
+    ],
+    defaultSortBy: "DocumentDate",
+    permissions: commonPermissions("ap.statements"),
+    moduleCode: "purchasing",
+    tenantScoped: true,
+    companyScoped: true,
+    readOnly: true,
+    columns: {
+      id: "AccountsPayableDocumentId",
+      tenantId: "TenantId",
+      companyId: "CompanyId",
+      code: "DocumentNumber",
+      name: "SupplierName",
+      description: "SourceDocumentNumber",
+      isActive: "IsActive",
+      createdAt: "CreatedAt",
+      updatedAt: "UpdatedAt",
+      createdBy: "CreatedBy",
+      updatedBy: "UpdatedBy"
+    },
+    fields: supplierStatementFields
+  },
+  "supplier-aging": {
+    catalogCode: "supplier-aging",
+    displayName: "Antiguedad de proveedores",
+    tableName: "ap.V_SupplierAgingSummary",
+    idColumn: "SupplierId",
+    codeColumn: "SupplierCode",
+    nameColumn: "SupplierName",
+    descriptionColumn: "SupplierName",
+    allowedSearchColumns: ["SupplierCode", "SupplierName"],
+    allowedSortColumns: [
+      "SupplierCode",
+      "SupplierName",
+      "CurrentAmount",
+      "Days1To30Amount",
+      "Days31To60Amount",
+      "Days61To90Amount",
+      "DaysOver90Amount",
+      "TotalOpenAmount",
+      "OverdueAmount",
+      "NotDueAmount",
+      "OpenDocumentCount",
+      "OverdueDocumentCount"
+    ],
+    defaultSortBy: "SupplierName",
+    permissions: commonPermissions("ap.aging"),
+    moduleCode: "purchasing",
+    tenantScoped: true,
+    companyScoped: true,
+    readOnly: true,
+    columns: {
+      id: "SupplierId",
+      tenantId: "TenantId",
+      companyId: "CompanyId",
+      code: "SupplierCode",
+      name: "SupplierName",
+      description: "SupplierName",
+      isActive: "IsActive",
+      createdAt: "CreatedAt",
+      updatedAt: "UpdatedAt",
+      createdBy: "CreatedBy",
+      updatedBy: "UpdatedBy"
+    },
+    fields: supplierAgingFields
   },
   "supplier-payments": {
     catalogCode: "supplier-payments",

@@ -342,6 +342,24 @@ async function expectSupplierAdjustmentPostFailure(supplierAdjustmentId, session
   return result.body;
 }
 
+async function getSupplierStatements(query, session) {
+  const params = new URLSearchParams(query);
+  const body = await expectOk(`/accounts-payable/statements?${params.toString()}`, {
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
+async function getSupplierAging(query, session) {
+  const params = new URLSearchParams(query);
+  const body = await expectOk(`/accounts-payable/aging?${params.toString()}`, {
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
 async function expectSupplierInvoiceCompleteFailure(supplierInvoiceId, session) {
   const result = await request(`/purchasing/supplier-invoices/${supplierInvoiceId}/complete`, {
     method: "POST",
@@ -954,6 +972,192 @@ async function countGeneratedDebitNoteDocuments(session, sourceDocumentId) {
       `);
 
     return Number(result.recordset[0]?.DocumentCount ?? 0);
+  } finally {
+    await pool.close();
+  }
+}
+
+async function countFinanceSideEffects(session) {
+  if (!session.user.companyId) {
+    fail("Cannot count finance side effects without company context.");
+  }
+
+  const pool = await sql.connect(getSqlConfig());
+
+  try {
+    const result = await pool
+      .request()
+      .input("TenantId", sql.UniqueIdentifier, session.user.tenantId)
+      .input("CompanyId", sql.UniqueIdentifier, session.user.companyId)
+      .query(`
+        SELECT
+          (SELECT COUNT(1) FROM ap.AccountsPayableDocuments WHERE TenantId = @TenantId AND CompanyId = @CompanyId) AS AccountsPayableDocumentCount,
+          (SELECT COUNT(1) FROM ap.SupplierPayments WHERE TenantId = @TenantId AND CompanyId = @CompanyId) AS SupplierPaymentCount,
+          (SELECT COUNT(1) FROM ap.SupplierAdjustments WHERE TenantId = @TenantId AND CompanyId = @CompanyId) AS SupplierAdjustmentCount,
+          (SELECT COUNT(1) FROM inventory.InventoryMovements WHERE TenantId = @TenantId AND CompanyId = @CompanyId) AS InventoryMovementCount;
+      `);
+
+    const row = result.recordset[0];
+    return {
+      accountsPayableDocumentCount: Number(row?.AccountsPayableDocumentCount ?? 0),
+      supplierPaymentCount: Number(row?.SupplierPaymentCount ?? 0),
+      supplierAdjustmentCount: Number(row?.SupplierAdjustmentCount ?? 0),
+      inventoryMovementCount: Number(row?.InventoryMovementCount ?? 0)
+    };
+  } finally {
+    await pool.close();
+  }
+}
+
+async function createSupplierAgingSmokeDocuments(session) {
+  if (!session.user.companyId) {
+    fail("Cannot create AP aging smoke documents without company context.");
+  }
+
+  const pool = await sql.connect(getSqlConfig());
+  const prefix = `CXP-AGING-QA-${smokeRun}`;
+  const supplierCode = `SUP-AGING-${smokeRun}`;
+
+  try {
+    const result = await pool
+      .request()
+      .input("TenantId", sql.UniqueIdentifier, session.user.tenantId)
+      .input("CompanyId", sql.UniqueIdentifier, session.user.companyId)
+      .input("UserId", sql.UniqueIdentifier, session.user.userId ?? null)
+      .input("Prefix", sql.NVarChar(80), prefix)
+      .input("SupplierCode", sql.NVarChar(40), supplierCode)
+      .query(`
+        DECLARE @SupplierId UNIQUEIDENTIFIER;
+
+        SELECT @SupplierId = SupplierId
+        FROM purchasing.Suppliers
+        WHERE TenantId = @TenantId
+          AND CompanyId = @CompanyId
+          AND Code = @SupplierCode;
+
+        IF @SupplierId IS NULL
+        BEGIN
+          SET @SupplierId = NEWID();
+
+          INSERT INTO purchasing.Suppliers (
+            SupplierId,
+            TenantId,
+            CompanyId,
+            Code,
+            Name,
+            CommercialName,
+            DocumentType,
+            DocumentNumber,
+            Email,
+            Phone,
+            City,
+            Province,
+            CountryCode,
+            PaymentTermId,
+            CurrencyId,
+            TaxCategoryId,
+            IsTaxWithholder,
+            IsForeignSupplier,
+            ContactName,
+            ContactEmail,
+            ContactPhone,
+            Notes,
+            IsActive,
+            CreatedBy
+          )
+          VALUES (
+            @SupplierId,
+            @TenantId,
+            @CompanyId,
+            @SupplierCode,
+            CONCAT('Proveedor Aging ', @SupplierCode),
+            CONCAT('Proveedor Aging ', @SupplierCode),
+            'RNC',
+            RIGHT(REPLACE(CONVERT(NVARCHAR(36), @SupplierId), '-', ''), 9),
+            CONCAT(LOWER(@SupplierCode), '@dobles.local'),
+            '809-000-0099',
+            'Santo Domingo',
+            'Distrito Nacional',
+            'DOM',
+            '77777777-7777-7777-7777-777777777777',
+            '55555555-5555-5555-5555-555555555555',
+            '88888888-8888-8888-8888-888888888888',
+            0,
+            0,
+            'Smoke Aging',
+            CONCAT(LOWER(@SupplierCode), '@dobles.local'),
+            '809-000-0099',
+            'Proveedor creado por smoke local para AP aging',
+            1,
+            @UserId
+          );
+        END;
+
+        DECLARE @Documents TABLE (
+          DocumentNumber NVARCHAR(80),
+          DueDate DATE,
+          TotalAmount DECIMAL(18, 6),
+          PaidAmount DECIMAL(18, 6),
+          Status NVARCHAR(20)
+        );
+
+        INSERT INTO @Documents (DocumentNumber, DueDate, TotalAmount, PaidAmount, Status)
+        VALUES
+          (CONCAT(@Prefix, '-CURRENT'), '2026-07-20', 10, 0, 'OPEN'),
+          (CONCAT(@Prefix, '-1-30'), '2026-06-30', 20, 0, 'OPEN'),
+          (CONCAT(@Prefix, '-31-60'), '2026-05-31', 30, 0, 'OPEN'),
+          (CONCAT(@Prefix, '-61-90'), '2026-04-30', 40, 0, 'OPEN'),
+          (CONCAT(@Prefix, '-90PLUS'), '2026-03-31', 50, 0, 'OPEN'),
+          (CONCAT(@Prefix, '-PAID'), '2026-03-01', 60, 60, 'PAID');
+
+        INSERT INTO ap.AccountsPayableDocuments (
+          AccountsPayableDocumentId,
+          TenantId,
+          CompanyId,
+          DocumentNumber,
+          SupplierId,
+          SourceModule,
+          SourceDocumentId,
+          SourceDocumentNumber,
+          DocumentDate,
+          DueDate,
+          TotalAmount,
+          PaidAmount,
+          Status,
+          Notes,
+          IsActive,
+          CreatedBy
+        )
+        SELECT
+          NEWID(),
+          @TenantId,
+          @CompanyId,
+          source.DocumentNumber,
+          @SupplierId,
+          'SMOKE_AGING',
+          NEWID(),
+          source.DocumentNumber,
+          '2026-01-01',
+          source.DueDate,
+          source.TotalAmount,
+          source.PaidAmount,
+          source.Status,
+          'Documento CxP creado por smoke local para AP aging',
+          1,
+          @UserId
+        FROM @Documents source
+        WHERE NOT EXISTS (
+          SELECT 1
+          FROM ap.AccountsPayableDocuments existing
+          WHERE existing.TenantId = @TenantId
+            AND existing.CompanyId = @CompanyId
+            AND existing.DocumentNumber = source.DocumentNumber
+        );
+
+        SELECT @SupplierId AS supplierId;
+      `);
+
+    return { supplierId: String(result.recordset[0].supplierId).toLowerCase(), prefix, asOfDate: "2026-07-10" };
   } finally {
     await pool.close();
   }
@@ -1972,6 +2176,30 @@ async function validateSupplierAdjustmentMetadata(session) {
   }
 }
 
+async function validateSupplierStatementMetadata(session) {
+  for (const catalog of ["supplier-statements", "supplier-aging"]) {
+    smokeStep(`metadata ${catalog}`);
+    const metadata = await expectOk(`/master-data/${catalog}/metadata`, {
+      headers: authHeaders(session)
+    });
+
+    if (metadata.data?.catalog?.readOnly !== true) {
+      fail(`${catalog} metadata must be read-only.`);
+    }
+
+    const fields = metadata.data.fields.map((field) => field.field);
+    const expectedFields =
+      catalog === "supplier-statements"
+        ? ["documentNumber", "supplierCode", "supplierName", "remainingAmount", "daysPastDue", "agingBucket"]
+        : ["supplierCode", "supplierName", "currentAmount", "days1To30Amount", "totalOpenAmount", "overdueAmount"];
+    const missingFields = expectedFields.filter((field) => !fields.includes(field));
+
+    if (missingFields.length) {
+      fail(`${catalog} metadata is missing fields: ${missingFields.join(", ")}.`);
+    }
+  }
+}
+
 async function validatePurchaseOrderFlow(session) {
   const references = await getDemoPurchaseReferences(session);
   const initialStock = await getStockSnapshot(session, "ART-DEMO", "ALM-PRINCIPAL");
@@ -2600,6 +2828,99 @@ async function validateSupplierAdjustmentFlow(session) {
   }
 }
 
+async function validateSupplierStatementAndAgingFlow(session) {
+  smokeStep("supplier statements aging AP document setup");
+  const setup = await createSupplierAgingSmokeDocuments(session);
+  const sideEffectsBefore = await countFinanceSideEffects(session);
+
+  smokeStep("supplier aging fixed as-of date");
+  const aging = await getSupplierAging(
+    {
+      supplierId: setup.supplierId,
+      asOfDate: setup.asOfDate,
+      pageSize: "20"
+    },
+    session
+  );
+
+  const agingRecord = aging.records.find((record) => String(record.supplierId).toLowerCase() === String(setup.supplierId).toLowerCase());
+  if (!agingRecord) {
+    fail("Supplier aging did not return the smoke supplier.");
+  }
+
+  const expectedBuckets = {
+    currentAmount: 10,
+    days1To30Amount: 20,
+    days31To60Amount: 30,
+    days61To90Amount: 40,
+    daysOver90Amount: 50,
+    totalOpenAmount: 150,
+    overdueAmount: 140,
+    notDueAmount: 10,
+    openDocumentCount: 5,
+    overdueDocumentCount: 4
+  };
+
+  for (const [field, expectedValue] of Object.entries(expectedBuckets)) {
+    const actualValue = Number(agingRecord[field] ?? 0);
+    if (Math.abs(actualValue - expectedValue) > 0.01) {
+      fail(`Supplier aging ${field} expected ${expectedValue} but got ${actualValue}.`);
+    }
+  }
+
+  const bucketSum =
+    Number(agingRecord.currentAmount ?? 0) +
+    Number(agingRecord.days1To30Amount ?? 0) +
+    Number(agingRecord.days31To60Amount ?? 0) +
+    Number(agingRecord.days61To90Amount ?? 0) +
+    Number(agingRecord.daysOver90Amount ?? 0);
+
+  if (Math.abs(bucketSum - Number(agingRecord.totalOpenAmount ?? 0)) > 0.01) {
+    fail("Supplier aging bucket sum does not match totalOpenAmount.");
+  }
+
+  smokeStep("supplier statement fixed as-of date");
+  const statement = await getSupplierStatements(
+    {
+      supplierId: setup.supplierId,
+      asOfDate: setup.asOfDate,
+      search: setup.prefix,
+      pageSize: "20"
+    },
+    session
+  );
+
+  const bucketsByDocument = new Map(statement.records.map((record) => [record.documentNumber, record.agingBucket]));
+  const expectedDocumentBuckets = {
+    [`${setup.prefix}-CURRENT`]: "CURRENT",
+    [`${setup.prefix}-1-30`]: "1-30",
+    [`${setup.prefix}-31-60`]: "31-60",
+    [`${setup.prefix}-61-90`]: "61-90",
+    [`${setup.prefix}-90PLUS`]: "90+",
+    [`${setup.prefix}-PAID`]: "90+"
+  };
+
+  for (const [documentNumber, expectedBucket] of Object.entries(expectedDocumentBuckets)) {
+    if (bucketsByDocument.get(documentNumber) !== expectedBucket) {
+      fail(`Statement document ${documentNumber} expected bucket ${expectedBucket}.`);
+    }
+  }
+
+  const paidDocument = statement.records.find((record) => record.documentNumber === `${setup.prefix}-PAID`);
+  if (!paidDocument || paidDocument.status !== "PAID" || Number(paidDocument.remainingAmount ?? 0) !== 0) {
+    fail("Supplier statement must include the paid detail with zero remaining balance.");
+  }
+
+  if (Math.abs(Number(statement.summary.remainingAmount ?? 0) - 150) > 0.01) {
+    fail("Supplier statement remaining summary must match open balances only because PAID has zero balance.");
+  }
+
+  const sideEffectsAfter = await countFinanceSideEffects(session);
+  if (JSON.stringify(sideEffectsAfter) !== JSON.stringify(sideEffectsBefore)) {
+    fail("Supplier statement and aging queries changed financial side-effect counts.");
+  }
+}
+
 async function validateCrud(session) {
   const suffix = smokeRun;
   const customerCode = `QA-CUST-${suffix}`;
@@ -2819,11 +3140,13 @@ async function main() {
   await validatePurchaseReceiptMetadata(session);
   await validateSupplierPaymentMetadata(session);
   await validateSupplierAdjustmentMetadata(session);
+  await validateSupplierStatementMetadata(session);
   await validatePurchaseOrderFlow(session);
   const postedReceipt = await validatePurchaseReceiptFlow(session);
   await validateSupplierInvoiceFlow(session, postedReceipt);
   await validateSupplierPaymentFlow(session);
   await validateSupplierAdjustmentFlow(session);
+  await validateSupplierStatementAndAgingFlow(session);
   await validateCrud(session);
   console.log("smoke: local runtime validation OK");
 }
