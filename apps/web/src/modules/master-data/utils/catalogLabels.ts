@@ -19,7 +19,9 @@ export const catalogLabels: Record<string, string> = {
   "tax-categories": "Categorías fiscales",
   "supplier-invoices": "Facturas de proveedores",
   "supplier-invoice-lines": "Líneas de facturas",
-  "accounts-payable-documents": "Documentos de cuentas por pagar"
+  "accounts-payable-documents": "Documentos de cuentas por pagar",
+  "supplier-payments": "Pagos a proveedores",
+  "supplier-payment-applications": "Aplicaciones de pagos"
 };
 
 export function getCatalogLabel(catalog: string) {
