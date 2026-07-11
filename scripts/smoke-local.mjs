@@ -360,6 +360,34 @@ async function getSupplierAging(query, session) {
   return body.data;
 }
 
+async function createAccountsReceivableDocument(payload, session) {
+  const body = await expectOk("/accounts-receivable/documents", {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function getAccountsReceivableDocuments(query, session) {
+  const params = new URLSearchParams(query);
+  const body = await expectOk(`/accounts-receivable/documents?${params.toString()}`, {
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
+async function getCustomerReceivableBalances(query, session) {
+  const params = new URLSearchParams(query);
+  const body = await expectOk(`/accounts-receivable/customer-balances?${params.toString()}`, {
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
 async function expectSupplierInvoiceCompleteFailure(supplierInvoiceId, session) {
   const result = await request(`/purchasing/supplier-invoices/${supplierInvoiceId}/complete`, {
     method: "POST",
@@ -1004,6 +1032,70 @@ async function countFinanceSideEffects(session) {
       supplierAdjustmentCount: Number(row?.SupplierAdjustmentCount ?? 0),
       inventoryMovementCount: Number(row?.InventoryMovementCount ?? 0)
     };
+  } finally {
+    await pool.close();
+  }
+}
+
+async function getDemoCustomerReferences(session) {
+  if (!session.user.companyId) {
+    fail("Cannot resolve demo customer without company context.");
+  }
+
+  const pool = await sql.connect(getSqlConfig());
+
+  try {
+    const result = await pool
+      .request()
+      .input("TenantId", sql.UniqueIdentifier, session.user.tenantId)
+      .input("CompanyId", sql.UniqueIdentifier, session.user.companyId)
+      .query(`
+        SELECT TOP (1)
+          CustomerId AS customerId,
+          Code AS customerCode,
+          Name AS customerName
+        FROM crm.Customers
+        WHERE TenantId = @TenantId
+          AND CompanyId = @CompanyId
+          AND Code = 'CLI-DEMO'
+          AND IsActive = 1;
+      `);
+
+    const row = result.recordset[0];
+    if (!row) {
+      fail("Demo customer CLI-DEMO was not found.");
+    }
+
+    return {
+      customerId: String(row.customerId).toLowerCase(),
+      customerCode: row.customerCode,
+      customerName: row.customerName
+    };
+  } finally {
+    await pool.close();
+  }
+}
+
+async function countAccountsReceivableDocuments(session) {
+  if (!session.user.companyId) {
+    fail("Cannot count AR documents without company context.");
+  }
+
+  const pool = await sql.connect(getSqlConfig());
+
+  try {
+    const result = await pool
+      .request()
+      .input("TenantId", sql.UniqueIdentifier, session.user.tenantId)
+      .input("CompanyId", sql.UniqueIdentifier, session.user.companyId)
+      .query(`
+        SELECT COUNT(1) AS DocumentCount
+        FROM ar.AccountsReceivableDocuments
+        WHERE TenantId = @TenantId
+          AND CompanyId = @CompanyId;
+      `);
+
+    return Number(result.recordset[0]?.DocumentCount ?? 0);
   } finally {
     await pool.close();
   }
@@ -2200,6 +2292,30 @@ async function validateSupplierStatementMetadata(session) {
   }
 }
 
+async function validateAccountsReceivableMetadata(session) {
+  for (const catalog of ["accounts-receivable-documents", "customer-receivable-balances"]) {
+    smokeStep(`metadata ${catalog}`);
+    const metadata = await expectOk(`/master-data/${catalog}/metadata`, {
+      headers: authHeaders(session)
+    });
+
+    if (metadata.data?.catalog?.readOnly !== true) {
+      fail(`${catalog} metadata must be read-only.`);
+    }
+
+    const fields = metadata.data.fields.map((field) => field.field);
+    const expectedFields =
+      catalog === "accounts-receivable-documents"
+        ? ["documentNumber", "customerCode", "customerName", "status", "totalAmount", "remainingAmount"]
+        : ["customerCode", "customerName", "totalOpenAmount", "currentAmount", "overdueAmount", "openDocumentCount"];
+    const missingFields = expectedFields.filter((field) => !fields.includes(field));
+
+    if (missingFields.length) {
+      fail(`${catalog} metadata is missing fields: ${missingFields.join(", ")}.`);
+    }
+  }
+}
+
 async function validatePurchaseOrderFlow(session) {
   const references = await getDemoPurchaseReferences(session);
   const initialStock = await getStockSnapshot(session, "ART-DEMO", "ALM-PRINCIPAL");
@@ -2921,6 +3037,87 @@ async function validateSupplierStatementAndAgingFlow(session) {
   }
 }
 
+async function validateAccountsReceivableFlow(session) {
+  smokeStep("accounts receivable manual document create");
+  const customer = await getDemoCustomerReferences(session);
+  const arDocumentCountBefore = await countAccountsReceivableDocuments(session);
+  const sideEffectsBefore = await countFinanceSideEffects(session);
+  const documentDate = new Date().toISOString().slice(0, 10);
+  const dueDate = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+  const document = await createAccountsReceivableDocument(
+    {
+      customerId: customer.customerId,
+      sourceType: "MANUAL",
+      documentDate,
+      dueDate,
+      currencyCode: "DOP",
+      exchangeRate: 1,
+      totalAmount: 100,
+      reference: `AR-${smokeRun}`,
+      notes: "Documento CxC smoke local"
+    },
+    session
+  );
+
+  if (
+    document.status !== "OPEN" ||
+    Number(document.totalAmount ?? 0) !== 100 ||
+    Number(document.paidAmount ?? 0) !== 0 ||
+    Number(document.remainingAmount ?? 0) !== 100
+  ) {
+    fail("Accounts receivable document was not created OPEN with the expected balance.");
+  }
+
+  const arDocumentCountAfter = await countAccountsReceivableDocuments(session);
+  if (arDocumentCountAfter !== arDocumentCountBefore + 1) {
+    fail("Accounts receivable document count did not increase by one.");
+  }
+
+  smokeStep("accounts receivable document query");
+  const documents = await getAccountsReceivableDocuments(
+    { search: document.documentNumber, page: "1", pageSize: "10" },
+    session
+  );
+  const listedDocument = documents.records.find((record) => record.id === document.id);
+  if (!listedDocument || listedDocument.documentNumber !== document.documentNumber) {
+    fail("Created accounts receivable document was not returned by the document endpoint.");
+  }
+
+  smokeStep("accounts receivable customer balance query");
+  const balances = await getCustomerReceivableBalances(
+    { customerId: customer.customerId, page: "1", pageSize: "10" },
+    session
+  );
+  const balance = balances.records.find((record) => String(record.customerId).toLowerCase() === customer.customerId);
+  if (!balance || Number(balance.totalOpenAmount ?? 0) < 100 || Number(balance.openDocumentCount ?? 0) < 1) {
+    fail("Customer receivable balance did not include the created document.");
+  }
+
+  const balanceDetail = await expectOk(`/accounts-receivable/customer-balances/${customer.customerId}`, {
+    headers: authHeaders(session)
+  });
+  if (String(balanceDetail.data?.customerId).toLowerCase() !== customer.customerId) {
+    fail("Customer receivable balance detail did not return the expected customer.");
+  }
+
+  smokeStep("accounts receivable tenant company isolation");
+  const isolated = await request(`/accounts-receivable/documents/${document.id}`, {
+    headers: {
+      ...authHeaders(session),
+      "x-company-id": "99999999-9999-9999-9999-999999999999"
+    }
+  });
+  if (isolated.response.ok || isolated.body?.success !== false) {
+    fail("Accounts receivable document must not be visible from another company context.");
+  }
+
+  const sideEffectsAfter = await countFinanceSideEffects(session);
+  if (JSON.stringify(sideEffectsAfter) !== JSON.stringify(sideEffectsBefore)) {
+    fail("Creating an accounts receivable document changed AP, payment, adjustment, or inventory counts.");
+  }
+}
+
 async function validateCrud(session) {
   const suffix = smokeRun;
   const customerCode = `QA-CUST-${suffix}`;
@@ -3141,12 +3338,14 @@ async function main() {
   await validateSupplierPaymentMetadata(session);
   await validateSupplierAdjustmentMetadata(session);
   await validateSupplierStatementMetadata(session);
+  await validateAccountsReceivableMetadata(session);
   await validatePurchaseOrderFlow(session);
   const postedReceipt = await validatePurchaseReceiptFlow(session);
   await validateSupplierInvoiceFlow(session, postedReceipt);
   await validateSupplierPaymentFlow(session);
   await validateSupplierAdjustmentFlow(session);
   await validateSupplierStatementAndAgingFlow(session);
+  await validateAccountsReceivableFlow(session);
   await validateCrud(session);
   console.log("smoke: local runtime validation OK");
 }

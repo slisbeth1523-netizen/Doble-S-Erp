@@ -62,6 +62,16 @@ const navigation: NavigationItem[] = [
       { label: "Consulta pagos", path: "/master-data/supplier-payments" }
     ]
   },
+  {
+    label: "Cuentas por cobrar",
+    path: "/accounts-receivable/documents",
+    children: [
+      { label: "Documentos", path: "/accounts-receivable/documents" },
+      { label: "Saldos por cliente", path: "/accounts-receivable/customer-balances" },
+      { label: "Consulta documentos", path: "/master-data/accounts-receivable-documents" },
+      { label: "Consulta saldos", path: "/master-data/customer-receivable-balances" }
+    ]
+  },
   { label: "Workflows", path: "/workflows" },
   { label: "Eventos", path: "/events" },
   { label: "Seguridad", path: "/security" },
@@ -115,6 +125,13 @@ function breadcrumb(path: string) {
     }
 
     if (
+      segments[1] === "accounts-receivable-documents" ||
+      segments[1] === "customer-receivable-balances"
+    ) {
+      return ["Doble S ERP", "Cuentas por cobrar", getCatalogLabel(segments[1] ?? "")];
+    }
+
+    if (
       segments[1] === "inventory-stocks" ||
       segments[1] === "inventory-movements" ||
       segments[1] === "inventory-ledger"
@@ -163,6 +180,14 @@ function breadcrumb(path: string) {
 
   if (segments[0] === "accounts-payable" && segments[1] === "supplier-adjustments") {
     return ["Doble S ERP", "Cuentas por pagar", "Notas proveedor"];
+  }
+
+  if (segments[0] === "accounts-receivable" && segments[1] === "documents") {
+    return ["Doble S ERP", "Cuentas por cobrar", "Documentos"];
+  }
+
+  if (segments[0] === "accounts-receivable" && segments[1] === "customer-balances") {
+    return ["Doble S ERP", "Cuentas por cobrar", "Saldos por cliente"];
   }
 
   const labels: Record<string, string> = {
@@ -242,6 +267,15 @@ function renderIcon(label: string) {
         <svg {...commonProps}>
           <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
           <line x1="1" y1="10" x2="23" y2="10"></line>
+        </svg>
+      );
+    case "Cuentas por cobrar":
+      return (
+        <svg {...commonProps}>
+          <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+          <line x1="1" y1="10" x2="23" y2="10"></line>
+          <path d="M16 14h3l-3 3"></path>
+          <path d="M19 14h-7a3 3 0 0 0 0 6h1"></path>
         </svg>
       );
     case "Seguridad":

@@ -10,6 +10,8 @@ import { PurchaseOrdersPreview } from "./pages/PurchaseOrdersPreview.js";
 import { PurchaseReceiptsPreview } from "./pages/PurchaseReceiptsPreview.js";
 import { SupplierInvoicesPreview } from "./pages/SupplierInvoicesPreview.js";
 import { AccountsPayablePreview } from "./pages/AccountsPayablePreview.js";
+import { AccountsReceivableDocumentsPreview } from "./pages/AccountsReceivableDocumentsPreview.js";
+import { CustomerReceivableBalancesPreview } from "./pages/CustomerReceivableBalancesPreview.js";
 import { SupplierPaymentsPreview } from "./pages/SupplierPaymentsPreview.js";
 import { SupplierAdjustmentsPreview } from "./pages/SupplierAdjustmentsPreview.js";
 import { SupplierAgingPreview } from "./pages/SupplierAgingPreview.js";
@@ -83,6 +85,14 @@ export function App() {
 
     if (path === "/accounts-payable/supplier-adjustments") {
       return <SupplierAdjustmentsPreview />;
+    }
+
+    if (path === "/accounts-receivable/documents") {
+      return <AccountsReceivableDocumentsPreview />;
+    }
+
+    if (path === "/accounts-receivable/customer-balances") {
+      return <CustomerReceivableBalancesPreview />;
     }
 
     if (path === "/security") {
