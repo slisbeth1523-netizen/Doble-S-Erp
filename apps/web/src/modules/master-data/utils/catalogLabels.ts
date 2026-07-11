@@ -25,7 +25,9 @@ export const catalogLabels: Record<string, string> = {
   "supplier-payments": "Pagos a proveedores",
   "supplier-payment-applications": "Aplicaciones de pagos",
   "supplier-adjustments": "Notas de proveedor",
-  "supplier-adjustment-applications": "Aplicaciones de notas"
+  "supplier-adjustment-applications": "Aplicaciones de notas",
+  "accounts-receivable-documents": "Documentos de cuentas por cobrar",
+  "customer-receivable-balances": "Saldos por cliente"
 };
 
 export function getCatalogLabel(catalog: string) {

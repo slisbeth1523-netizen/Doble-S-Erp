@@ -201,6 +201,28 @@ const catalogFields: Record<string, FieldInput[]> = {
     { field: "remainingAmount", label: "Balance", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 140, align: "right", format: "currency" },
     { field: "status", label: "Estado", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 120 }
   ],
+  "accounts-receivable-documents": [
+    { field: "documentNumber", label: "Documento CxC", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 160 },
+    { field: "customerCode", label: "Cliente", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 130 },
+    { field: "customerName", label: "Nombre cliente", searchable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 220 },
+    { field: "sourceType", label: "Tipo origen", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 130 },
+    { field: "documentDate", label: "Fecha doc.", type: "datetime", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 150 },
+    { field: "dueDate", label: "Vence", type: "datetime", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 150 },
+    { field: "status", label: "Estado", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 120 },
+    { field: "totalAmount", label: "Total", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 120, align: "right", format: "currency" },
+    { field: "paidAmount", label: "Pagado", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 120, align: "right", format: "currency" },
+    { field: "remainingAmount", label: "Saldo", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 120, align: "right", format: "currency" },
+    { field: "reference", label: "Referencia", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 170 }
+  ],
+  "customer-receivable-balances": [
+    { field: "customerCode", label: "Cliente", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 130 },
+    { field: "customerName", label: "Nombre cliente", searchable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 240 },
+    { field: "totalOpenAmount", label: "Total abierto", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 140, align: "right", format: "currency" },
+    { field: "currentAmount", label: "Corriente", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 120, align: "right", format: "currency" },
+    { field: "overdueAmount", label: "Vencido", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 120, align: "right", format: "currency" },
+    { field: "openDocumentCount", label: "Docs abiertos", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 120, align: "right" },
+    { field: "oldestDueDate", label: "Vence desde", type: "datetime", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 150 }
+  ],
   "supplier-statements": [
     { field: "supplierId", label: "Proveedor Id", editable: false, readOnly: true, visibleInGrid: false, visibleInForm: false, validation: { nullable: false } },
     { field: "documentNumber", label: "Documento CxP", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 160 },
@@ -500,7 +522,9 @@ export function getFallbackCatalogMetadata(catalog: string): CatalogMetadata | n
     "supplier-payments",
     "supplier-payment-applications",
     "supplier-adjustments",
-    "supplier-adjustment-applications"
+    "supplier-adjustment-applications",
+    "accounts-receivable-documents",
+    "customer-receivable-balances"
   ].includes(catalog);
   const catalogActions = catalogReadOnly ? readOnlyActions : actions;
 
