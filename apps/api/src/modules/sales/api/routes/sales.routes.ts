@@ -7,7 +7,19 @@ import { requirePermission } from "../../../security/api/permission.middleware.j
 import { getRequestContext } from "../../../../utils/requestContext.js";
 import { sendSuccess } from "../../../../utils/responseBuilder.js";
 import { validateRequest } from "../../../../utils/validateRequest.js";
+import { salesOrderService } from "../../application/SalesOrderService.js";
 import { salesQuotationService } from "../../application/SalesQuotationService.js";
+import {
+  salesOrderCancelSchema,
+  salesOrderCreateSchema,
+  salesOrderIdParamsSchema,
+  salesOrderLineCreateSchema,
+  salesOrderLineIdParamsSchema,
+  salesOrderLineUpdateSchema,
+  salesOrderListQuerySchema,
+  salesOrderQuotationIdParamsSchema,
+  salesOrderUpdateSchema
+} from "../../validators/sales-order.validators.js";
 import {
   salesQuotationCreateSchema,
   salesQuotationIdParamsSchema,
@@ -33,6 +45,147 @@ function salesContext(request: Parameters<typeof getRequestContext>[0]) {
     correlationId: context.correlationId
   };
 }
+
+salesRouter.get(
+  "/orders",
+  validateRequest({ query: salesOrderListQuerySchema }),
+  requirePermission("sales", "sales.orders.read"),
+  asyncHandler(async (request, response) => {
+    const result = await salesOrderService.listOrders(salesContext(request), request.query);
+
+    sendSuccess(response, result);
+  })
+);
+
+salesRouter.get(
+  "/orders/:id",
+  validateRequest({ params: salesOrderIdParamsSchema }),
+  requirePermission("sales", "sales.orders.read"),
+  asyncHandler(async (request, response) => {
+    const result = await salesOrderService.getOrder(salesContext(request), request.params.id!);
+
+    sendSuccess(response, result);
+  })
+);
+
+salesRouter.post(
+  "/orders",
+  validateRequest({ body: salesOrderCreateSchema }),
+  requirePermission("sales", "sales.orders.create"),
+  asyncHandler(async (request, response) => {
+    const result = await salesOrderService.createOrder(salesContext(request), request.body);
+
+    sendSuccess(response, result, 201);
+  })
+);
+
+salesRouter.post(
+  "/orders/from-quotation/:quotationId",
+  validateRequest({ params: salesOrderQuotationIdParamsSchema }),
+  requirePermission("sales", "sales.orders.create"),
+  asyncHandler(async (request, response) => {
+    const result = await salesOrderService.createFromQuotation(salesContext(request), request.params.quotationId!);
+
+    sendSuccess(response, result, 201);
+  })
+);
+
+salesRouter.patch(
+  "/orders/:id",
+  validateRequest({ params: salesOrderIdParamsSchema, body: salesOrderUpdateSchema }),
+  requirePermission("sales", "sales.orders.update"),
+  asyncHandler(async (request, response) => {
+    const result = await salesOrderService.updateOrder(salesContext(request), request.params.id!, request.body);
+
+    sendSuccess(response, result);
+  })
+);
+
+salesRouter.post(
+  "/orders/:id/lines",
+  validateRequest({ params: salesOrderIdParamsSchema, body: salesOrderLineCreateSchema }),
+  requirePermission("sales", "sales.orders.update"),
+  asyncHandler(async (request, response) => {
+    const result = await salesOrderService.addLine(salesContext(request), request.params.id!, request.body);
+
+    sendSuccess(response, result, 201);
+  })
+);
+
+salesRouter.patch(
+  "/orders/:id/lines/:lineId",
+  validateRequest({ params: salesOrderLineIdParamsSchema, body: salesOrderLineUpdateSchema }),
+  requirePermission("sales", "sales.orders.update"),
+  asyncHandler(async (request, response) => {
+    const result = await salesOrderService.updateLine(
+      salesContext(request),
+      request.params.id!,
+      request.params.lineId!,
+      request.body
+    );
+
+    sendSuccess(response, result);
+  })
+);
+
+salesRouter.delete(
+  "/orders/:id/lines/:lineId",
+  validateRequest({ params: salesOrderLineIdParamsSchema }),
+  requirePermission("sales", "sales.orders.update"),
+  asyncHandler(async (request, response) => {
+    const result = await salesOrderService.deleteLine(
+      salesContext(request),
+      request.params.id!,
+      request.params.lineId!
+    );
+
+    sendSuccess(response, result);
+  })
+);
+
+salesRouter.post(
+  "/orders/:id/submit",
+  validateRequest({ params: salesOrderIdParamsSchema }),
+  requirePermission("sales", "sales.orders.submit"),
+  asyncHandler(async (request, response) => {
+    const result = await salesOrderService.submitOrder(salesContext(request), request.params.id!);
+
+    sendSuccess(response, result);
+  })
+);
+
+salesRouter.post(
+  "/orders/:id/approve",
+  validateRequest({ params: salesOrderIdParamsSchema }),
+  requirePermission("sales", "sales.orders.approve"),
+  asyncHandler(async (request, response) => {
+    const result = await salesOrderService.approveOrder(salesContext(request), request.params.id!);
+
+    sendSuccess(response, result);
+  })
+);
+
+salesRouter.post(
+  "/orders/:id/reject",
+  validateRequest({ params: salesOrderIdParamsSchema }),
+  requirePermission("sales", "sales.orders.reject"),
+  asyncHandler(async (request, response) => {
+    const result = await salesOrderService.rejectOrder(salesContext(request), request.params.id!);
+
+    sendSuccess(response, result);
+  })
+);
+
+salesRouter.post(
+  "/orders/:id/cancel",
+  validateRequest({ params: salesOrderIdParamsSchema, body: salesOrderCancelSchema }),
+  requirePermission("sales", "sales.orders.cancel"),
+  asyncHandler(async (request, response) => {
+    const result = await salesOrderService.cancelOrder(salesContext(request), request.params.id!, request.body);
+
+    sendSuccess(response, result);
+  })
+);
 
 salesRouter.get(
   "/quotations",

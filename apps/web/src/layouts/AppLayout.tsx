@@ -43,8 +43,11 @@ const navigation: NavigationItem[] = [
     path: "/sales/quotations",
     children: [
       { label: "Cotizaciones", path: "/sales/quotations" },
+      { label: "Pedidos", path: "/sales/orders" },
       { label: "Consulta cotizaciones", path: "/master-data/sales-quotations" },
       { label: "Lineas cotizadas", path: "/master-data/sales-quotation-lines" },
+      { label: "Consulta pedidos", path: "/master-data/sales-orders" },
+      { label: "Lineas pedidos", path: "/master-data/sales-order-lines" },
       { label: "Clientes", path: "/master-data/customers" }
     ]
   },
@@ -120,7 +123,9 @@ function breadcrumb(path: string) {
   if (segments[0] === "master-data") {
     if (
       segments[1] === "sales-quotations" ||
-      segments[1] === "sales-quotation-lines"
+      segments[1] === "sales-quotation-lines" ||
+      segments[1] === "sales-orders" ||
+      segments[1] === "sales-order-lines"
     ) {
       return ["Doble S ERP", "Ventas", getCatalogLabel(segments[1] ?? "")];
     }
@@ -187,6 +192,10 @@ function breadcrumb(path: string) {
 
   if (segments[0] === "sales" && segments[1] === "quotations") {
     return ["Doble S ERP", "Ventas", "Cotizaciones"];
+  }
+
+  if (segments[0] === "sales" && segments[1] === "orders") {
+    return ["Doble S ERP", "Ventas", "Pedidos"];
   }
 
   if (segments[0] === "purchasing" && segments[1] === "purchase-receipts") {
