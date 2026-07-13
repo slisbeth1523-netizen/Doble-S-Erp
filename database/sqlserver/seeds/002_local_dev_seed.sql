@@ -112,6 +112,8 @@ VALUES
   ('receivables', 'ar.documents.read', 'Local read accounts receivable documents'),
   ('receivables', 'ar.documents.create', 'Local create accounts receivable documents'),
   ('receivables', 'ar.customer-balances.read', 'Local read customer receivable balances'),
+  ('receivables', 'ar.statements.read', 'Local read customer statements'),
+  ('receivables', 'ar.aging.read', 'Local read customer aging'),
   ('receivables', 'ar.receipts.read', 'Local read customer receipts'),
   ('receivables', 'ar.receipts.create', 'Local create customer receipts'),
   ('receivables', 'ar.receipts.update', 'Local update customer receipt applications'),

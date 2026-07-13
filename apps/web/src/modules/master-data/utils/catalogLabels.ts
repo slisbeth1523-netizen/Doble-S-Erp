@@ -31,6 +31,8 @@ export const catalogLabels: Record<string, string> = {
   "customer-receipt-applications": "Aplicaciones de recibos",
   "customer-credit-notes": "Notas de credito de clientes",
   "customer-credit-note-applications": "Aplicaciones de notas de credito",
+  "customer-statements": "Estado de cuenta clientes",
+  "customer-aging": "Antiguedad de clientes",
   "customer-receivable-balances": "Saldos por cliente"
 };
 
