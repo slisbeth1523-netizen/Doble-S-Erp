@@ -189,6 +189,30 @@ const catalogFields: Record<string, FieldInput[]> = {
     { field: "taxPercent", label: "Imp. %", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, max: 100, nullable: false }, width: 95, align: "right" },
     { field: "lineTotal", label: "Total linea", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 130, align: "right", format: "currency" }
   ],
+  "sales-orders": [
+    { field: "orderNumber", label: "Pedido", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 160 },
+    { field: "sourceQuotationNumber", label: "Cotizacion origen", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 170 },
+    { field: "customerCode", label: "Cliente", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 130 },
+    { field: "customerName", label: "Nombre cliente", searchable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 220 },
+    { field: "status", label: "Estado", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 120 },
+    { field: "orderDate", label: "Fecha", type: "datetime", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 150 },
+    { field: "requestedDeliveryDate", label: "Entrega solicitada", type: "datetime", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 160 },
+    { field: "currencyCode", label: "Moneda", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 90 },
+    { field: "totalAmount", label: "Total", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 130, align: "right", format: "currency" },
+    { field: "lineCount", label: "Lineas", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 90, align: "right" },
+    { field: "reference", label: "Referencia", searchable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 170 }
+  ],
+  "sales-order-lines": [
+    { field: "orderNumber", label: "Pedido", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 160 },
+    { field: "status", label: "Estado", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 120 },
+    { field: "lineNumber", label: "Linea", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 1, nullable: false }, width: 80, align: "right" },
+    { field: "itemCode", label: "Articulo", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 130 },
+    { field: "description", label: "Descripcion", searchable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 240 },
+    { field: "warehouseCode", label: "Almacen", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 120 },
+    { field: "quantity", label: "Cantidad", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 110, align: "right" },
+    { field: "unitPrice", label: "Precio", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 110, align: "right", format: "currency" },
+    { field: "lineTotal", label: "Total linea", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 130, align: "right", format: "currency" }
+  ],
   "purchase-receipts": [
     { field: "purchaseReceiptNumber", label: "Recepcion", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 160 },
     { field: "purchaseOrderNumber", label: "Orden", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 160 },
@@ -619,6 +643,8 @@ export function getFallbackCatalogMetadata(catalog: string): CatalogMetadata | n
     "inventory-ledger",
     "sales-quotations",
     "sales-quotation-lines",
+    "sales-orders",
+    "sales-order-lines",
     "purchase-orders",
     "purchase-order-lines",
     "purchase-receipts",

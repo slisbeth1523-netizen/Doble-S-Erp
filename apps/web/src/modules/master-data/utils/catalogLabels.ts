@@ -3,6 +3,8 @@ export const catalogLabels: Record<string, string> = {
   suppliers: "Proveedores",
   "sales-quotations": "Cotizaciones de venta",
   "sales-quotation-lines": "Lineas de cotizaciones",
+  "sales-orders": "Pedidos de venta",
+  "sales-order-lines": "Lineas de pedidos",
   "purchase-orders": "Ordenes de compra",
   "purchase-order-lines": "Lineas de ordenes de compra",
   "purchase-receipts": "Recepciones de compra",

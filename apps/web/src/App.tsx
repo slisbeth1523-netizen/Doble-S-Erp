@@ -8,6 +8,7 @@ import { InventoryAdjustmentsPreview } from "./pages/InventoryAdjustmentsPreview
 import { InventoryPhysicalCountsPreview } from "./pages/InventoryPhysicalCountsPreview.js";
 import { PurchaseOrdersPreview } from "./pages/PurchaseOrdersPreview.js";
 import { PurchaseReceiptsPreview } from "./pages/PurchaseReceiptsPreview.js";
+import { SalesOrdersPreview } from "./pages/SalesOrdersPreview.js";
 import { SalesQuotationsPreview } from "./pages/SalesQuotationsPreview.js";
 import { SupplierInvoicesPreview } from "./pages/SupplierInvoicesPreview.js";
 import { AccountsPayablePreview } from "./pages/AccountsPayablePreview.js";
@@ -66,6 +67,10 @@ export function App() {
 
     if (path === "/sales/quotations") {
       return <SalesQuotationsPreview />;
+    }
+
+    if (path === "/sales/orders") {
+      return <SalesOrdersPreview />;
     }
 
     if (path === "/purchasing/purchase-receipts") {

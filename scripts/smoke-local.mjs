@@ -528,6 +528,104 @@ async function expectSalesQuotationLineUpdateFailure(salesQuotationId, lineId, s
   return result.body;
 }
 
+async function createSalesOrder(payload, session) {
+  const body = await expectOk("/sales/orders", {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function createSalesOrderFromQuotation(salesQuotationId, session) {
+  const body = await expectOk(`/sales/orders/from-quotation/${salesQuotationId}`, {
+    method: "POST",
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
+async function getSalesOrder(salesOrderId, session) {
+  const body = await expectOk(`/sales/orders/${salesOrderId}`, {
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
+async function getSalesOrders(query, session) {
+  const params = new URLSearchParams(query);
+  const body = await expectOk(`/sales/orders?${params.toString()}`, {
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
+async function addSalesOrderLine(salesOrderId, payload, session) {
+  const body = await expectOk(`/sales/orders/${salesOrderId}/lines`, {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function updateSalesOrderLine(salesOrderId, lineId, payload, session) {
+  const body = await expectOk(`/sales/orders/${salesOrderId}/lines/${lineId}`, {
+    method: "PATCH",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function deleteSalesOrderLine(salesOrderId, lineId, session) {
+  const body = await expectOk(`/sales/orders/${salesOrderId}/lines/${lineId}`, {
+    method: "DELETE",
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
+async function transitionSalesOrder(salesOrderId, action, session) {
+  const body = await expectOk(`/sales/orders/${salesOrderId}/${action}`, {
+    method: "POST",
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
+async function cancelSalesOrder(salesOrderId, reason, session) {
+  const body = await expectOk(`/sales/orders/${salesOrderId}/cancel`, {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify({ reason })
+  });
+
+  return body.data;
+}
+
+async function expectSalesOrderLineUpdateFailure(salesOrderId, lineId, session) {
+  const result = await request(`/sales/orders/${salesOrderId}/lines/${lineId}`, {
+    method: "PATCH",
+    headers: authHeaders(session),
+    body: JSON.stringify({ quantity: 9 })
+  });
+
+  if (result.response.ok || result.body?.success !== false) {
+    fail(`Updating non-draft sales order ${salesOrderId} must fail in a controlled way.`);
+  }
+
+  return result.body;
+}
+
 async function applyCustomerCreditNote(customerCreditNoteId, payload, session) {
   const body = await expectOk(`/accounts-receivable/customer-credit-notes/${customerCreditNoteId}/applications`, {
     method: "POST",
@@ -1328,6 +1426,96 @@ async function countSalesQuotationForbiddenSideEffects(session) {
       inventoryLedgerEntryCount: Number(row?.InventoryLedgerEntryCount ?? 0),
       accountsReceivableDocumentCount: Number(row?.AccountsReceivableDocumentCount ?? 0),
       salesInvoiceCount: Number(row?.SalesInvoiceCount ?? 0)
+    };
+  } finally {
+    await pool.close();
+  }
+}
+
+async function countSalesOrderForbiddenSideEffects(session) {
+  if (!session.user.companyId) {
+    fail("Cannot count sales order side effects without company context.");
+  }
+
+  const pool = await sql.connect(getSqlConfig());
+
+  try {
+    const result = await pool
+      .request()
+      .input("TenantId", sql.UniqueIdentifier, session.user.tenantId)
+      .input("CompanyId", sql.UniqueIdentifier, session.user.companyId)
+      .query(`
+        DECLARE @SalesInvoiceCount INT = 0;
+        DECLARE @ReservationCount INT = 0;
+        DECLARE @DispatchCount INT = 0;
+
+        IF OBJECT_ID('sales.SalesInvoices', 'U') IS NOT NULL
+        BEGIN
+          DECLARE @InvoiceSql NVARCHAR(MAX) = N'
+            SELECT @Count = COUNT(1)
+            FROM sales.SalesInvoices
+            WHERE TenantId = @TenantId
+              AND CompanyId = @CompanyId;
+          ';
+          EXEC sp_executesql
+            @InvoiceSql,
+            N'@TenantId UNIQUEIDENTIFIER, @CompanyId UNIQUEIDENTIFIER, @Count INT OUTPUT',
+            @TenantId = @TenantId,
+            @CompanyId = @CompanyId,
+            @Count = @SalesInvoiceCount OUTPUT;
+        END;
+
+        IF OBJECT_ID('sales.SalesReservations', 'U') IS NOT NULL
+        BEGIN
+          DECLARE @ReservationSql NVARCHAR(MAX) = N'
+            SELECT @Count = COUNT(1)
+            FROM sales.SalesReservations
+            WHERE TenantId = @TenantId
+              AND CompanyId = @CompanyId;
+          ';
+          EXEC sp_executesql
+            @ReservationSql,
+            N'@TenantId UNIQUEIDENTIFIER, @CompanyId UNIQUEIDENTIFIER, @Count INT OUTPUT',
+            @TenantId = @TenantId,
+            @CompanyId = @CompanyId,
+            @Count = @ReservationCount OUTPUT;
+        END;
+
+        IF OBJECT_ID('sales.SalesDispatches', 'U') IS NOT NULL
+        BEGIN
+          DECLARE @DispatchSql NVARCHAR(MAX) = N'
+            SELECT @Count = COUNT(1)
+            FROM sales.SalesDispatches
+            WHERE TenantId = @TenantId
+              AND CompanyId = @CompanyId;
+          ';
+          EXEC sp_executesql
+            @DispatchSql,
+            N'@TenantId UNIQUEIDENTIFIER, @CompanyId UNIQUEIDENTIFIER, @Count INT OUTPUT',
+            @TenantId = @TenantId,
+            @CompanyId = @CompanyId,
+            @Count = @DispatchCount OUTPUT;
+        END;
+
+        SELECT
+          (SELECT COUNT(1) FROM inventory.ItemStocks WHERE TenantId = @TenantId AND CompanyId = @CompanyId) AS ItemStockCount,
+          (SELECT COUNT(1) FROM inventory.InventoryMovements WHERE TenantId = @TenantId AND CompanyId = @CompanyId) AS InventoryMovementCount,
+          (SELECT COUNT(1) FROM inventory.InventoryLedgerEntries WHERE TenantId = @TenantId AND CompanyId = @CompanyId) AS InventoryLedgerEntryCount,
+          (SELECT COUNT(1) FROM ar.AccountsReceivableDocuments WHERE TenantId = @TenantId AND CompanyId = @CompanyId) AS AccountsReceivableDocumentCount,
+          @SalesInvoiceCount AS SalesInvoiceCount,
+          @ReservationCount AS ReservationCount,
+          @DispatchCount AS DispatchCount;
+      `);
+
+    const row = result.recordset[0];
+    return {
+      itemStockCount: Number(row?.ItemStockCount ?? 0),
+      inventoryMovementCount: Number(row?.InventoryMovementCount ?? 0),
+      inventoryLedgerEntryCount: Number(row?.InventoryLedgerEntryCount ?? 0),
+      accountsReceivableDocumentCount: Number(row?.AccountsReceivableDocumentCount ?? 0),
+      salesInvoiceCount: Number(row?.SalesInvoiceCount ?? 0),
+      reservationCount: Number(row?.ReservationCount ?? 0),
+      dispatchCount: Number(row?.DispatchCount ?? 0)
     };
   } finally {
     await pool.close();
@@ -2741,6 +2929,38 @@ async function validateSalesQuotationMetadata(session) {
       catalog === "sales-quotations"
         ? ["quotationNumber", "customerCode", "customerName", "status", "quotationDate", "validUntil", "totalAmount"]
         : ["quotationNumber", "status", "lineNumber", "itemCode", "unitOfMeasureCode", "quantity", "unitPrice", "lineTotal"];
+    const missingFields = expectedFields.filter((field) => !fields.includes(field));
+
+    if (missingFields.length) {
+      fail(`${catalog} metadata is missing fields: ${missingFields.join(", ")}.`);
+    }
+
+    const unavailableActions = ["create", "update", "activate", "deactivate"]
+      .map((actionName) => metadata.data.actions.find((action) => action.action === actionName))
+      .filter((action) => action?.available !== false);
+
+    if (unavailableActions.length) {
+      fail(`${catalog} write actions must be unavailable.`);
+    }
+  }
+}
+
+async function validateSalesOrderMetadata(session) {
+  for (const catalog of ["sales-orders", "sales-order-lines"]) {
+    smokeStep(`metadata ${catalog}`);
+    const metadata = await expectOk(`/master-data/${catalog}/metadata`, {
+      headers: authHeaders(session)
+    });
+
+    if (metadata.data?.catalog?.readOnly !== true) {
+      fail(`${catalog} metadata must be read-only.`);
+    }
+
+    const fields = metadata.data.fields.map((field) => field.field);
+    const expectedFields =
+      catalog === "sales-orders"
+        ? ["orderNumber", "customerCode", "customerName", "status", "orderDate", "requestedDeliveryDate", "totalAmount"]
+        : ["orderNumber", "status", "lineNumber", "itemCode", "warehouseCode", "quantity", "unitPrice", "lineTotal"];
     const missingFields = expectedFields.filter((field) => !fields.includes(field));
 
     if (missingFields.length) {
@@ -4302,6 +4522,232 @@ async function validateSalesQuotationFlow(session) {
   }
 }
 
+async function validateSalesOrderFlow(session) {
+  smokeStep("sales order foundation flow");
+  const customer = await getDemoCustomerReferences(session);
+  const { itemId, unitOfMeasureId, warehouseId } = await getDemoPurchaseReferences(session);
+  const sideEffectsBefore = await countSalesOrderForbiddenSideEffects(session);
+
+  smokeStep("sales order direct draft");
+  const draft = await createSalesOrder(
+    {
+      customerId: customer.customerId,
+      requestedDeliveryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      currencyCode: "DOP",
+      exchangeRate: 1,
+      reference: `ORD-QA-${smokeRun}`,
+      notes: "Pedido directo creado por smoke local"
+    },
+    session
+  );
+
+  if (draft.status !== "DRAFT" || !String(draft.orderNumber ?? "").startsWith("PED-")) {
+    fail("Sales order was not created in DRAFT with an internal number.");
+  }
+
+  smokeStep("sales order line calculations");
+  const firstLineOrder = await addSalesOrderLine(
+    draft.id,
+    {
+      itemId,
+      unitOfMeasureId,
+      warehouseId,
+      description: "Linea pedido QA 1",
+      quantity: 2,
+      unitPrice: 10,
+      discountPercent: 0,
+      taxPercent: 0
+    },
+    session
+  );
+  assertAmount(firstLineOrder.totalAmount, 20, "First sales order line total was not calculated");
+
+  const secondLineOrder = await addSalesOrderLine(
+    draft.id,
+    {
+      itemId,
+      unitOfMeasureId,
+      warehouseId,
+      description: "Linea pedido QA 2",
+      quantity: 3,
+      unitPrice: 5,
+      discountPercent: 10,
+      taxPercent: 18
+    },
+    session
+  );
+  assertAmount(secondLineOrder.totalAmount, 35.93, "Second sales order line total was not calculated");
+
+  smokeStep("sales order update and delete lines");
+  const firstLine = secondLineOrder.lines.find((line) => line.lineNumber === 1);
+  const secondLine = secondLineOrder.lines.find((line) => line.lineNumber === 2);
+  if (!firstLine || !secondLine) {
+    fail("Sales order lines were not returned in detail.");
+  }
+
+  const updatedOrder = await updateSalesOrderLine(
+    draft.id,
+    firstLine.id,
+    {
+      quantity: 4,
+      unitPrice: 12,
+      discountPercent: 0,
+      taxPercent: 0
+    },
+    session
+  );
+  assertAmount(updatedOrder.totalAmount, 63.93, "Sales order line update did not recalculate header totals");
+
+  const deletedOrder = await deleteSalesOrderLine(draft.id, secondLine.id, session);
+  assertAmount(deletedOrder.totalAmount, 48, "Sales order delete did not recalculate header totals");
+
+  smokeStep("sales order submit and edit rejection");
+  const submittedOrder = await transitionSalesOrder(draft.id, "submit", session);
+  if (submittedOrder.status !== "SUBMITTED") {
+    fail("Sales order did not transition to SUBMITTED.");
+  }
+  await expectSalesOrderLineUpdateFailure(draft.id, firstLine.id, session);
+
+  smokeStep("sales order approve");
+  const approvedOrder = await transitionSalesOrder(draft.id, "approve", session);
+  if (approvedOrder.status !== "APPROVED") {
+    fail("Sales order did not transition to APPROVED.");
+  }
+
+  smokeStep("sales order reject");
+  const rejectDraft = await createSalesOrder(
+    {
+      customerId: customer.customerId,
+      currencyCode: "DOP",
+      exchangeRate: 1,
+      reference: `ORD-REJ-${smokeRun}`
+    },
+    session
+  );
+  const rejectWithLine = await addSalesOrderLine(
+    rejectDraft.id,
+    {
+      itemId,
+      unitOfMeasureId,
+      quantity: 1,
+      unitPrice: 12
+    },
+    session
+  );
+  await transitionSalesOrder(rejectWithLine.id, "submit", session);
+  const rejectedOrder = await transitionSalesOrder(rejectWithLine.id, "reject", session);
+  if (rejectedOrder.status !== "REJECTED") {
+    fail("Sales order did not transition to REJECTED.");
+  }
+
+  smokeStep("sales order cancel");
+  const cancelDraft = await createSalesOrder(
+    {
+      customerId: customer.customerId,
+      currencyCode: "DOP",
+      exchangeRate: 1,
+      reference: `ORD-CAN-${smokeRun}`
+    },
+    session
+  );
+  const cancelledOrder = await cancelSalesOrder(cancelDraft.id, "Cancelacion validada por smoke local", session);
+  if (cancelledOrder.status !== "CANCELLED") {
+    fail("Sales order did not transition to CANCELLED.");
+  }
+
+  smokeStep("sales order from approved quotation conversion");
+  const quotationDraft = await createSalesQuotation(
+    {
+      customerId: customer.customerId,
+      validUntil: new Date(Date.now() + 20 * 24 * 60 * 60 * 1000).toISOString(),
+      currencyCode: "DOP",
+      exchangeRate: 1,
+      reference: `QUO-TO-ORD-${smokeRun}`,
+      notes: "Cotizacion para convertir a pedido"
+    },
+    session
+  );
+  const quotationWithLine = await addSalesQuotationLine(
+    quotationDraft.id,
+    {
+      itemId,
+      unitOfMeasureId,
+      description: "Linea cotizada para pedido",
+      quantity: 2,
+      unitPrice: 25,
+      discountPercent: 0,
+      taxPercent: 18
+    },
+    session
+  );
+  await transitionSalesQuotation(quotationWithLine.id, "send", session);
+  const approvedQuotation = await transitionSalesQuotation(quotationWithLine.id, "approve", session);
+  const orderFromQuotation = await createSalesOrderFromQuotation(approvedQuotation.id, session);
+
+  if (orderFromQuotation.status !== "DRAFT") {
+    fail("Sales order converted from quotation must start as DRAFT.");
+  }
+  if (orderFromQuotation.sourceQuotationId !== approvedQuotation.id) {
+    fail("Sales order did not keep source quotation link.");
+  }
+  if (orderFromQuotation.lineCount !== approvedQuotation.lineCount) {
+    fail("Sales order did not copy quotation lines.");
+  }
+  assertAmount(orderFromQuotation.totalAmount, approvedQuotation.totalAmount, "Sales order did not copy quotation total");
+
+  const convertedQuotation = await getSalesQuotation(approvedQuotation.id, session);
+  if (convertedQuotation.status !== "CONVERTED") {
+    fail("Sales quotation was not marked CONVERTED after order creation.");
+  }
+
+  const retryOrder = await createSalesOrderFromQuotation(approvedQuotation.id, session);
+  if (retryOrder.id !== orderFromQuotation.id) {
+    fail("Retrying quotation conversion must not create a second sales order.");
+  }
+
+  const sourceOrders = await getSalesOrders(
+    { sourceQuotationId: approvedQuotation.id, page: "1", pageSize: "10" },
+    session
+  );
+  if (sourceOrders.records.length !== 1) {
+    fail("Quotation conversion retry created duplicated sales orders.");
+  }
+
+  smokeStep("sales order list, metadata runtime and isolation");
+  const list = await getSalesOrders({ search: approvedOrder.orderNumber, page: "1", pageSize: "10" }, session);
+  if (!list.records?.some((record) => record.id === approvedOrder.id)) {
+    fail("Sales order list did not return the approved order.");
+  }
+
+  const detail = await getSalesOrder(approvedOrder.id, session);
+  if (detail.id !== approvedOrder.id || detail.status !== "APPROVED") {
+    fail("Sales order detail did not return the approved order.");
+  }
+
+  const runtimeRows = await expectOk(
+    `/master-data/sales-orders?search=${encodeURIComponent(approvedOrder.orderNumber)}&page=1&pageSize=10`,
+    { headers: authHeaders(session) }
+  );
+  if (!runtimeRows.data?.some((record) => record.orderNumber === approvedOrder.orderNumber)) {
+    fail("/master-data/sales-orders did not return the created order.");
+  }
+
+  const isolated = await request(`/sales/orders/${approvedOrder.id}`, {
+    headers: {
+      ...authHeaders(session),
+      "x-company-id": "99999999-9999-9999-9999-999999999999"
+    }
+  });
+  if (isolated.response.ok || isolated.body?.success !== false) {
+    fail("Sales order must not be visible from another company context.");
+  }
+
+  const sideEffectsAfter = await countSalesOrderForbiddenSideEffects(session);
+  if (JSON.stringify(sideEffectsAfter) !== JSON.stringify(sideEffectsBefore)) {
+    fail("Sales order flow changed inventory, ledger, AR, invoice, reservation or dispatch side effects.");
+  }
+}
+
 async function validateCrud(session) {
   const suffix = smokeRun;
   const customerCode = `QA-CUST-${suffix}`;
@@ -4518,6 +4964,7 @@ async function main() {
   await validateCatalogs(session);
   await validateInventoryLedgerMetadata(session);
   await validateSalesQuotationMetadata(session);
+  await validateSalesOrderMetadata(session);
   await validatePurchaseOrderMetadata(session);
   await validatePurchaseReceiptMetadata(session);
   await validateSupplierPaymentMetadata(session);
@@ -4535,6 +4982,7 @@ async function main() {
   await validateCustomerCreditNoteFlow(session);
   await validateCustomerStatementAndAgingFlow(session);
   await validateSalesQuotationFlow(session);
+  await validateSalesOrderFlow(session);
   await validateCrud(session);
   console.log("smoke: local runtime validation OK");
 }
