@@ -236,6 +236,28 @@ const catalogFields: Record<string, FieldInput[]> = {
     { field: "appliedAmount", label: "Aplicado", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 120, align: "right", format: "currency" },
     { field: "documentRemainingAmount", label: "Saldo doc.", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 130, align: "right", format: "currency" }
   ],
+  "customer-credit-notes": [
+    { field: "creditNoteNumber", label: "Nota credito", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 160 },
+    { field: "customerCode", label: "Cliente", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 130 },
+    { field: "customerName", label: "Nombre cliente", searchable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 220 },
+    { field: "creditNoteDate", label: "Fecha nota", type: "datetime", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 150 },
+    { field: "status", label: "Estado", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 110 },
+    { field: "amount", label: "Monto", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 130, align: "right", format: "currency" },
+    { field: "appliedAmount", label: "Aplicado", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 120, align: "right", format: "currency" },
+    { field: "unappliedAmount", label: "Sin aplicar", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 120, align: "right", format: "currency" },
+    { field: "applicationCount", label: "Aplicaciones", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 120, align: "right" },
+    { field: "reference", label: "Referencia", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 170 },
+    { field: "postedAt", label: "Posteado", type: "datetime", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 150 }
+  ],
+  "customer-credit-note-applications": [
+    { field: "creditNoteNumber", label: "Nota credito", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 160 },
+    { field: "lineNumber", label: "Linea", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 1, nullable: false }, width: 90, align: "right" },
+    { field: "documentNumber", label: "Documento CxC", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 160 },
+    { field: "customerCode", label: "Cliente", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 130 },
+    { field: "documentStatus", label: "Estado doc.", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 120 },
+    { field: "appliedAmount", label: "Aplicado", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 120, align: "right", format: "currency" },
+    { field: "documentRemainingAmount", label: "Saldo doc.", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 130, align: "right", format: "currency" }
+  ],
   "customer-receivable-balances": [
     { field: "customerCode", label: "Cliente", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 130 },
     { field: "customerName", label: "Nombre cliente", searchable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 240 },
@@ -548,6 +570,8 @@ export function getFallbackCatalogMetadata(catalog: string): CatalogMetadata | n
     "accounts-receivable-documents",
     "customer-receipts",
     "customer-receipt-applications",
+    "customer-credit-notes",
+    "customer-credit-note-applications",
     "customer-receivable-balances"
   ].includes(catalog);
   const catalogActions = catalogReadOnly ? readOnlyActions : actions;

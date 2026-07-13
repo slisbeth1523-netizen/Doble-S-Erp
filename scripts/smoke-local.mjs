@@ -421,6 +421,48 @@ async function expectCustomerReceiptPostFailure(customerReceiptId, session) {
   return result.body;
 }
 
+async function createCustomerCreditNote(payload, session) {
+  const body = await expectOk("/accounts-receivable/customer-credit-notes", {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function applyCustomerCreditNote(customerCreditNoteId, payload, session) {
+  const body = await expectOk(`/accounts-receivable/customer-credit-notes/${customerCreditNoteId}/applications`, {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function postCustomerCreditNote(customerCreditNoteId, session) {
+  const body = await expectOk(`/accounts-receivable/customer-credit-notes/${customerCreditNoteId}/post`, {
+    method: "POST",
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
+async function expectCustomerCreditNotePostFailure(customerCreditNoteId, session) {
+  const result = await request(`/accounts-receivable/customer-credit-notes/${customerCreditNoteId}/post`, {
+    method: "POST",
+    headers: authHeaders(session)
+  });
+
+  if (result.response.ok || result.body?.success !== false) {
+    fail(`Re-posting customer credit note for ${customerCreditNoteId} must fail in a controlled way.`);
+  }
+
+  return result.body;
+}
+
 async function getCustomerReceivableBalances(query, session) {
   const params = new URLSearchParams(query);
   const body = await expectOk(`/accounts-receivable/customer-balances?${params.toString()}`, {
@@ -2382,6 +2424,8 @@ async function validateAccountsReceivableMetadata(session) {
     "accounts-receivable-documents",
     "customer-receipts",
     "customer-receipt-applications",
+    "customer-credit-notes",
+    "customer-credit-note-applications",
     "customer-receivable-balances"
   ]) {
     smokeStep(`metadata ${catalog}`);
@@ -2413,6 +2457,21 @@ async function validateAccountsReceivableMetadata(session) {
       ],
       "customer-receipt-applications": [
         "receiptNumber",
+        "documentNumber",
+        "documentStatus",
+        "appliedAmount",
+        "documentRemainingAmount"
+      ],
+      "customer-credit-notes": [
+        "creditNoteNumber",
+        "customerCode",
+        "customerName",
+        "status",
+        "amount",
+        "appliedAmount"
+      ],
+      "customer-credit-note-applications": [
+        "creditNoteNumber",
         "documentNumber",
         "documentStatus",
         "appliedAmount",
@@ -3342,6 +3401,84 @@ async function validateCustomerReceiptFlow(session) {
   }
 }
 
+async function validateCustomerCreditNoteFlow(session) {
+  smokeStep("customer credit note partial posting");
+  const customer = await getDemoCustomerReferences(session);
+  const documentDate = new Date().toISOString().slice(0, 10);
+  const dueDate = new Date(Date.now() + 25 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const document = await createAccountsReceivableDocument(
+    {
+      customerId: customer.customerId,
+      sourceType: "MANUAL",
+      documentDate,
+      dueDate,
+      currencyCode: "DOP",
+      exchangeRate: 1,
+      totalAmount: 100,
+      reference: `AR-NC-${smokeRun}`,
+      notes: "Documento CxC para smoke de notas de credito"
+    },
+    session
+  );
+
+  const initialSnapshot = await getAccountsReceivableDocumentSnapshot(document.id, session);
+  if (initialSnapshot.status !== "OPEN" || initialSnapshot.paidAmount !== 0 || initialSnapshot.remainingAmount !== 100) {
+    fail("Customer credit note smoke document did not start with an OPEN balance of 100.");
+  }
+
+  smokeStep("customer credit note draft");
+  const note = await createCustomerCreditNote(
+    {
+      customerId: customer.customerId,
+      creditNoteDate: documentDate,
+      amount: 30,
+      reference: `NC-CXC-${smokeRun}`,
+      notes: "Nota de credito smoke local"
+    },
+    session
+  );
+
+  const draftSnapshot = await getAccountsReceivableDocumentSnapshot(document.id, session);
+  if (draftSnapshot.paidAmount !== 0 || draftSnapshot.remainingAmount !== 100 || note.status !== "DRAFT") {
+    fail("Creating a customer credit note DRAFT changed AR document balances.");
+  }
+
+  smokeStep("customer credit note application and post");
+  await applyCustomerCreditNote(
+    note.id,
+    {
+      accountsReceivableDocumentId: document.id,
+      appliedAmount: 30,
+      notes: "Credito parcial smoke local"
+    },
+    session
+  );
+  const postedNote = await postCustomerCreditNote(note.id, session);
+  if (postedNote.status !== "POSTED") {
+    fail("Customer credit note was not posted.");
+  }
+
+  const postedSnapshot = await getAccountsReceivableDocumentSnapshot(document.id, session);
+  if (
+    postedSnapshot.status !== "PARTIALLY_PAID" ||
+    postedSnapshot.paidAmount !== 30 ||
+    postedSnapshot.remainingAmount !== 70
+  ) {
+    fail("Customer credit note did not reduce AR balance to 70.");
+  }
+
+  smokeStep("customer credit note repost rejected");
+  await expectCustomerCreditNotePostFailure(note.id, session);
+  const retrySnapshot = await getAccountsReceivableDocumentSnapshot(document.id, session);
+  if (
+    retrySnapshot.status !== "PARTIALLY_PAID" ||
+    retrySnapshot.paidAmount !== 30 ||
+    retrySnapshot.remainingAmount !== 70
+  ) {
+    fail("Retrying customer credit note post duplicated AR balance effects.");
+  }
+}
+
 async function validateCrud(session) {
   const suffix = smokeRun;
   const customerCode = `QA-CUST-${suffix}`;
@@ -3571,6 +3708,7 @@ async function main() {
   await validateSupplierStatementAndAgingFlow(session);
   await validateAccountsReceivableFlow(session);
   await validateCustomerReceiptFlow(session);
+  await validateCustomerCreditNoteFlow(session);
   await validateCrud(session);
   console.log("smoke: local runtime validation OK");
 }
