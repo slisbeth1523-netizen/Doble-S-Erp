@@ -10,6 +10,7 @@ import { validateRequest } from "../../../../utils/validateRequest.js";
 import { accountsReceivableDocumentService } from "../../application/AccountsReceivableDocumentService.js";
 import { customerCreditNoteService } from "../../application/CustomerCreditNoteService.js";
 import { customerReceiptService } from "../../application/CustomerReceiptService.js";
+import { customerStatementService } from "../../application/CustomerStatementService.js";
 import {
   accountsReceivableDocumentCreateSchema,
   accountsReceivableDocumentIdParamsSchema,
@@ -29,6 +30,11 @@ import {
   customerReceiptIdParamsSchema,
   customerReceiptListQuerySchema
 } from "../../validators/customer-receipt.validators.js";
+import {
+  customerAgingQuerySchema,
+  customerStatementParamsSchema,
+  customerStatementQuerySchema
+} from "../../validators/customer-statement.validators.js";
 
 export const accountsReceivableRouter = Router();
 
@@ -45,6 +51,58 @@ function accountsReceivableContext(request: Parameters<typeof getRequestContext>
     correlationId: context.correlationId
   };
 }
+
+accountsReceivableRouter.get(
+  "/statements",
+  validateRequest({ query: customerStatementQuerySchema }),
+  requirePermission("receivables", "ar.statements.read"),
+  asyncHandler(async (request, response) => {
+    const result = await customerStatementService.listStatements(accountsReceivableContext(request), request.query);
+
+    sendSuccess(response, result);
+  })
+);
+
+accountsReceivableRouter.get(
+  "/statements/:customerId",
+  validateRequest({ params: customerStatementParamsSchema, query: customerStatementQuerySchema }),
+  requirePermission("receivables", "ar.statements.read"),
+  asyncHandler(async (request, response) => {
+    const result = await customerStatementService.getCustomerStatement(
+      accountsReceivableContext(request),
+      request.params.customerId!,
+      request.query
+    );
+
+    sendSuccess(response, result);
+  })
+);
+
+accountsReceivableRouter.get(
+  "/aging",
+  validateRequest({ query: customerAgingQuerySchema }),
+  requirePermission("receivables", "ar.aging.read"),
+  asyncHandler(async (request, response) => {
+    const result = await customerStatementService.listAging(accountsReceivableContext(request), request.query);
+
+    sendSuccess(response, result);
+  })
+);
+
+accountsReceivableRouter.get(
+  "/aging/:customerId",
+  validateRequest({ params: customerStatementParamsSchema, query: customerAgingQuerySchema }),
+  requirePermission("receivables", "ar.aging.read"),
+  asyncHandler(async (request, response) => {
+    const result = await customerStatementService.getCustomerAging(
+      accountsReceivableContext(request),
+      request.params.customerId!,
+      request.query
+    );
+
+    sendSuccess(response, result);
+  })
+);
 
 accountsReceivableRouter.get(
   "/documents",

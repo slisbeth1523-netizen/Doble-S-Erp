@@ -4268,6 +4268,109 @@ const accountsPayableDocumentFields = [
   }
 ] as const satisfies readonly CatalogFieldDefinition[];
 
+const customerStatementFields = [
+  readOnlyField("documentNumber", "DocumentNumber", "Documento CxC", "text", 10, {
+    searchable: true,
+    grid: { width: 160, align: "left" }
+  }),
+  readOnlyField("customerId", "CustomerId", "Cliente Id", "text", 15, { visibleInGrid: false }),
+  readOnlyField("customerCode", "CustomerCode", "Cliente", "text", 20, {
+    searchable: true,
+    grid: { width: 130, align: "left" }
+  }),
+  readOnlyField("customerName", "CustomerName", "Nombre cliente", "text", 30, {
+    searchable: true,
+    sortable: false,
+    grid: { width: 220, align: "left" }
+  }),
+  readOnlyField("sourceDocumentNumber", "SourceDocumentNumber", "Documento origen", "text", 40, {
+    searchable: true,
+    grid: { width: 170, align: "left" }
+  }),
+  readOnlyField("sourceType", "SourceType", "Tipo origen", "text", 50, {
+    searchable: true,
+    grid: { width: 140, align: "left" }
+  }),
+  readOnlyField("documentDate", "DocumentDate", "Fecha documento", "datetime", 60, {
+    grid: { width: 160, align: "left" }
+  }),
+  readOnlyField("dueDate", "DueDate", "Vence", "datetime", 70, {
+    grid: { width: 150, align: "left" }
+  }),
+  readOnlyField("currencyCode", "CurrencyCode", "Moneda", "text", 75, {
+    searchable: true,
+    grid: { width: 90, align: "left" }
+  }),
+  readOnlyField("status", "Status", "Estado", "text", 80, {
+    searchable: true,
+    grid: { width: 130, align: "left" }
+  }),
+  readOnlyField("totalAmount", "TotalAmount", "Total", "number", 90, {
+    grid: { width: 130, align: "right", format: "currency" }
+  }),
+  readOnlyField("paidAmount", "PaidAmount", "Pagado", "number", 100, {
+    grid: { width: 130, align: "right", format: "currency" }
+  }),
+  readOnlyField("remainingAmount", "RemainingAmount", "Saldo", "number", 110, {
+    grid: { width: 130, align: "right", format: "currency" }
+  }),
+  readOnlyField("daysPastDue", "DaysPastDue", "Dias vencidos", "number", 120, {
+    grid: { width: 120, align: "right" }
+  }),
+  readOnlyField("agingBucket", "AgingBucket", "Rango", "text", 130, {
+    searchable: true,
+    grid: { width: 110, align: "left" }
+  }),
+  readOnlyField("reference", "Reference", "Referencia", "text", 135, {
+    searchable: true,
+    grid: { width: 170, align: "left" }
+  }),
+  readOnlyField("createdAt", "CreatedAt", "Creado", "datetime", 140, { visibleInGrid: false })
+] satisfies readonly CatalogFieldDefinition[];
+
+const customerAgingFields = [
+  readOnlyField("customerId", "CustomerId", "Cliente Id", "text", 5, { visibleInGrid: false }),
+  readOnlyField("customerCode", "CustomerCode", "Cliente", "text", 10, {
+    searchable: true,
+    grid: { width: 130, align: "left" }
+  }),
+  readOnlyField("customerName", "CustomerName", "Nombre cliente", "text", 20, {
+    searchable: true,
+    sortable: false,
+    grid: { width: 240, align: "left" }
+  }),
+  readOnlyField("currentAmount", "CurrentAmount", "Corriente", "number", 30, {
+    grid: { width: 130, align: "right", format: "currency" }
+  }),
+  readOnlyField("days1To30Amount", "Days1To30Amount", "1 a 30", "number", 40, {
+    grid: { width: 130, align: "right", format: "currency" }
+  }),
+  readOnlyField("days31To60Amount", "Days31To60Amount", "31 a 60", "number", 50, {
+    grid: { width: 130, align: "right", format: "currency" }
+  }),
+  readOnlyField("days61To90Amount", "Days61To90Amount", "61 a 90", "number", 60, {
+    grid: { width: 130, align: "right", format: "currency" }
+  }),
+  readOnlyField("daysOver90Amount", "DaysOver90Amount", "Mas de 90", "number", 70, {
+    grid: { width: 130, align: "right", format: "currency" }
+  }),
+  readOnlyField("totalOpenAmount", "TotalOpenAmount", "Total abierto", "number", 80, {
+    grid: { width: 140, align: "right", format: "currency" }
+  }),
+  readOnlyField("overdueAmount", "OverdueAmount", "Vencido", "number", 90, {
+    grid: { width: 130, align: "right", format: "currency" }
+  }),
+  readOnlyField("notDueAmount", "NotDueAmount", "Por vencer", "number", 100, {
+    grid: { width: 130, align: "right", format: "currency" }
+  }),
+  readOnlyField("openDocumentCount", "OpenDocumentCount", "Docs abiertos", "number", 110, {
+    grid: { width: 120, align: "right" }
+  }),
+  readOnlyField("overdueDocumentCount", "OverdueDocumentCount", "Docs vencidos", "number", 120, {
+    grid: { width: 120, align: "right" }
+  })
+] satisfies readonly CatalogFieldDefinition[];
+
 const supplierStatementFields = [
   readOnlyField("documentNumber", "DocumentNumber", "Documento CxP", "text", 10, {
     searchable: true,
@@ -6105,6 +6208,105 @@ export const catalogDefinitions = {
       updatedBy: "UpdatedBy"
     },
     fields: customerCreditNoteApplicationFields
+  },
+  "customer-statements": {
+    catalogCode: "customer-statements",
+    displayName: "Estado de cuenta clientes",
+    tableName: "ar.V_CustomerStatementDetail",
+    idColumn: "AccountsReceivableDocumentId",
+    codeColumn: "DocumentNumber",
+    nameColumn: "CustomerName",
+    descriptionColumn: "Reference",
+    allowedSearchColumns: [
+      "DocumentNumber",
+      "SourceDocumentNumber",
+      "SourceType",
+      "CustomerCode",
+      "CustomerName",
+      "Status",
+      "AgingBucket",
+      "Reference"
+    ],
+    allowedSortColumns: [
+      "DocumentNumber",
+      "CustomerCode",
+      "CustomerName",
+      "SourceType",
+      "DocumentDate",
+      "DueDate",
+      "CurrencyCode",
+      "Status",
+      "TotalAmount",
+      "PaidAmount",
+      "RemainingAmount",
+      "DaysPastDue",
+      "AgingBucket",
+      "CreatedAt"
+    ],
+    defaultSortBy: "DocumentDate",
+    permissions: commonPermissions("ar.statements"),
+    moduleCode: "receivables",
+    tenantScoped: true,
+    companyScoped: true,
+    readOnly: true,
+    columns: {
+      id: "AccountsReceivableDocumentId",
+      tenantId: "TenantId",
+      companyId: "CompanyId",
+      code: "DocumentNumber",
+      name: "CustomerName",
+      description: "Reference",
+      isActive: "IsActive",
+      createdAt: "CreatedAt",
+      updatedAt: "UpdatedAt",
+      createdBy: "CreatedBy",
+      updatedBy: "UpdatedBy"
+    },
+    fields: customerStatementFields
+  },
+  "customer-aging": {
+    catalogCode: "customer-aging",
+    displayName: "Antiguedad de clientes",
+    tableName: "ar.V_CustomerAgingSummary",
+    idColumn: "CustomerId",
+    codeColumn: "CustomerCode",
+    nameColumn: "CustomerName",
+    descriptionColumn: "CustomerName",
+    allowedSearchColumns: ["CustomerCode", "CustomerName"],
+    allowedSortColumns: [
+      "CustomerCode",
+      "CustomerName",
+      "CurrentAmount",
+      "Days1To30Amount",
+      "Days31To60Amount",
+      "Days61To90Amount",
+      "DaysOver90Amount",
+      "TotalOpenAmount",
+      "OverdueAmount",
+      "NotDueAmount",
+      "OpenDocumentCount",
+      "OverdueDocumentCount"
+    ],
+    defaultSortBy: "CustomerName",
+    permissions: commonPermissions("ar.aging"),
+    moduleCode: "receivables",
+    tenantScoped: true,
+    companyScoped: true,
+    readOnly: true,
+    columns: {
+      id: "CustomerId",
+      tenantId: "TenantId",
+      companyId: "CompanyId",
+      code: "CustomerCode",
+      name: "CustomerName",
+      description: "CustomerName",
+      isActive: "IsActive",
+      createdAt: "CreatedAt",
+      updatedAt: "UpdatedAt",
+      createdBy: "CreatedBy",
+      updatedBy: "UpdatedBy"
+    },
+    fields: customerAgingFields
   },
   "customer-receivable-balances": {
     catalogCode: "customer-receivable-balances",

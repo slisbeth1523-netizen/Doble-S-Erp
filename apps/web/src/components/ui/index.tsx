@@ -28,6 +28,41 @@ export function Card({ children, className = "" }: { children: ReactNode; classN
   return <section className={`ui-card ${className}`.trim()}>{children}</section>;
 }
 
+export function FormSection({
+  children,
+  title
+}: {
+  children: ReactNode;
+  title: string;
+}) {
+  return (
+    <section className="form-section">
+      <h3>{title}</h3>
+      {children}
+    </section>
+  );
+}
+
+export function FormField({
+  children,
+  label,
+  required = false
+}: {
+  children: ReactNode;
+  label: string;
+  required?: boolean;
+}) {
+  return (
+    <label className="form-field">
+      <span>
+        {label}
+        {required ? <strong aria-label="requerido"> *</strong> : null}
+      </span>
+      {children}
+    </label>
+  );
+}
+
 export function Badge({
   children,
   tone = "neutral"

@@ -379,6 +379,24 @@ async function getAccountsReceivableDocuments(query, session) {
   return body.data;
 }
 
+async function getCustomerStatements(query, session) {
+  const params = new URLSearchParams(query);
+  const body = await expectOk(`/accounts-receivable/statements?${params.toString()}`, {
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
+async function getCustomerAging(query, session) {
+  const params = new URLSearchParams(query);
+  const body = await expectOk(`/accounts-receivable/aging?${params.toString()}`, {
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
 async function createCustomerReceipt(payload, session) {
   const body = await expectOk("/accounts-receivable/receipts", {
     method: "POST",
@@ -1185,6 +1203,40 @@ async function countAccountsReceivableDocuments(session) {
   }
 }
 
+async function countAccountsReceivableReadSideEffects(session) {
+  if (!session.user.companyId) {
+    fail("Cannot count AR read side effects without company context.");
+  }
+
+  const pool = await sql.connect(getSqlConfig());
+
+  try {
+    const result = await pool
+      .request()
+      .input("TenantId", sql.UniqueIdentifier, session.user.tenantId)
+      .input("CompanyId", sql.UniqueIdentifier, session.user.companyId)
+      .query(`
+        SELECT
+          (SELECT COUNT(1) FROM ar.AccountsReceivableDocuments WHERE TenantId = @TenantId AND CompanyId = @CompanyId) AS AccountsReceivableDocumentCount,
+          (SELECT COUNT(1) FROM ar.CustomerReceipts WHERE TenantId = @TenantId AND CompanyId = @CompanyId) AS CustomerReceiptCount,
+          (SELECT COUNT(1) FROM ar.CustomerCreditNotes WHERE TenantId = @TenantId AND CompanyId = @CompanyId) AS CustomerCreditNoteCount,
+          (SELECT COUNT(1) FROM ap.AccountsPayableDocuments WHERE TenantId = @TenantId AND CompanyId = @CompanyId) AS AccountsPayableDocumentCount,
+          (SELECT COUNT(1) FROM inventory.InventoryMovements WHERE TenantId = @TenantId AND CompanyId = @CompanyId) AS InventoryMovementCount;
+      `);
+
+    const row = result.recordset[0];
+    return {
+      accountsReceivableDocumentCount: Number(row?.AccountsReceivableDocumentCount ?? 0),
+      customerReceiptCount: Number(row?.CustomerReceiptCount ?? 0),
+      customerCreditNoteCount: Number(row?.CustomerCreditNoteCount ?? 0),
+      accountsPayableDocumentCount: Number(row?.AccountsPayableDocumentCount ?? 0),
+      inventoryMovementCount: Number(row?.InventoryMovementCount ?? 0)
+    };
+  } finally {
+    await pool.close();
+  }
+}
+
 async function getAccountsReceivableDocumentSnapshot(documentId, session) {
   if (!session.user.companyId) {
     fail("Cannot read AR document snapshot without company context.");
@@ -1377,6 +1429,225 @@ async function createSupplierAgingSmokeDocuments(session) {
       `);
 
     return { supplierId: String(result.recordset[0].supplierId).toLowerCase(), prefix, asOfDate: "2026-07-10" };
+  } finally {
+    await pool.close();
+  }
+}
+
+async function createCustomerAgingSmokeDocuments(session) {
+  if (!session.user.companyId) {
+    fail("Cannot create AR aging smoke documents without company context.");
+  }
+
+  const pool = await sql.connect(getSqlConfig());
+  const prefix = `CXC-AGING-QA-${smokeRun}`;
+  const customerCode = `CLI-AGING-${smokeRun}`;
+  const customerSearch = `CLI-AGING-${smokeRun}`;
+
+  try {
+    const result = await pool
+      .request()
+      .input("TenantId", sql.UniqueIdentifier, session.user.tenantId)
+      .input("CompanyId", sql.UniqueIdentifier, session.user.companyId)
+      .input("UserId", sql.UniqueIdentifier, session.user.userId ?? null)
+      .input("Prefix", sql.NVarChar(80), prefix)
+      .input("CustomerCode", sql.NVarChar(40), customerCode)
+      .query(`
+        DECLARE @CustomerId UNIQUEIDENTIFIER;
+        DECLARE @SecondCustomerId UNIQUEIDENTIFIER;
+        DECLARE @SecondCustomerCode NVARCHAR(40) = CONCAT(@CustomerCode, '-B');
+
+        SELECT @CustomerId = CustomerId
+        FROM crm.Customers
+        WHERE TenantId = @TenantId
+          AND CompanyId = @CompanyId
+          AND Code = @CustomerCode;
+
+        IF @CustomerId IS NULL
+        BEGIN
+          SET @CustomerId = NEWID();
+
+          INSERT INTO crm.Customers (
+            CustomerId,
+            TenantId,
+            CompanyId,
+            Code,
+            Name,
+            CommercialName,
+            DocumentType,
+            DocumentNumber,
+            Email,
+            Phone,
+            City,
+            Province,
+            CountryCode,
+            PaymentTermId,
+            CurrencyId,
+            TaxCategoryId,
+            CreditLimit,
+            IsCreditCustomer,
+            IsActive,
+            CreatedBy
+          )
+          VALUES (
+            @CustomerId,
+            @TenantId,
+            @CompanyId,
+            @CustomerCode,
+            CONCAT('Cliente Aging ', @CustomerCode),
+            CONCAT('Cliente Aging ', @CustomerCode),
+            'RNC',
+            RIGHT(REPLACE(CONVERT(NVARCHAR(36), @CustomerId), '-', ''), 9),
+            CONCAT(LOWER(@CustomerCode), '@dobles.local'),
+            '809-000-0088',
+            'Santo Domingo',
+            'Distrito Nacional',
+            'DOM',
+            '77777777-7777-7777-7777-777777777777',
+            '55555555-5555-5555-5555-555555555555',
+            '88888888-8888-8888-8888-888888888888',
+            100000,
+            1,
+            1,
+            @UserId
+          );
+        END;
+
+        SELECT @SecondCustomerId = CustomerId
+        FROM crm.Customers
+        WHERE TenantId = @TenantId
+          AND CompanyId = @CompanyId
+          AND Code = @SecondCustomerCode;
+
+        IF @SecondCustomerId IS NULL
+        BEGIN
+          SET @SecondCustomerId = NEWID();
+
+          INSERT INTO crm.Customers (
+            CustomerId,
+            TenantId,
+            CompanyId,
+            Code,
+            Name,
+            CommercialName,
+            DocumentType,
+            DocumentNumber,
+            Email,
+            Phone,
+            City,
+            Province,
+            CountryCode,
+            PaymentTermId,
+            CurrencyId,
+            TaxCategoryId,
+            CreditLimit,
+            IsCreditCustomer,
+            IsActive,
+            CreatedBy
+          )
+          VALUES (
+            @SecondCustomerId,
+            @TenantId,
+            @CompanyId,
+            @SecondCustomerCode,
+            CONCAT('Cliente Aging ', @SecondCustomerCode),
+            CONCAT('Cliente Aging ', @SecondCustomerCode),
+            'RNC',
+            RIGHT(REPLACE(CONVERT(NVARCHAR(36), @SecondCustomerId), '-', ''), 9),
+            CONCAT(LOWER(@SecondCustomerCode), '@dobles.local'),
+            '809-000-0089',
+            'Santo Domingo',
+            'Distrito Nacional',
+            'DOM',
+            '77777777-7777-7777-7777-777777777777',
+            '55555555-5555-5555-5555-555555555555',
+            '88888888-8888-8888-8888-888888888888',
+            100000,
+            1,
+            1,
+            @UserId
+          );
+        END;
+
+        DECLARE @Documents TABLE (
+          CustomerId UNIQUEIDENTIFIER,
+          DocumentNumber NVARCHAR(80),
+          DueDate DATE,
+          TotalAmount DECIMAL(18, 6),
+          PaidAmount DECIMAL(18, 6),
+          Status NVARCHAR(20)
+        );
+
+        INSERT INTO @Documents (CustomerId, DocumentNumber, DueDate, TotalAmount, PaidAmount, Status)
+        VALUES
+          (@CustomerId, CONCAT(@Prefix, '-CURRENT'), '2026-07-20', 10, 0, 'OPEN'),
+          (@CustomerId, CONCAT(@Prefix, '-1-30'), '2026-06-30', 20, 0, 'OPEN'),
+          (@CustomerId, CONCAT(@Prefix, '-31-60'), '2026-05-31', 30, 0, 'OPEN'),
+          (@CustomerId, CONCAT(@Prefix, '-61-90'), '2026-04-30', 40, 0, 'OPEN'),
+          (@CustomerId, CONCAT(@Prefix, '-90PLUS'), '2026-03-31', 50, 0, 'OPEN'),
+          (@CustomerId, CONCAT(@Prefix, '-PAID'), '2026-03-01', 60, 60, 'PAID'),
+          (@SecondCustomerId, CONCAT(@Prefix, '-B'), '2026-07-20', 5, 0, 'OPEN');
+
+        INSERT INTO ar.AccountsReceivableDocuments (
+          AccountsReceivableDocumentId,
+          TenantId,
+          CompanyId,
+          DocumentNumber,
+          SourceType,
+          SourceDocumentId,
+          SourceDocumentNumber,
+          CustomerId,
+          DocumentDate,
+          DueDate,
+          CurrencyCode,
+          ExchangeRate,
+          Status,
+          TotalAmount,
+          PaidAmount,
+          Reference,
+          Notes,
+          IsActive,
+          CreatedBy
+        )
+        SELECT
+          NEWID(),
+          @TenantId,
+          @CompanyId,
+          source.DocumentNumber,
+          'MANUAL',
+          NEWID(),
+          source.DocumentNumber,
+          source.CustomerId,
+          '2026-01-01',
+          source.DueDate,
+          'DOP',
+          1,
+          source.Status,
+          source.TotalAmount,
+          source.PaidAmount,
+          @Prefix,
+          'Documento CxC creado por smoke local para AR aging',
+          1,
+          @UserId
+        FROM @Documents source
+        WHERE NOT EXISTS (
+          SELECT 1
+          FROM ar.AccountsReceivableDocuments existing
+          WHERE existing.TenantId = @TenantId
+            AND existing.CompanyId = @CompanyId
+            AND existing.DocumentNumber = source.DocumentNumber
+        );
+
+        SELECT @CustomerId AS customerId, @SecondCustomerId AS secondCustomerId;
+      `);
+
+    return {
+      customerId: String(result.recordset[0].customerId).toLowerCase(),
+      secondCustomerId: String(result.recordset[0].secondCustomerId).toLowerCase(),
+      customerSearch,
+      prefix,
+      asOfDate: "2026-07-10"
+    };
   } finally {
     await pool.close();
   }
@@ -2426,6 +2697,8 @@ async function validateAccountsReceivableMetadata(session) {
     "customer-receipt-applications",
     "customer-credit-notes",
     "customer-credit-note-applications",
+    "customer-statements",
+    "customer-aging",
     "customer-receivable-balances"
   ]) {
     smokeStep(`metadata ${catalog}`);
@@ -2476,6 +2749,22 @@ async function validateAccountsReceivableMetadata(session) {
         "documentStatus",
         "appliedAmount",
         "documentRemainingAmount"
+      ],
+      "customer-statements": [
+        "documentNumber",
+        "customerCode",
+        "customerName",
+        "remainingAmount",
+        "daysPastDue",
+        "agingBucket"
+      ],
+      "customer-aging": [
+        "customerCode",
+        "customerName",
+        "currentAmount",
+        "days1To30Amount",
+        "totalOpenAmount",
+        "overdueAmount"
       ],
       "customer-receivable-balances": [
         "customerCode",
@@ -3216,6 +3505,197 @@ async function validateSupplierStatementAndAgingFlow(session) {
   }
 }
 
+async function validateCustomerStatementAndAgingFlow(session) {
+  smokeStep("customer statements aging AR document setup");
+  const setup = await createCustomerAgingSmokeDocuments(session);
+  const snapshotBefore = await getCustomerAging({ customerId: setup.customerId, asOfDate: setup.asOfDate, pageSize: "20" }, session);
+  const sideEffectsBefore = await countAccountsReceivableReadSideEffects(session);
+
+  smokeStep("customer aging fixed as-of date");
+  const aging = await getCustomerAging(
+    {
+      customerId: setup.customerId,
+      asOfDate: setup.asOfDate,
+      pageSize: "20"
+    },
+    session
+  );
+
+  const agingRecord = aging.records.find((record) => String(record.customerId).toLowerCase() === String(setup.customerId).toLowerCase());
+  if (!agingRecord) {
+    fail("Customer aging did not return the smoke customer.");
+  }
+
+  const expectedBuckets = {
+    currentAmount: 10,
+    days1To30Amount: 20,
+    days31To60Amount: 30,
+    days61To90Amount: 40,
+    daysOver90Amount: 50,
+    totalOpenAmount: 150,
+    overdueAmount: 140,
+    notDueAmount: 10,
+    openDocumentCount: 5,
+    overdueDocumentCount: 4
+  };
+
+  for (const [field, expectedValue] of Object.entries(expectedBuckets)) {
+    const actualValue = Number(agingRecord[field] ?? 0);
+    if (Math.abs(actualValue - expectedValue) > 0.01) {
+      fail(`Customer aging ${field} expected ${expectedValue} but got ${actualValue}.`);
+    }
+  }
+
+  const bucketSum =
+    Number(agingRecord.currentAmount ?? 0) +
+    Number(agingRecord.days1To30Amount ?? 0) +
+    Number(agingRecord.days31To60Amount ?? 0) +
+    Number(agingRecord.days61To90Amount ?? 0) +
+    Number(agingRecord.daysOver90Amount ?? 0);
+
+  if (Math.abs(bucketSum - Number(agingRecord.totalOpenAmount ?? 0)) > 0.01) {
+    fail("Customer aging bucket sum does not match totalOpenAmount.");
+  }
+
+  smokeStep("customer statement fixed as-of date");
+  const statement = await getCustomerStatements(
+    {
+      customerId: setup.customerId,
+      asOfDate: setup.asOfDate,
+      search: setup.prefix,
+      pageSize: "20"
+    },
+    session
+  );
+
+  const bucketsByDocument = new Map(statement.records.map((record) => [record.documentNumber, record.agingBucket]));
+  const expectedDocumentBuckets = {
+    [`${setup.prefix}-CURRENT`]: "CURRENT",
+    [`${setup.prefix}-1-30`]: "1-30",
+    [`${setup.prefix}-31-60`]: "31-60",
+    [`${setup.prefix}-61-90`]: "61-90",
+    [`${setup.prefix}-90PLUS`]: "90+",
+    [`${setup.prefix}-PAID`]: "90+"
+  };
+
+  for (const [documentNumber, expectedBucket] of Object.entries(expectedDocumentBuckets)) {
+    if (bucketsByDocument.get(documentNumber) !== expectedBucket) {
+      fail(`Customer statement document ${documentNumber} expected bucket ${expectedBucket}.`);
+    }
+  }
+
+  const paidDocument = statement.records.find((record) => record.documentNumber === `${setup.prefix}-PAID`);
+  if (!paidDocument || paidDocument.status !== "PAID" || Number(paidDocument.remainingAmount ?? 0) !== 0) {
+    fail("Customer statement must include the paid detail with zero remaining balance.");
+  }
+
+  if (Math.abs(Number(statement.summary.remainingAmount ?? 0) - 150) > 0.01) {
+    fail("Customer statement remaining summary must match open balances only because PAID has zero balance.");
+  }
+
+  smokeStep("customer statement global summary pagination");
+  const statementPage1 = await getCustomerStatements(
+    {
+      customerId: setup.customerId,
+      asOfDate: setup.asOfDate,
+      search: setup.prefix,
+      page: "1",
+      pageSize: "2"
+    },
+    session
+  );
+  const statementPage2 = await getCustomerStatements(
+    {
+      customerId: setup.customerId,
+      asOfDate: setup.asOfDate,
+      search: setup.prefix,
+      page: "2",
+      pageSize: "2"
+    },
+    session
+  );
+
+  if (JSON.stringify(statementPage1.summary) !== JSON.stringify(statementPage2.summary)) {
+    fail("Customer statement summary must be global and stable across pages.");
+  }
+
+  if (
+    Number(statementPage1.summary.documentCount ?? 0) !== 6 ||
+    Number(statementPage1.summary.openDocumentCount ?? 0) !== 5 ||
+    Math.abs(Number(statementPage1.summary.remainingAmount ?? 0) - 150) > 0.01
+  ) {
+    fail("Customer statement paginated summary must include all filtered documents.");
+  }
+
+  const statementPage1Documents = statementPage1.records.map((record) => record.documentNumber).join("|");
+  const statementPage2Documents = statementPage2.records.map((record) => record.documentNumber).join("|");
+  if (!statementPage1.records.length || !statementPage2.records.length || statementPage1Documents === statementPage2Documents) {
+    fail("Customer statement paginated records must change by page.");
+  }
+
+  const detail = await expectOk(`/accounts-receivable/statements/${setup.customerId}?asOfDate=${setup.asOfDate}&search=${setup.prefix}&pageSize=20`, {
+    headers: authHeaders(session)
+  });
+  if (!Array.isArray(detail.data?.records) || detail.data.records.length !== statement.records.length) {
+    fail("Customer statement detail endpoint did not match the list endpoint.");
+  }
+
+  const agingDetail = await expectOk(`/accounts-receivable/aging/${setup.customerId}?asOfDate=${setup.asOfDate}&pageSize=20`, {
+    headers: authHeaders(session)
+  });
+  if (!agingDetail.data?.records?.some((record) => String(record.customerId).toLowerCase() === setup.customerId)) {
+    fail("Customer aging detail endpoint did not return the expected customer.");
+  }
+
+  smokeStep("customer aging global summary pagination");
+  const agingPage1 = await getCustomerAging(
+    {
+      search: setup.customerSearch,
+      asOfDate: setup.asOfDate,
+      page: "1",
+      pageSize: "1"
+    },
+    session
+  );
+  const agingPage2 = await getCustomerAging(
+    {
+      search: setup.customerSearch,
+      asOfDate: setup.asOfDate,
+      page: "2",
+      pageSize: "1"
+    },
+    session
+  );
+
+  if (JSON.stringify(agingPage1.summary) !== JSON.stringify(agingPage2.summary)) {
+    fail("Customer aging summary must be global and stable across pages.");
+  }
+
+  if (
+    Math.abs(Number(agingPage1.summary.currentAmount ?? 0) - 15) > 0.01 ||
+    Math.abs(Number(agingPage1.summary.totalOpenAmount ?? 0) - 155) > 0.01 ||
+    Number(agingPage1.summary.openDocumentCount ?? 0) !== 6
+  ) {
+    fail("Customer aging paginated summary must include all filtered customers.");
+  }
+
+  const agingPage1Customer = agingPage1.records.map((record) => record.customerId).join("|");
+  const agingPage2Customer = agingPage2.records.map((record) => record.customerId).join("|");
+  if (!agingPage1.records.length || !agingPage2.records.length || agingPage1Customer === agingPage2Customer) {
+    fail("Customer aging paginated records must change by page.");
+  }
+
+  const snapshotAfter = await getCustomerAging({ customerId: setup.customerId, asOfDate: setup.asOfDate, pageSize: "20" }, session);
+  if (JSON.stringify(snapshotAfter.records) !== JSON.stringify(snapshotBefore.records)) {
+    fail("Customer statement and aging queries changed the aging result.");
+  }
+
+  const sideEffectsAfter = await countAccountsReceivableReadSideEffects(session);
+  if (JSON.stringify(sideEffectsAfter) !== JSON.stringify(sideEffectsBefore)) {
+    fail("Customer statement and aging queries created financial side effects.");
+  }
+}
+
 async function validateAccountsReceivableFlow(session) {
   smokeStep("accounts receivable manual document create");
   const customer = await getDemoCustomerReferences(session);
@@ -3709,6 +4189,7 @@ async function main() {
   await validateAccountsReceivableFlow(session);
   await validateCustomerReceiptFlow(session);
   await validateCustomerCreditNoteFlow(session);
+  await validateCustomerStatementAndAgingFlow(session);
   await validateCrud(session);
   console.log("smoke: local runtime validation OK");
 }

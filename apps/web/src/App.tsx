@@ -12,8 +12,10 @@ import { SupplierInvoicesPreview } from "./pages/SupplierInvoicesPreview.js";
 import { AccountsPayablePreview } from "./pages/AccountsPayablePreview.js";
 import { AccountsReceivableDocumentsPreview } from "./pages/AccountsReceivableDocumentsPreview.js";
 import { CustomerReceivableBalancesPreview } from "./pages/CustomerReceivableBalancesPreview.js";
+import { CustomerAgingPreview } from "./pages/CustomerAgingPreview.js";
 import { CustomerCreditNotesPreview } from "./pages/CustomerCreditNotesPreview.js";
 import { CustomerReceiptsPreview } from "./pages/CustomerReceiptsPreview.js";
+import { CustomerStatementsPreview } from "./pages/CustomerStatementsPreview.js";
 import { SupplierPaymentsPreview } from "./pages/SupplierPaymentsPreview.js";
 import { SupplierAdjustmentsPreview } from "./pages/SupplierAdjustmentsPreview.js";
 import { SupplierAgingPreview } from "./pages/SupplierAgingPreview.js";
@@ -91,6 +93,14 @@ export function App() {
 
     if (path === "/accounts-receivable/documents") {
       return <AccountsReceivableDocumentsPreview />;
+    }
+
+    if (path === "/accounts-receivable/statements") {
+      return <CustomerStatementsPreview />;
+    }
+
+    if (path === "/accounts-receivable/aging") {
+      return <CustomerAgingPreview />;
     }
 
     if (path === "/accounts-receivable/customer-balances") {
