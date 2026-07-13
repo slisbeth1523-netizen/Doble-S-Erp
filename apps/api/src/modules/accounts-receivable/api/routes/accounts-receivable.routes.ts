@@ -8,6 +8,7 @@ import { getRequestContext } from "../../../../utils/requestContext.js";
 import { sendSuccess } from "../../../../utils/responseBuilder.js";
 import { validateRequest } from "../../../../utils/validateRequest.js";
 import { accountsReceivableDocumentService } from "../../application/AccountsReceivableDocumentService.js";
+import { customerReceiptService } from "../../application/CustomerReceiptService.js";
 import {
   accountsReceivableDocumentCreateSchema,
   accountsReceivableDocumentIdParamsSchema,
@@ -15,6 +16,12 @@ import {
   customerBalanceListQuerySchema,
   customerBalanceParamsSchema
 } from "../../validators/accounts-receivable-document.validators.js";
+import {
+  customerReceiptApplicationCreateSchema,
+  customerReceiptCreateSchema,
+  customerReceiptIdParamsSchema,
+  customerReceiptListQuerySchema
+} from "../../validators/customer-receipt.validators.js";
 
 export const accountsReceivableRouter = Router();
 
@@ -71,6 +78,71 @@ accountsReceivableRouter.post(
     );
 
     sendSuccess(response, result, 201);
+  })
+);
+
+accountsReceivableRouter.get(
+  "/receipts",
+  validateRequest({ query: customerReceiptListQuerySchema }),
+  requirePermission("receivables", "ar.receipts.read"),
+  asyncHandler(async (request, response) => {
+    const result = await customerReceiptService.listCustomerReceipts(accountsReceivableContext(request), request.query);
+
+    sendSuccess(response, result);
+  })
+);
+
+accountsReceivableRouter.get(
+  "/receipts/:id",
+  validateRequest({ params: customerReceiptIdParamsSchema }),
+  requirePermission("receivables", "ar.receipts.read"),
+  asyncHandler(async (request, response) => {
+    const result = await customerReceiptService.getCustomerReceipt(
+      accountsReceivableContext(request),
+      request.params.id!
+    );
+
+    sendSuccess(response, result);
+  })
+);
+
+accountsReceivableRouter.post(
+  "/receipts",
+  validateRequest({ body: customerReceiptCreateSchema }),
+  requirePermission("receivables", "ar.receipts.create"),
+  asyncHandler(async (request, response) => {
+    const result = await customerReceiptService.createCustomerReceipt(accountsReceivableContext(request), request.body);
+
+    sendSuccess(response, result, 201);
+  })
+);
+
+accountsReceivableRouter.post(
+  "/receipts/:id/applications",
+  validateRequest({ params: customerReceiptIdParamsSchema, body: customerReceiptApplicationCreateSchema }),
+  requirePermission("receivables", "ar.receipts.update"),
+  asyncHandler(async (request, response) => {
+    const result = await customerReceiptService.addApplication(
+      accountsReceivableContext(request),
+      request.params.id!,
+      request.body
+    );
+
+    sendSuccess(response, result);
+  })
+);
+
+accountsReceivableRouter.post(
+  "/receipts/:id/post",
+  validateRequest({ params: customerReceiptIdParamsSchema }),
+  requirePermission("receivables", "ar.receipts.post"),
+  asyncHandler(async (request, response) => {
+    const result = await customerReceiptService.postCustomerReceipt(
+      accountsReceivableContext(request),
+      request.params.id!
+    );
+
+    sendSuccess(response, result);
   })
 );
 

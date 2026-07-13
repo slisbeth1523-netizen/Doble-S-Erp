@@ -379,6 +379,48 @@ async function getAccountsReceivableDocuments(query, session) {
   return body.data;
 }
 
+async function createCustomerReceipt(payload, session) {
+  const body = await expectOk("/accounts-receivable/receipts", {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function applyCustomerReceipt(customerReceiptId, payload, session) {
+  const body = await expectOk(`/accounts-receivable/receipts/${customerReceiptId}/applications`, {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function postCustomerReceipt(customerReceiptId, session) {
+  const body = await expectOk(`/accounts-receivable/receipts/${customerReceiptId}/post`, {
+    method: "POST",
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
+async function expectCustomerReceiptPostFailure(customerReceiptId, session) {
+  const result = await request(`/accounts-receivable/receipts/${customerReceiptId}/post`, {
+    method: "POST",
+    headers: authHeaders(session)
+  });
+
+  if (result.response.ok || result.body?.success !== false) {
+    fail(`Re-posting customer receipt for ${customerReceiptId} must fail in a controlled way.`);
+  }
+
+  return result.body;
+}
+
 async function getCustomerReceivableBalances(query, session) {
   const params = new URLSearchParams(query);
   const body = await expectOk(`/accounts-receivable/customer-balances?${params.toString()}`, {
@@ -1096,6 +1138,49 @@ async function countAccountsReceivableDocuments(session) {
       `);
 
     return Number(result.recordset[0]?.DocumentCount ?? 0);
+  } finally {
+    await pool.close();
+  }
+}
+
+async function getAccountsReceivableDocumentSnapshot(documentId, session) {
+  if (!session.user.companyId) {
+    fail("Cannot read AR document snapshot without company context.");
+  }
+
+  const pool = await sql.connect(getSqlConfig());
+
+  try {
+    const result = await pool
+      .request()
+      .input("TenantId", sql.UniqueIdentifier, session.user.tenantId)
+      .input("CompanyId", sql.UniqueIdentifier, session.user.companyId)
+      .input("DocumentId", sql.UniqueIdentifier, documentId)
+      .query(`
+        SELECT
+          AccountsReceivableDocumentId,
+          Status,
+          TotalAmount,
+          PaidAmount,
+          RemainingAmount
+        FROM ar.AccountsReceivableDocuments
+        WHERE TenantId = @TenantId
+          AND CompanyId = @CompanyId
+          AND AccountsReceivableDocumentId = @DocumentId;
+      `);
+
+    const row = result.recordset[0];
+    if (!row) {
+      fail(`AR document ${documentId} was not found.`);
+    }
+
+    return {
+      id: String(row.AccountsReceivableDocumentId).toLowerCase(),
+      status: row.Status,
+      totalAmount: Number(row.TotalAmount ?? 0),
+      paidAmount: Number(row.PaidAmount ?? 0),
+      remainingAmount: Number(row.RemainingAmount ?? 0)
+    };
   } finally {
     await pool.close();
   }
@@ -2293,7 +2378,12 @@ async function validateSupplierStatementMetadata(session) {
 }
 
 async function validateAccountsReceivableMetadata(session) {
-  for (const catalog of ["accounts-receivable-documents", "customer-receivable-balances"]) {
+  for (const catalog of [
+    "accounts-receivable-documents",
+    "customer-receipts",
+    "customer-receipt-applications",
+    "customer-receivable-balances"
+  ]) {
     smokeStep(`metadata ${catalog}`);
     const metadata = await expectOk(`/master-data/${catalog}/metadata`, {
       headers: authHeaders(session)
@@ -2304,10 +2394,40 @@ async function validateAccountsReceivableMetadata(session) {
     }
 
     const fields = metadata.data.fields.map((field) => field.field);
-    const expectedFields =
-      catalog === "accounts-receivable-documents"
-        ? ["documentNumber", "customerCode", "customerName", "status", "totalAmount", "remainingAmount"]
-        : ["customerCode", "customerName", "totalOpenAmount", "currentAmount", "overdueAmount", "openDocumentCount"];
+    const expectedFieldsByCatalog = {
+      "accounts-receivable-documents": [
+        "documentNumber",
+        "customerCode",
+        "customerName",
+        "status",
+        "totalAmount",
+        "remainingAmount"
+      ],
+      "customer-receipts": [
+        "receiptNumber",
+        "customerCode",
+        "customerName",
+        "status",
+        "totalAmount",
+        "appliedAmount"
+      ],
+      "customer-receipt-applications": [
+        "receiptNumber",
+        "documentNumber",
+        "documentStatus",
+        "appliedAmount",
+        "documentRemainingAmount"
+      ],
+      "customer-receivable-balances": [
+        "customerCode",
+        "customerName",
+        "totalOpenAmount",
+        "currentAmount",
+        "overdueAmount",
+        "openDocumentCount"
+      ]
+    };
+    const expectedFields = expectedFieldsByCatalog[catalog];
     const missingFields = expectedFields.filter((field) => !fields.includes(field));
 
     if (missingFields.length) {
@@ -3118,6 +3238,110 @@ async function validateAccountsReceivableFlow(session) {
   }
 }
 
+async function validateCustomerReceiptFlow(session) {
+  smokeStep("customer receipt partial and final posting");
+  const customer = await getDemoCustomerReferences(session);
+  const documentDate = new Date().toISOString().slice(0, 10);
+  const dueDate = new Date(Date.now() + 20 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const document = await createAccountsReceivableDocument(
+    {
+      customerId: customer.customerId,
+      sourceType: "MANUAL",
+      documentDate,
+      dueDate,
+      currencyCode: "DOP",
+      exchangeRate: 1,
+      totalAmount: 100,
+      reference: `AR-REC-${smokeRun}`,
+      notes: "Documento CxC para smoke de recibos"
+    },
+    session
+  );
+
+  const initialSnapshot = await getAccountsReceivableDocumentSnapshot(document.id, session);
+  if (initialSnapshot.status !== "OPEN" || initialSnapshot.paidAmount !== 0 || initialSnapshot.remainingAmount !== 100) {
+    fail("Customer receipt smoke document did not start with an OPEN balance of 100.");
+  }
+
+  smokeStep("customer receipt draft does not change balance");
+  const partialReceipt = await createCustomerReceipt(
+    {
+      customerId: customer.customerId,
+      receiptDate: documentDate,
+      totalAmount: 30,
+      reference: `REC-PARTIAL-${smokeRun}`,
+      notes: "Recibo parcial smoke local"
+    },
+    session
+  );
+
+  const draftSnapshot = await getAccountsReceivableDocumentSnapshot(document.id, session);
+  if (draftSnapshot.paidAmount !== 0 || draftSnapshot.remainingAmount !== 100 || partialReceipt.status !== "DRAFT") {
+    fail("Creating a customer receipt DRAFT changed AR document balances.");
+  }
+
+  smokeStep("customer receipt partial application and post");
+  await applyCustomerReceipt(
+    partialReceipt.id,
+    {
+      accountsReceivableDocumentId: document.id,
+      appliedAmount: 30,
+      notes: "Abono parcial smoke local"
+    },
+    session
+  );
+  const postedPartialReceipt = await postCustomerReceipt(partialReceipt.id, session);
+  if (postedPartialReceipt.status !== "POSTED") {
+    fail("Customer partial receipt was not posted.");
+  }
+
+  const partialSnapshot = await getAccountsReceivableDocumentSnapshot(document.id, session);
+  if (
+    partialSnapshot.status !== "PARTIALLY_PAID" ||
+    partialSnapshot.paidAmount !== 30 ||
+    partialSnapshot.remainingAmount !== 70
+  ) {
+    fail("Customer partial receipt did not reduce AR balance to 70.");
+  }
+
+  smokeStep("customer receipt final application and post");
+  const finalReceipt = await createCustomerReceipt(
+    {
+      customerId: customer.customerId,
+      receiptDate: documentDate,
+      totalAmount: 70,
+      reference: `REC-FINAL-${smokeRun}`,
+      notes: "Recibo final smoke local"
+    },
+    session
+  );
+  await applyCustomerReceipt(
+    finalReceipt.id,
+    {
+      accountsReceivableDocumentId: document.id,
+      appliedAmount: 70,
+      notes: "Pago final smoke local"
+    },
+    session
+  );
+  const postedFinalReceipt = await postCustomerReceipt(finalReceipt.id, session);
+  if (postedFinalReceipt.status !== "POSTED") {
+    fail("Customer final receipt was not posted.");
+  }
+
+  const finalSnapshot = await getAccountsReceivableDocumentSnapshot(document.id, session);
+  if (finalSnapshot.status !== "PAID" || finalSnapshot.paidAmount !== 100 || finalSnapshot.remainingAmount !== 0) {
+    fail("Customer final receipt did not close the AR balance.");
+  }
+
+  smokeStep("customer receipt repost rejected");
+  await expectCustomerReceiptPostFailure(partialReceipt.id, session);
+  const retrySnapshot = await getAccountsReceivableDocumentSnapshot(document.id, session);
+  if (retrySnapshot.paidAmount !== 100 || retrySnapshot.remainingAmount !== 0 || retrySnapshot.status !== "PAID") {
+    fail("Retrying customer receipt post reduced AR balance twice.");
+  }
+}
+
 async function validateCrud(session) {
   const suffix = smokeRun;
   const customerCode = `QA-CUST-${suffix}`;
@@ -3346,6 +3570,7 @@ async function main() {
   await validateSupplierAdjustmentFlow(session);
   await validateSupplierStatementAndAgingFlow(session);
   await validateAccountsReceivableFlow(session);
+  await validateCustomerReceiptFlow(session);
   await validateCrud(session);
   console.log("smoke: local runtime validation OK");
 }
