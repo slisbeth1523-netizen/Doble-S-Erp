@@ -1442,6 +1442,7 @@ async function createCustomerAgingSmokeDocuments(session) {
   const pool = await sql.connect(getSqlConfig());
   const prefix = `CXC-AGING-QA-${smokeRun}`;
   const customerCode = `CLI-AGING-${smokeRun}`;
+  const customerSearch = `CLI-AGING-${smokeRun}`;
 
   try {
     const result = await pool
@@ -1453,6 +1454,8 @@ async function createCustomerAgingSmokeDocuments(session) {
       .input("CustomerCode", sql.NVarChar(40), customerCode)
       .query(`
         DECLARE @CustomerId UNIQUEIDENTIFIER;
+        DECLARE @SecondCustomerId UNIQUEIDENTIFIER;
+        DECLARE @SecondCustomerCode NVARCHAR(40) = CONCAT(@CustomerCode, '-B');
 
         SELECT @CustomerId = CustomerId
         FROM crm.Customers
@@ -1510,7 +1513,64 @@ async function createCustomerAgingSmokeDocuments(session) {
           );
         END;
 
+        SELECT @SecondCustomerId = CustomerId
+        FROM crm.Customers
+        WHERE TenantId = @TenantId
+          AND CompanyId = @CompanyId
+          AND Code = @SecondCustomerCode;
+
+        IF @SecondCustomerId IS NULL
+        BEGIN
+          SET @SecondCustomerId = NEWID();
+
+          INSERT INTO crm.Customers (
+            CustomerId,
+            TenantId,
+            CompanyId,
+            Code,
+            Name,
+            CommercialName,
+            DocumentType,
+            DocumentNumber,
+            Email,
+            Phone,
+            City,
+            Province,
+            CountryCode,
+            PaymentTermId,
+            CurrencyId,
+            TaxCategoryId,
+            CreditLimit,
+            IsCreditCustomer,
+            IsActive,
+            CreatedBy
+          )
+          VALUES (
+            @SecondCustomerId,
+            @TenantId,
+            @CompanyId,
+            @SecondCustomerCode,
+            CONCAT('Cliente Aging ', @SecondCustomerCode),
+            CONCAT('Cliente Aging ', @SecondCustomerCode),
+            'RNC',
+            RIGHT(REPLACE(CONVERT(NVARCHAR(36), @SecondCustomerId), '-', ''), 9),
+            CONCAT(LOWER(@SecondCustomerCode), '@dobles.local'),
+            '809-000-0089',
+            'Santo Domingo',
+            'Distrito Nacional',
+            'DOM',
+            '77777777-7777-7777-7777-777777777777',
+            '55555555-5555-5555-5555-555555555555',
+            '88888888-8888-8888-8888-888888888888',
+            100000,
+            1,
+            1,
+            @UserId
+          );
+        END;
+
         DECLARE @Documents TABLE (
+          CustomerId UNIQUEIDENTIFIER,
           DocumentNumber NVARCHAR(80),
           DueDate DATE,
           TotalAmount DECIMAL(18, 6),
@@ -1518,14 +1578,15 @@ async function createCustomerAgingSmokeDocuments(session) {
           Status NVARCHAR(20)
         );
 
-        INSERT INTO @Documents (DocumentNumber, DueDate, TotalAmount, PaidAmount, Status)
+        INSERT INTO @Documents (CustomerId, DocumentNumber, DueDate, TotalAmount, PaidAmount, Status)
         VALUES
-          (CONCAT(@Prefix, '-CURRENT'), '2026-07-20', 10, 0, 'OPEN'),
-          (CONCAT(@Prefix, '-1-30'), '2026-06-30', 20, 0, 'OPEN'),
-          (CONCAT(@Prefix, '-31-60'), '2026-05-31', 30, 0, 'OPEN'),
-          (CONCAT(@Prefix, '-61-90'), '2026-04-30', 40, 0, 'OPEN'),
-          (CONCAT(@Prefix, '-90PLUS'), '2026-03-31', 50, 0, 'OPEN'),
-          (CONCAT(@Prefix, '-PAID'), '2026-03-01', 60, 60, 'PAID');
+          (@CustomerId, CONCAT(@Prefix, '-CURRENT'), '2026-07-20', 10, 0, 'OPEN'),
+          (@CustomerId, CONCAT(@Prefix, '-1-30'), '2026-06-30', 20, 0, 'OPEN'),
+          (@CustomerId, CONCAT(@Prefix, '-31-60'), '2026-05-31', 30, 0, 'OPEN'),
+          (@CustomerId, CONCAT(@Prefix, '-61-90'), '2026-04-30', 40, 0, 'OPEN'),
+          (@CustomerId, CONCAT(@Prefix, '-90PLUS'), '2026-03-31', 50, 0, 'OPEN'),
+          (@CustomerId, CONCAT(@Prefix, '-PAID'), '2026-03-01', 60, 60, 'PAID'),
+          (@SecondCustomerId, CONCAT(@Prefix, '-B'), '2026-07-20', 5, 0, 'OPEN');
 
         INSERT INTO ar.AccountsReceivableDocuments (
           AccountsReceivableDocumentId,
@@ -1556,7 +1617,7 @@ async function createCustomerAgingSmokeDocuments(session) {
           'MANUAL',
           NEWID(),
           source.DocumentNumber,
-          @CustomerId,
+          source.CustomerId,
           '2026-01-01',
           source.DueDate,
           'DOP',
@@ -1577,10 +1638,16 @@ async function createCustomerAgingSmokeDocuments(session) {
             AND existing.DocumentNumber = source.DocumentNumber
         );
 
-        SELECT @CustomerId AS customerId;
+        SELECT @CustomerId AS customerId, @SecondCustomerId AS secondCustomerId;
       `);
 
-    return { customerId: String(result.recordset[0].customerId).toLowerCase(), prefix, asOfDate: "2026-07-10" };
+    return {
+      customerId: String(result.recordset[0].customerId).toLowerCase(),
+      secondCustomerId: String(result.recordset[0].secondCustomerId).toLowerCase(),
+      customerSearch,
+      prefix,
+      asOfDate: "2026-07-10"
+    };
   } finally {
     await pool.close();
   }
@@ -3526,6 +3593,46 @@ async function validateCustomerStatementAndAgingFlow(session) {
     fail("Customer statement remaining summary must match open balances only because PAID has zero balance.");
   }
 
+  smokeStep("customer statement global summary pagination");
+  const statementPage1 = await getCustomerStatements(
+    {
+      customerId: setup.customerId,
+      asOfDate: setup.asOfDate,
+      search: setup.prefix,
+      page: "1",
+      pageSize: "2"
+    },
+    session
+  );
+  const statementPage2 = await getCustomerStatements(
+    {
+      customerId: setup.customerId,
+      asOfDate: setup.asOfDate,
+      search: setup.prefix,
+      page: "2",
+      pageSize: "2"
+    },
+    session
+  );
+
+  if (JSON.stringify(statementPage1.summary) !== JSON.stringify(statementPage2.summary)) {
+    fail("Customer statement summary must be global and stable across pages.");
+  }
+
+  if (
+    Number(statementPage1.summary.documentCount ?? 0) !== 6 ||
+    Number(statementPage1.summary.openDocumentCount ?? 0) !== 5 ||
+    Math.abs(Number(statementPage1.summary.remainingAmount ?? 0) - 150) > 0.01
+  ) {
+    fail("Customer statement paginated summary must include all filtered documents.");
+  }
+
+  const statementPage1Documents = statementPage1.records.map((record) => record.documentNumber).join("|");
+  const statementPage2Documents = statementPage2.records.map((record) => record.documentNumber).join("|");
+  if (!statementPage1.records.length || !statementPage2.records.length || statementPage1Documents === statementPage2Documents) {
+    fail("Customer statement paginated records must change by page.");
+  }
+
   const detail = await expectOk(`/accounts-receivable/statements/${setup.customerId}?asOfDate=${setup.asOfDate}&search=${setup.prefix}&pageSize=20`, {
     headers: authHeaders(session)
   });
@@ -3538,6 +3645,44 @@ async function validateCustomerStatementAndAgingFlow(session) {
   });
   if (!agingDetail.data?.records?.some((record) => String(record.customerId).toLowerCase() === setup.customerId)) {
     fail("Customer aging detail endpoint did not return the expected customer.");
+  }
+
+  smokeStep("customer aging global summary pagination");
+  const agingPage1 = await getCustomerAging(
+    {
+      search: setup.customerSearch,
+      asOfDate: setup.asOfDate,
+      page: "1",
+      pageSize: "1"
+    },
+    session
+  );
+  const agingPage2 = await getCustomerAging(
+    {
+      search: setup.customerSearch,
+      asOfDate: setup.asOfDate,
+      page: "2",
+      pageSize: "1"
+    },
+    session
+  );
+
+  if (JSON.stringify(agingPage1.summary) !== JSON.stringify(agingPage2.summary)) {
+    fail("Customer aging summary must be global and stable across pages.");
+  }
+
+  if (
+    Math.abs(Number(agingPage1.summary.currentAmount ?? 0) - 15) > 0.01 ||
+    Math.abs(Number(agingPage1.summary.totalOpenAmount ?? 0) - 155) > 0.01 ||
+    Number(agingPage1.summary.openDocumentCount ?? 0) !== 6
+  ) {
+    fail("Customer aging paginated summary must include all filtered customers.");
+  }
+
+  const agingPage1Customer = agingPage1.records.map((record) => record.customerId).join("|");
+  const agingPage2Customer = agingPage2.records.map((record) => record.customerId).join("|");
+  if (!agingPage1.records.length || !agingPage2.records.length || agingPage1Customer === agingPage2Customer) {
+    fail("Customer aging paginated records must change by page.");
   }
 
   const snapshotAfter = await getCustomerAging({ customerId: setup.customerId, asOfDate: setup.asOfDate, pageSize: "20" }, session);

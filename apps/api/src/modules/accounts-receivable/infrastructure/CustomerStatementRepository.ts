@@ -84,6 +84,29 @@ type AgingRow = {
 
 type CountRow = { TotalItems: number };
 
+type StatementSummaryRow = {
+  TotalAmount: number;
+  PaidAmount: number;
+  RemainingAmount: number;
+  OverdueAmount: number;
+  NotDueAmount: number;
+  DocumentCount: number;
+  OpenDocumentCount: number;
+};
+
+type AgingSummaryRow = {
+  CurrentAmount: number;
+  Days1To30Amount: number;
+  Days31To60Amount: number;
+  Days61To90Amount: number;
+  DaysOver90Amount: number;
+  TotalOpenAmount: number;
+  OverdueAmount: number;
+  NotDueAmount: number;
+  OpenDocumentCount: number;
+  OverdueDocumentCount: number;
+};
+
 const openStatuses = "'OPEN', 'PARTIALLY_PAID'";
 
 export class CustomerStatementRepository extends BaseSqlRepository {
@@ -108,7 +131,7 @@ export class CustomerStatementRepository extends BaseSqlRepository {
       pageSize
     });
 
-    const [rows, counts] = await Promise.all([
+    const [rows, counts, summaries] = await Promise.all([
       this.query<StatementRow>(
         `
           ${this.statementCte()}
@@ -146,6 +169,22 @@ export class CustomerStatementRepository extends BaseSqlRepository {
           WHERE ${this.statementWhere()};
         `,
         parameters
+      ),
+      this.query<StatementSummaryRow>(
+        `
+          ${this.statementCte()}
+          SELECT
+            COALESCE(SUM(TotalAmount), 0) AS TotalAmount,
+            COALESCE(SUM(PaidAmount), 0) AS PaidAmount,
+            COALESCE(SUM(RemainingAmount), 0) AS RemainingAmount,
+            COALESCE(SUM(CASE WHEN DaysPastDue > 0 THEN RemainingAmount ELSE 0 END), 0) AS OverdueAmount,
+            COALESCE(SUM(CASE WHEN DaysPastDue = 0 THEN RemainingAmount ELSE 0 END), 0) AS NotDueAmount,
+            COUNT(1) AS DocumentCount,
+            COALESCE(SUM(CASE WHEN Status IN ('OPEN', 'PARTIALLY_PAID') AND RemainingAmount > 0 THEN 1 ELSE 0 END), 0) AS OpenDocumentCount
+          FROM statement_documents
+          WHERE ${this.statementWhere()};
+        `,
+        parameters
       )
     ]);
 
@@ -154,7 +193,7 @@ export class CustomerStatementRepository extends BaseSqlRepository {
     return {
       asOfDate,
       records: rows.map((row) => this.mapStatement(row)),
-      summary: this.summarizeStatements(rows),
+      summary: this.mapStatementSummary(summaries[0]),
       pagination: {
         page,
         pageSize,
@@ -177,7 +216,7 @@ export class CustomerStatementRepository extends BaseSqlRepository {
     const customerId = query.customerId ?? null;
     const parameters = this.agingParameters(context, { asOfDate, search, customerId, offset, pageSize });
 
-    const [rows, counts] = await Promise.all([
+    const [rows, counts, summaries] = await Promise.all([
       this.query<AgingRow>(
         `
           ${this.agingCte()}
@@ -210,6 +249,25 @@ export class CustomerStatementRepository extends BaseSqlRepository {
           WHERE ${this.agingWhere()};
         `,
         parameters
+      ),
+      this.query<AgingSummaryRow>(
+        `
+          ${this.agingCte()}
+          SELECT
+            COALESCE(SUM(CurrentAmount), 0) AS CurrentAmount,
+            COALESCE(SUM(Days1To30Amount), 0) AS Days1To30Amount,
+            COALESCE(SUM(Days31To60Amount), 0) AS Days31To60Amount,
+            COALESCE(SUM(Days61To90Amount), 0) AS Days61To90Amount,
+            COALESCE(SUM(DaysOver90Amount), 0) AS DaysOver90Amount,
+            COALESCE(SUM(TotalOpenAmount), 0) AS TotalOpenAmount,
+            COALESCE(SUM(OverdueAmount), 0) AS OverdueAmount,
+            COALESCE(SUM(NotDueAmount), 0) AS NotDueAmount,
+            COALESCE(SUM(OpenDocumentCount), 0) AS OpenDocumentCount,
+            COALESCE(SUM(OverdueDocumentCount), 0) AS OverdueDocumentCount
+          FROM customer_aging
+          WHERE ${this.agingWhere()};
+        `,
+        parameters
       )
     ]);
 
@@ -219,7 +277,7 @@ export class CustomerStatementRepository extends BaseSqlRepository {
     return {
       asOfDate,
       records,
-      summary: this.summarizeAging(records),
+      summary: this.mapAgingSummary(summaries[0]),
       pagination: {
         page,
         pageSize,
@@ -399,58 +457,31 @@ export class CustomerStatementRepository extends BaseSqlRepository {
     ];
   }
 
-  private summarizeStatements(rows: StatementRow[]) {
-    return rows.reduce(
-      (summary, row) => ({
-        totalAmount: summary.totalAmount + Number(row.TotalAmount ?? 0),
-        paidAmount: summary.paidAmount + Number(row.PaidAmount ?? 0),
-        remainingAmount: summary.remainingAmount + Number(row.RemainingAmount ?? 0),
-        overdueAmount: summary.overdueAmount + (Number(row.DaysPastDue ?? 0) > 0 ? Number(row.RemainingAmount ?? 0) : 0),
-        notDueAmount: summary.notDueAmount + (Number(row.DaysPastDue ?? 0) === 0 ? Number(row.RemainingAmount ?? 0) : 0),
-        documentCount: summary.documentCount + 1,
-        openDocumentCount:
-          summary.openDocumentCount +
-          (["OPEN", "PARTIALLY_PAID"].includes(row.Status) && Number(row.RemainingAmount ?? 0) > 0 ? 1 : 0)
-      }),
-      {
-        totalAmount: 0,
-        paidAmount: 0,
-        remainingAmount: 0,
-        overdueAmount: 0,
-        notDueAmount: 0,
-        documentCount: 0,
-        openDocumentCount: 0
-      }
-    );
+  private mapStatementSummary(row?: StatementSummaryRow) {
+    return {
+      totalAmount: Number(row?.TotalAmount ?? 0),
+      paidAmount: Number(row?.PaidAmount ?? 0),
+      remainingAmount: Number(row?.RemainingAmount ?? 0),
+      overdueAmount: Number(row?.OverdueAmount ?? 0),
+      notDueAmount: Number(row?.NotDueAmount ?? 0),
+      documentCount: Number(row?.DocumentCount ?? 0),
+      openDocumentCount: Number(row?.OpenDocumentCount ?? 0)
+    };
   }
 
-  private summarizeAging(records: CustomerAgingSummary[]) {
-    return records.reduce(
-      (summary, record) => ({
-        currentAmount: summary.currentAmount + record.currentAmount,
-        days1To30Amount: summary.days1To30Amount + record.days1To30Amount,
-        days31To60Amount: summary.days31To60Amount + record.days31To60Amount,
-        days61To90Amount: summary.days61To90Amount + record.days61To90Amount,
-        daysOver90Amount: summary.daysOver90Amount + record.daysOver90Amount,
-        totalOpenAmount: summary.totalOpenAmount + record.totalOpenAmount,
-        overdueAmount: summary.overdueAmount + record.overdueAmount,
-        notDueAmount: summary.notDueAmount + record.notDueAmount,
-        openDocumentCount: summary.openDocumentCount + record.openDocumentCount,
-        overdueDocumentCount: summary.overdueDocumentCount + record.overdueDocumentCount
-      }),
-      {
-        currentAmount: 0,
-        days1To30Amount: 0,
-        days31To60Amount: 0,
-        days61To90Amount: 0,
-        daysOver90Amount: 0,
-        totalOpenAmount: 0,
-        overdueAmount: 0,
-        notDueAmount: 0,
-        openDocumentCount: 0,
-        overdueDocumentCount: 0
-      }
-    );
+  private mapAgingSummary(row?: AgingSummaryRow) {
+    return {
+      currentAmount: Number(row?.CurrentAmount ?? 0),
+      days1To30Amount: Number(row?.Days1To30Amount ?? 0),
+      days31To60Amount: Number(row?.Days31To60Amount ?? 0),
+      days61To90Amount: Number(row?.Days61To90Amount ?? 0),
+      daysOver90Amount: Number(row?.DaysOver90Amount ?? 0),
+      totalOpenAmount: Number(row?.TotalOpenAmount ?? 0),
+      overdueAmount: Number(row?.OverdueAmount ?? 0),
+      notDueAmount: Number(row?.NotDueAmount ?? 0),
+      openDocumentCount: Number(row?.OpenDocumentCount ?? 0),
+      overdueDocumentCount: Number(row?.OverdueDocumentCount ?? 0)
+    };
   }
 
   private mapStatement(row: StatementRow): CustomerStatementDetail {
