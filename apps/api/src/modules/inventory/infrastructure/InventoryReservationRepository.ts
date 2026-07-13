@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import sql from "mssql";
 
@@ -178,6 +178,28 @@ type ExistingReservationRow = {
   Reference: string | null;
 };
 
+type InventoryReservationOperationType = "RESERVE" | "RELEASE";
+
+type ReservationOperationRow = {
+  InventoryReservationId: string | null;
+  RequestHash: string;
+  ResultingReservedQuantity: number;
+  ResultingReleasedQuantity: number;
+  ResultingActiveQuantity: number;
+  ResultingStatus: InventoryReservationStatus;
+};
+
+type ReservationOperationResult = {
+  reservationId: string;
+  replayed: boolean;
+  snapshot?: {
+    reservedQuantity: number;
+    releasedQuantity: number;
+    activeQuantity: number;
+    status: InventoryReservationStatus;
+  };
+};
+
 export class InventoryReservationRepository extends BaseSqlRepository {
   async reserveSalesOrderLine(
     context: InventoryReservationContextInput,
@@ -185,7 +207,30 @@ export class InventoryReservationRepository extends BaseSqlRepository {
     salesOrderLineId: string,
     payload: InventoryReservationCreatePayload
   ) {
-    const reservationId = await this.executeInTransaction(async (transaction) => {
+    const operationHash = this.hashPayload({
+      operationType: "RESERVE",
+      salesOrderId,
+      salesOrderLineId,
+      quantity: payload.quantity,
+      reference: payload.reference ?? null,
+      notes: payload.notes ?? null
+    });
+
+    const operationResult = await this.executeInTransaction<ReservationOperationResult>(async (transaction) => {
+      const replayed = await this.lockReservationOperation(
+        transaction,
+        context,
+        "RESERVE",
+        payload.idempotencyKey,
+        operationHash
+      );
+      if (replayed) {
+        if (!replayed.InventoryReservationId) {
+          throw this.conflict("INVENTORY_RESERVATION_IDEMPOTENCY_INCOMPLETE", "La operacion idempotente no tiene resultado asociado.");
+        }
+        return this.replayedOperation(replayed.InventoryReservationId, replayed);
+      }
+
       const line = await this.lockSalesOrderLine(transaction, context, salesOrderId, salesOrderLineId);
       this.validateReservableLine(line);
 
@@ -193,9 +238,6 @@ export class InventoryReservationRepository extends BaseSqlRepository {
       await this.lockItemWarehouseReservations(transaction, context, line.ItemId, line.WarehouseId!);
 
       const existing = await this.lockLineReservation(transaction, context, salesOrderLineId, line.ItemId, line.WarehouseId!);
-      if (existing && payload.reference && existing.Reference === payload.reference) {
-        return existing.InventoryReservationId;
-      }
 
       const currentActive = existing ? Number(existing.ActiveQuantity) : 0;
       const currentConsumed = existing ? Number(existing.ConsumedQuantity) : 0;
@@ -234,7 +276,22 @@ export class InventoryReservationRepository extends BaseSqlRepository {
             { name: "UserId", value: context.userId ?? null }
           ]
         );
-        return existing.InventoryReservationId;
+
+        const updated = await this.lockReservation(transaction, context, existing.InventoryReservationId);
+        await this.insertReservationOperation(transaction, context, {
+          operationType: "RESERVE",
+          idempotencyKey: payload.idempotencyKey,
+          requestHash: operationHash,
+          requestQuantity: payload.quantity,
+          inventoryReservationId: existing.InventoryReservationId,
+          salesOrderId,
+          salesOrderLineId,
+          resultingReservedQuantity: Number(updated.ReservedQuantity),
+          resultingReleasedQuantity: Number(updated.ReleasedQuantity),
+          resultingActiveQuantity: Number(updated.ActiveQuantity),
+          resultingStatus: updated.Status
+        });
+        return { reservationId: existing.InventoryReservationId, replayed: false };
       }
 
       const inventoryReservationId = randomUUID();
@@ -291,10 +348,26 @@ export class InventoryReservationRepository extends BaseSqlRepository {
         ]
       );
 
-      return inventoryReservationId;
+      const created = await this.lockReservation(transaction, context, inventoryReservationId);
+      await this.insertReservationOperation(transaction, context, {
+        operationType: "RESERVE",
+        idempotencyKey: payload.idempotencyKey,
+        requestHash: operationHash,
+        requestQuantity: payload.quantity,
+        inventoryReservationId,
+        salesOrderId,
+        salesOrderLineId,
+        resultingReservedQuantity: Number(created.ReservedQuantity),
+        resultingReleasedQuantity: Number(created.ReleasedQuantity),
+        resultingActiveQuantity: Number(created.ActiveQuantity),
+        resultingStatus: created.Status
+      });
+
+      return { reservationId: inventoryReservationId, replayed: false };
     });
 
-    return this.getReservation(context, reservationId);
+    const reservation = await this.getReservation(context, operationResult.reservationId);
+    return this.applyOperationSnapshot(reservation, operationResult);
   }
 
   async releaseReservation(
@@ -302,7 +375,28 @@ export class InventoryReservationRepository extends BaseSqlRepository {
     inventoryReservationId: string,
     payload: InventoryReservationReleasePayload
   ) {
-    const reservationId = await this.executeInTransaction(async (transaction) => {
+    const operationHash = this.hashPayload({
+      operationType: "RELEASE",
+      inventoryReservationId,
+      quantity: payload.quantity,
+      reason: payload.reason ?? null
+    });
+
+    const operationResult = await this.executeInTransaction<ReservationOperationResult>(async (transaction) => {
+      const replayed = await this.lockReservationOperation(
+        transaction,
+        context,
+        "RELEASE",
+        payload.idempotencyKey,
+        operationHash
+      );
+      if (replayed) {
+        if (!replayed.InventoryReservationId) {
+          throw this.conflict("INVENTORY_RESERVATION_IDEMPOTENCY_INCOMPLETE", "La operacion idempotente no tiene resultado asociado.");
+        }
+        return this.replayedOperation(replayed.InventoryReservationId, replayed);
+      }
+
       const current = await this.lockReservation(transaction, context, inventoryReservationId);
       const activeQuantity = Number(current.ActiveQuantity);
       if (activeQuantity <= 0) {
@@ -342,10 +436,26 @@ export class InventoryReservationRepository extends BaseSqlRepository {
         ]
       );
 
-      return inventoryReservationId;
+      const updated = await this.lockReservation(transaction, context, inventoryReservationId);
+      await this.insertReservationOperation(transaction, context, {
+        operationType: "RELEASE",
+        idempotencyKey: payload.idempotencyKey,
+        requestHash: operationHash,
+        requestQuantity: payload.quantity,
+        inventoryReservationId,
+        salesOrderId: null,
+        salesOrderLineId: null,
+        resultingReservedQuantity: Number(updated.ReservedQuantity),
+        resultingReleasedQuantity: Number(updated.ReleasedQuantity),
+        resultingActiveQuantity: Number(updated.ActiveQuantity),
+        resultingStatus: updated.Status
+      });
+
+      return { reservationId: inventoryReservationId, replayed: false };
     });
 
-    return this.getReservation(context, reservationId);
+    const reservation = await this.getReservation(context, operationResult.reservationId);
+    return this.applyOperationSnapshot(reservation, operationResult);
   }
 
   async getReservation(context: InventoryReservationContextInput, inventoryReservationId: string) {
@@ -717,6 +827,155 @@ export class InventoryReservationRepository extends BaseSqlRepository {
       throw this.conflict("ITEM_AVAILABILITY_NOT_FOUND", "No existe disponibilidad para el articulo y almacen.");
     }
     return row;
+  }
+
+  private async lockReservationOperation(
+    transaction: sql.Transaction,
+    context: InventoryReservationContextInput,
+    operationType: InventoryReservationOperationType,
+    idempotencyKey: string,
+    requestHash: string
+  ) {
+    const rows = await this.queryInTransaction<ReservationOperationRow>(
+      transaction,
+      `
+        SELECT
+          InventoryReservationId,
+          RequestHash,
+          ResultingReservedQuantity,
+          ResultingReleasedQuantity,
+          ResultingActiveQuantity,
+          ResultingStatus
+        FROM inventory.InventoryReservationOperations WITH (UPDLOCK, HOLDLOCK)
+        WHERE TenantId = @TenantId
+          AND CompanyId = @CompanyId
+          AND OperationType = @OperationType
+          AND IdempotencyKey = @IdempotencyKey;
+      `,
+      [
+        { name: "TenantId", value: context.tenantId },
+        { name: "CompanyId", value: context.companyId },
+        { name: "OperationType", value: operationType },
+        { name: "IdempotencyKey", value: idempotencyKey }
+      ]
+    );
+
+    const row = rows[0];
+    if (row && row.RequestHash !== requestHash) {
+      throw this.conflict("INVENTORY_RESERVATION_IDEMPOTENCY_CONFLICT", "La clave idempotente ya fue usada con un payload diferente.");
+    }
+
+    return row;
+  }
+
+  private async insertReservationOperation(
+    transaction: sql.Transaction,
+    context: InventoryReservationContextInput,
+    input: {
+      operationType: InventoryReservationOperationType;
+      idempotencyKey: string;
+      requestHash: string;
+      requestQuantity: number;
+      inventoryReservationId: string;
+      salesOrderId: string | null;
+      salesOrderLineId: string | null;
+      resultingReservedQuantity: number;
+      resultingReleasedQuantity: number;
+      resultingActiveQuantity: number;
+      resultingStatus: InventoryReservationStatus;
+    }
+  ) {
+    await this.queryInTransaction(
+      transaction,
+      `
+        INSERT INTO inventory.InventoryReservationOperations (
+          InventoryReservationOperationId,
+          TenantId,
+          CompanyId,
+          InventoryReservationId,
+          SalesOrderId,
+          SalesOrderLineId,
+          OperationType,
+          IdempotencyKey,
+          RequestQuantity,
+          RequestHash,
+          ResultingReservedQuantity,
+          ResultingReleasedQuantity,
+          ResultingActiveQuantity,
+          ResultingStatus,
+          CreatedBy
+        )
+        VALUES (
+          @OperationId,
+          @TenantId,
+          @CompanyId,
+          @ReservationId,
+          @SalesOrderId,
+          @SalesOrderLineId,
+          @OperationType,
+          @IdempotencyKey,
+          @RequestQuantity,
+          @RequestHash,
+          @ResultingReservedQuantity,
+          @ResultingReleasedQuantity,
+          @ResultingActiveQuantity,
+          @ResultingStatus,
+          @UserId
+        );
+      `,
+      [
+        { name: "OperationId", value: randomUUID() },
+        { name: "TenantId", value: context.tenantId },
+        { name: "CompanyId", value: context.companyId },
+        { name: "ReservationId", value: input.inventoryReservationId },
+        { name: "SalesOrderId", value: input.salesOrderId },
+        { name: "SalesOrderLineId", value: input.salesOrderLineId },
+        { name: "OperationType", value: input.operationType },
+        { name: "IdempotencyKey", value: input.idempotencyKey },
+        { name: "RequestQuantity", value: input.requestQuantity },
+        { name: "RequestHash", value: input.requestHash },
+        { name: "ResultingReservedQuantity", value: input.resultingReservedQuantity },
+        { name: "ResultingReleasedQuantity", value: input.resultingReleasedQuantity },
+        { name: "ResultingActiveQuantity", value: input.resultingActiveQuantity },
+        { name: "ResultingStatus", value: input.resultingStatus },
+        { name: "UserId", value: context.userId ?? null }
+      ]
+    );
+  }
+
+  private hashPayload(payload: Record<string, unknown>) {
+    return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+  }
+
+  private replayedOperation(reservationId: string, row: ReservationOperationRow): ReservationOperationResult {
+    return {
+      reservationId,
+      replayed: true,
+      snapshot: {
+        reservedQuantity: Number(row.ResultingReservedQuantity),
+        releasedQuantity: Number(row.ResultingReleasedQuantity),
+        activeQuantity: Number(row.ResultingActiveQuantity),
+        status: row.ResultingStatus
+      }
+    };
+  }
+
+  private applyOperationSnapshot(
+    reservation: InventoryReservationResult,
+    operationResult: ReservationOperationResult
+  ): InventoryReservationResult & { idempotencyReplayed?: boolean } {
+    if (!operationResult.snapshot) {
+      return { ...reservation, idempotencyReplayed: operationResult.replayed || undefined };
+    }
+
+    return {
+      ...reservation,
+      reservedQuantity: operationResult.snapshot.reservedQuantity,
+      releasedQuantity: operationResult.snapshot.releasedQuantity,
+      activeQuantity: operationResult.snapshot.activeQuantity,
+      status: operationResult.snapshot.status,
+      idempotencyReplayed: operationResult.replayed || undefined
+    };
   }
 
   private async queryInTransaction<TRecord>(

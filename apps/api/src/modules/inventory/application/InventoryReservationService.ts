@@ -50,7 +50,9 @@ export class InventoryReservationService extends BaseService {
     payload: InventoryReservationCreatePayload
   ) {
     const result = await this.repository.reserveSalesOrderLine(context, salesOrderId, salesOrderLineId, payload);
-    await this.recordSideEffects(context, result, "created");
+    if (!result.idempotencyReplayed) {
+      await this.recordSideEffects(context, result, "created");
+    }
     return result;
   }
 
@@ -60,7 +62,9 @@ export class InventoryReservationService extends BaseService {
     payload: InventoryReservationReleasePayload
   ) {
     const result = await this.repository.releaseReservation(context, inventoryReservationId, payload);
-    await this.recordSideEffects(context, result, "released");
+    if (!result.idempotencyReplayed) {
+      await this.recordSideEffects(context, result, "released");
+    }
     return result;
   }
 

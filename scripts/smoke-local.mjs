@@ -677,6 +677,10 @@ async function expectReservationFailure(path, payload, session) {
   return result.body;
 }
 
+function reservationIdempotencyKey(label) {
+  return `smoke-${label}-${smokeRun}`;
+}
+
 async function applyCustomerCreditNote(customerCreditNoteId, payload, session) {
   const body = await expectOk(`/accounts-receivable/customer-credit-notes/${customerCreditNoteId}/applications`, {
     method: "POST",
@@ -1649,7 +1653,16 @@ async function releaseSmokeInventoryReservations(session, itemId, warehouseId) {
           AND CompanyId = @CompanyId
           AND ItemId = @ItemId
           AND WarehouseId = @WarehouseId
-          AND Reference LIKE 'RES-%'
+          AND (
+            Reference LIKE 'RES-%'
+            OR SalesOrderId IN (
+              SELECT SalesOrderId
+              FROM sales.SalesOrders
+              WHERE TenantId = @TenantId
+                AND CompanyId = @CompanyId
+                AND Reference LIKE 'RES-%'
+            )
+          )
           AND Status IN ('ACTIVE', 'PARTIALLY_RELEASED')
           AND ReservedQuantity - ReleasedQuantity - ConsumedQuantity > 0;
       `);
@@ -4995,15 +5008,30 @@ async function validateInventoryReservationFlow(session) {
 
   smokeStep("inventory reservation complete flow");
   const complete = await createApprovedReservationOrder(session, `RES-FULL-${smokeRun}`, 5, true);
+  const fullReserveKey = reservationIdempotencyKey("reserve-full");
   const fullReservation = await reserveSalesOrderLine(
     complete.order.id,
     complete.line.id,
-    { quantity: 5, reference: `RES-FULL-${smokeRun}`, notes: "Reserva completa smoke" },
+    { idempotencyKey: fullReserveKey, quantity: 5, reference: `RES-FULL-${smokeRun}`, notes: "Reserva completa smoke" },
     session
   );
   if (fullReservation.activeQuantity !== 5 || fullReservation.status !== "ACTIVE") {
     fail("Complete reservation did not reserve active quantity 5.");
   }
+  const fullReservationRetry = await reserveSalesOrderLine(
+    complete.order.id,
+    complete.line.id,
+    { idempotencyKey: fullReserveKey, quantity: 5, reference: `RES-FULL-${smokeRun}`, notes: "Reserva completa smoke" },
+    session
+  );
+  if (fullReservationRetry.reservedQuantity !== 5 || fullReservationRetry.activeQuantity !== 5) {
+    fail("Retrying complete reservation duplicated quantity.");
+  }
+  await expectReservationFailure(
+    `/sales/orders/${complete.order.id}/lines/${complete.line.id}/reserve`,
+    { idempotencyKey: fullReserveKey, quantity: 1, reference: `RES-FULL-${smokeRun}`, notes: "Reserva completa smoke" },
+    session
+  );
 
   const availabilityAfterFull = await getInventoryAvailability({ itemId, warehouseId, page: "1", pageSize: "10" }, session);
   const fullAvailability = availabilityAfterFull.records[0];
@@ -5026,31 +5054,57 @@ async function validateInventoryReservationFlow(session) {
 
   smokeStep("inventory reservation partial and idempotent increment");
   const partial = await createApprovedReservationOrder(session, `RES-PART-${smokeRun}`, 6, true);
+  const partialNoReferenceKey = reservationIdempotencyKey("reserve-part-no-ref");
   const partialOne = await reserveSalesOrderLine(
     partial.order.id,
     partial.line.id,
-    { quantity: 2, reference: `RES-PART-A-${smokeRun}` },
+    { idempotencyKey: partialNoReferenceKey, quantity: 2 },
     session
   );
+  const partialNoReferenceRetry = await reserveSalesOrderLine(
+    partial.order.id,
+    partial.line.id,
+    { idempotencyKey: partialNoReferenceKey, quantity: 2 },
+    session
+  );
+  if (partialNoReferenceRetry.activeQuantity !== partialOne.activeQuantity) {
+    fail("Retrying reservation without reference duplicated quantity.");
+  }
   const partialLines = await getSalesOrderReservationLines(partial.order.id, session);
   const partialLine = partialLines.find((line) => line.salesOrderLineId === partial.line.id);
   if (!partialLine || partialLine.pendingReservationQuantity !== 4) {
     fail("Partial reservation did not leave pending quantity 4.");
   }
+  const partialIncrementKey = reservationIdempotencyKey("reserve-part-increment");
   await reserveSalesOrderLine(
     partial.order.id,
     partial.line.id,
-    { quantity: 4, reference: `RES-PART-B-${smokeRun}` },
+    { idempotencyKey: partialIncrementKey, quantity: 4, reference: `RES-PART-B-${smokeRun}` },
     session
   );
   const partialRetry = await reserveSalesOrderLine(
     partial.order.id,
     partial.line.id,
-    { quantity: 4, reference: `RES-PART-B-${smokeRun}` },
+    { idempotencyKey: partialIncrementKey, quantity: 4, reference: `RES-PART-B-${smokeRun}` },
     session
   );
   if (partialRetry.activeQuantity !== 6) {
     fail("Retrying reservation with same reference duplicated quantity or failed to preserve total 6.");
+  }
+  await expectReservationFailure(
+    `/sales/orders/${partial.order.id}/lines/${partial.line.id}/reserve`,
+    { idempotencyKey: partialIncrementKey, quantity: 3, reference: `RES-PART-B-${smokeRun}` },
+    session
+  );
+  const extraOrder = await createApprovedReservationOrder(session, `RES-EXTRA-${smokeRun}`, 1, true);
+  const extraReservation = await reserveSalesOrderLine(
+    extraOrder.order.id,
+    extraOrder.line.id,
+    { idempotencyKey: reservationIdempotencyKey("reserve-extra"), quantity: 1 },
+    session
+  );
+  if (extraReservation.activeQuantity !== 1) {
+    fail("A different idempotency key did not allow a valid additional reservation.");
   }
 
   smokeStep("inventory reservation insufficient availability rejected");
@@ -5058,7 +5112,7 @@ async function validateInventoryReservationFlow(session) {
   const reservationsBeforeFailure = await getInventoryAvailability({ itemId, warehouseId, page: "1", pageSize: "10" }, session);
   await expectReservationFailure(
     `/sales/orders/${unavailable.order.id}/lines/${unavailable.line.id}/reserve`,
-    { quantity: 99, reference: `RES-NO-STOCK-${smokeRun}` },
+    { idempotencyKey: reservationIdempotencyKey("reserve-no-stock"), quantity: 99, reference: `RES-NO-STOCK-${smokeRun}` },
     session
   );
   const reservationsAfterFailure = await getInventoryAvailability({ itemId, warehouseId, page: "1", pageSize: "10" }, session);
@@ -5068,10 +5122,28 @@ async function validateInventoryReservationFlow(session) {
 
   smokeStep("inventory reservation partial release");
   const availabilityBeforePartialRelease = await getInventoryAvailability({ itemId, warehouseId, page: "1", pageSize: "10" }, session);
-  const releasedPartial = await releaseInventoryReservation(fullReservation.id, { quantity: 2, reason: "Liberacion parcial smoke" }, session);
+  const partialReleaseKey = reservationIdempotencyKey("release-partial");
+  const releasedPartial = await releaseInventoryReservation(
+    fullReservation.id,
+    { idempotencyKey: partialReleaseKey, quantity: 2, reason: "Liberacion parcial smoke" },
+    session
+  );
   if (releasedPartial.status !== "PARTIALLY_RELEASED" || releasedPartial.activeQuantity !== 3) {
     fail("Partial release did not leave active quantity 3.");
   }
+  const releasedPartialRetry = await releaseInventoryReservation(
+    fullReservation.id,
+    { idempotencyKey: partialReleaseKey, quantity: 2, reason: "Liberacion parcial smoke" },
+    session
+  );
+  if (releasedPartialRetry.releasedQuantity !== releasedPartial.releasedQuantity || releasedPartialRetry.activeQuantity !== releasedPartial.activeQuantity) {
+    fail("Retrying partial release duplicated ReleasedQuantity.");
+  }
+  await expectReservationFailure(
+    `/inventory/reservations/${fullReservation.id}/release`,
+    { idempotencyKey: partialReleaseKey, quantity: 1, reason: "Liberacion parcial smoke" },
+    session
+  );
   const availabilityAfterPartialRelease = await getInventoryAvailability({ itemId, warehouseId, page: "1", pageSize: "10" }, session);
   if (
     Number(availabilityAfterPartialRelease.records[0]?.availableQuantity ?? 0) !==
@@ -5081,13 +5153,17 @@ async function validateInventoryReservationFlow(session) {
   }
 
   smokeStep("inventory reservation total release and retry rejected");
-  const releasedFull = await releaseInventoryReservation(fullReservation.id, { quantity: 3, reason: "Liberacion total smoke" }, session);
+  const releasedFull = await releaseInventoryReservation(
+    fullReservation.id,
+    { idempotencyKey: reservationIdempotencyKey("release-full"), quantity: 3, reason: "Liberacion total smoke" },
+    session
+  );
   if (releasedFull.status !== "RELEASED" || releasedFull.activeQuantity !== 0) {
     fail("Total release did not close reservation.");
   }
   await expectReservationFailure(
     `/inventory/reservations/${fullReservation.id}/release`,
-    { quantity: 1, reason: "Reintento smoke" },
+    { idempotencyKey: reservationIdempotencyKey("release-after-full"), quantity: 1, reason: "Reintento smoke" },
     session
   );
 
@@ -5110,14 +5186,14 @@ async function validateInventoryReservationFlow(session) {
   );
   await expectReservationFailure(
     `/sales/orders/${draftOrder.id}/lines/${draftWithLine.lines[0].id}/reserve`,
-    { quantity: 1, reference: `RES-DRAFT-${smokeRun}` },
+    { idempotencyKey: reservationIdempotencyKey("reserve-draft"), quantity: 1, reference: `RES-DRAFT-${smokeRun}` },
     session
   );
 
   const noWarehouse = await createApprovedReservationOrder(session, `RES-NO-WHS-${smokeRun}`, 1, false);
   await expectReservationFailure(
     `/sales/orders/${noWarehouse.order.id}/lines/${noWarehouse.line.id}/reserve`,
-    { quantity: 1, reference: `RES-NO-WHS-${smokeRun}` },
+    { idempotencyKey: reservationIdempotencyKey("reserve-no-whs"), quantity: 1, reference: `RES-NO-WHS-${smokeRun}` },
     session
   );
 
@@ -5127,7 +5203,7 @@ async function validateInventoryReservationFlow(session) {
       ...authHeaders(session),
       "x-company-id": "99999999-9999-9999-9999-999999999999"
     },
-    body: JSON.stringify({ quantity: 1, reference: `RES-ISO-${smokeRun}` })
+    body: JSON.stringify({ idempotencyKey: reservationIdempotencyKey("reserve-isolated"), quantity: 1, reference: `RES-ISO-${smokeRun}` })
   });
   if (isolated.response.ok || isolated.body?.success !== false) {
     fail("Reservation must remain isolated by tenant and company.");

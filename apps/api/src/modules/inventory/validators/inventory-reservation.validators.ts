@@ -6,6 +6,7 @@ const uniqueIdentifierSchema = z
   .transform((value) => value.toLowerCase());
 
 const optionalText = (max: number) => z.string().trim().max(max).optional().nullable();
+const idempotencyKeySchema = z.string().trim().min(8).max(120);
 
 export const inventoryReservationStatusSchema = z.enum([
   "ACTIVE",
@@ -52,12 +53,14 @@ export const inventoryAvailabilityListQuerySchema = z.object({
 });
 
 export const inventoryReservationCreateSchema = z.object({
+  idempotencyKey: idempotencyKeySchema,
   quantity: z.number().positive(),
   reference: optionalText(120),
   notes: optionalText(500)
 });
 
 export const inventoryReservationReleaseSchema = z.object({
+  idempotencyKey: idempotencyKeySchema,
   quantity: z.number().positive(),
   reason: optionalText(500)
 });

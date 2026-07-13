@@ -101,6 +101,74 @@ BEGIN
 END;
 GO
 
+IF OBJECT_ID('inventory.InventoryReservationOperations', 'U') IS NULL
+BEGIN
+    CREATE TABLE inventory.InventoryReservationOperations (
+        InventoryReservationOperationId UNIQUEIDENTIFIER NOT NULL
+            CONSTRAINT DF_inventory_InventoryReservationOperations_Id DEFAULT NEWSEQUENTIALID(),
+        TenantId UNIQUEIDENTIFIER NOT NULL,
+        CompanyId UNIQUEIDENTIFIER NOT NULL,
+        InventoryReservationId UNIQUEIDENTIFIER NULL,
+        SalesOrderId UNIQUEIDENTIFIER NULL,
+        SalesOrderLineId UNIQUEIDENTIFIER NULL,
+        OperationType NVARCHAR(20) NOT NULL,
+        IdempotencyKey NVARCHAR(120) NOT NULL,
+        RequestQuantity DECIMAL(18,4) NOT NULL,
+        RequestHash NVARCHAR(64) NOT NULL,
+        ResultingReservedQuantity DECIMAL(18,4) NOT NULL,
+        ResultingReleasedQuantity DECIMAL(18,4) NOT NULL,
+        ResultingActiveQuantity DECIMAL(18,4) NOT NULL,
+        ResultingStatus NVARCHAR(30) NOT NULL,
+        CreatedAt DATETIME2(7) NOT NULL
+            CONSTRAINT DF_inventory_InventoryReservationOperations_CreatedAt DEFAULT SYSUTCDATETIME(),
+        CreatedBy UNIQUEIDENTIFIER NULL,
+        CONSTRAINT PK_inventory_InventoryReservationOperations PRIMARY KEY (InventoryReservationOperationId),
+        CONSTRAINT FK_inventory_InventoryReservationOperations_Tenants FOREIGN KEY (TenantId)
+            REFERENCES core.Tenants (TenantId),
+        CONSTRAINT FK_inventory_InventoryReservationOperations_Companies FOREIGN KEY (CompanyId)
+            REFERENCES core.Companies (CompanyId),
+        CONSTRAINT FK_inventory_InventoryReservationOperations_Reservations FOREIGN KEY (InventoryReservationId)
+            REFERENCES inventory.InventoryReservations (InventoryReservationId),
+        CONSTRAINT FK_inventory_InventoryReservationOperations_SalesOrders FOREIGN KEY (SalesOrderId)
+            REFERENCES sales.SalesOrders (SalesOrderId),
+        CONSTRAINT FK_inventory_InventoryReservationOperations_SalesOrderLines FOREIGN KEY (SalesOrderLineId)
+            REFERENCES sales.SalesOrderLines (SalesOrderLineId),
+        CONSTRAINT CK_inventory_InventoryReservationOperations_Type CHECK (OperationType IN ('RESERVE', 'RELEASE')),
+        CONSTRAINT CK_inventory_InventoryReservationOperations_RequestQuantity CHECK (RequestQuantity > 0),
+        CONSTRAINT CK_inventory_InventoryReservationOperations_ResultingQuantities CHECK (
+            ResultingReservedQuantity >= 0
+            AND ResultingReleasedQuantity >= 0
+            AND ResultingActiveQuantity >= 0
+        ),
+        CONSTRAINT CK_inventory_InventoryReservationOperations_ResultingStatus CHECK (
+            ResultingStatus IN ('ACTIVE', 'PARTIALLY_RELEASED', 'RELEASED', 'CONSUMED', 'CANCELLED')
+        )
+    );
+END;
+GO
+
+IF NOT EXISTS (
+    SELECT 1 FROM sys.indexes
+    WHERE object_id = OBJECT_ID('inventory.InventoryReservationOperations')
+      AND name = 'UX_inventory_InventoryReservationOperations_Key'
+)
+BEGIN
+    CREATE UNIQUE INDEX UX_inventory_InventoryReservationOperations_Key
+        ON inventory.InventoryReservationOperations (TenantId, CompanyId, OperationType, IdempotencyKey);
+END;
+GO
+
+IF NOT EXISTS (
+    SELECT 1 FROM sys.indexes
+    WHERE object_id = OBJECT_ID('inventory.InventoryReservationOperations')
+      AND name = 'IX_inventory_InventoryReservationOperations_Reservation'
+)
+BEGIN
+    CREATE INDEX IX_inventory_InventoryReservationOperations_Reservation
+        ON inventory.InventoryReservationOperations (TenantId, CompanyId, InventoryReservationId);
+END;
+GO
+
 CREATE OR ALTER VIEW inventory.V_ItemAvailability
 AS
 WITH ActiveReservations AS (

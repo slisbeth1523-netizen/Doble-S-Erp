@@ -42,6 +42,10 @@ function statusTone(status?: string) {
   return "neutral";
 }
 
+function nextIdempotencyKey(prefix: string) {
+  return `${prefix}-${crypto.randomUUID()}`;
+}
+
 export function SalesReservationsPreview() {
   const [orders, setOrders] = useState<SalesOrder[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState("");
@@ -53,6 +57,8 @@ export function SalesReservationsPreview() {
   const [reserveQuantity, setReserveQuantity] = useState(1);
   const [releaseReservationId, setReleaseReservationId] = useState("");
   const [releaseQuantity, setReleaseQuantity] = useState(1);
+  const [reserveIdempotencyKey, setReserveIdempotencyKey] = useState(() => nextIdempotencyKey("ui-reserve"));
+  const [releaseIdempotencyKey, setReleaseIdempotencyKey] = useState(() => nextIdempotencyKey("ui-release"));
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
@@ -155,10 +161,12 @@ export function SalesReservationsPreview() {
     setFeedback(null);
     try {
       const result = await reserveSalesOrderLine(selectedOrderId, selectedLine.salesOrderLineId, {
+        idempotencyKey: reserveIdempotencyKey,
         quantity: reserveQuantity,
         reference: `UI-RES-${Date.now()}`,
         notes: "Reserva creada desde UI"
       });
+      setReserveIdempotencyKey(nextIdempotencyKey("ui-reserve"));
       setFeedback({ tone: "success", message: `Reserva ${result.orderNumber} creada por ${formatNumber(result.activeQuantity)}.` });
       await refresh(selectedOrderId, search);
     } catch (error: unknown) {
@@ -179,9 +187,11 @@ export function SalesReservationsPreview() {
     setFeedback(null);
     try {
       const result = await releaseInventoryReservation(selectedReservation.id, {
+        idempotencyKey: releaseIdempotencyKey,
         quantity: releaseQuantity,
         reason: "Liberacion desde UI"
       });
+      setReleaseIdempotencyKey(nextIdempotencyKey("ui-release"));
       setFeedback({ tone: "success", message: `Reserva ${reservationStatusLabels[result.status] ?? result.status}.` });
       await refresh(selectedOrderId, search);
     } catch (error: unknown) {

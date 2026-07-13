@@ -119,14 +119,18 @@ export function getSalesOrderReservationLines(orderId: string) {
   return requestApi<SalesOrderReservationLine[]>(`/sales/orders/${orderId}/reservations`);
 }
 
-export function reserveSalesOrderLine(orderId: string, lineId: string, payload: { quantity: number; reference?: string | null; notes?: string | null }) {
+export function reserveSalesOrderLine(
+  orderId: string,
+  lineId: string,
+  payload: { idempotencyKey: string; quantity: number; reference?: string | null; notes?: string | null }
+) {
   return requestApi<InventoryReservation>(`/sales/orders/${orderId}/lines/${lineId}/reserve`, {
     method: "POST",
     body: payload
   });
 }
 
-export function releaseInventoryReservation(reservationId: string, payload: { quantity: number; reason?: string | null }) {
+export function releaseInventoryReservation(reservationId: string, payload: { idempotencyKey: string; quantity: number; reason?: string | null }) {
   return requestApi<InventoryReservation>(`/inventory/reservations/${reservationId}/release`, {
     method: "POST",
     body: payload
