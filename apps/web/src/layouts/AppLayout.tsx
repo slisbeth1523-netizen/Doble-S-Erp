@@ -39,6 +39,16 @@ const navigation: NavigationItem[] = [
     ]
   },
   {
+    label: "Ventas",
+    path: "/sales/quotations",
+    children: [
+      { label: "Cotizaciones", path: "/sales/quotations" },
+      { label: "Consulta cotizaciones", path: "/master-data/sales-quotations" },
+      { label: "Lineas cotizadas", path: "/master-data/sales-quotation-lines" },
+      { label: "Clientes", path: "/master-data/customers" }
+    ]
+  },
+  {
     label: "Compras",
     path: "/purchasing/purchase-orders",
     children: [
@@ -109,6 +119,13 @@ function breadcrumb(path: string) {
 
   if (segments[0] === "master-data") {
     if (
+      segments[1] === "sales-quotations" ||
+      segments[1] === "sales-quotation-lines"
+    ) {
+      return ["Doble S ERP", "Ventas", getCatalogLabel(segments[1] ?? "")];
+    }
+
+    if (
       segments[1] === "purchase-orders" ||
       segments[1] === "purchase-order-lines" ||
       segments[1] === "purchase-receipts" ||
@@ -166,6 +183,10 @@ function breadcrumb(path: string) {
 
   if (segments[0] === "purchasing" && segments[1] === "purchase-orders") {
     return ["Doble S ERP", "Compras", "Ordenes de compra"];
+  }
+
+  if (segments[0] === "sales" && segments[1] === "quotations") {
+    return ["Doble S ERP", "Ventas", "Cotizaciones"];
   }
 
   if (segments[0] === "purchasing" && segments[1] === "purchase-receipts") {
@@ -285,6 +306,7 @@ function renderIcon(label: string) {
         </svg>
       );
     case "Compras":
+    case "Ventas":
       return (
         <svg {...commonProps}>
           <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
