@@ -20,6 +20,15 @@ export const salesOrderLineIdParamsSchema = z.object({
   lineId: uniqueIdentifierSchema
 });
 
+export const salesOrderReservationParamsSchema = z.object({
+  orderId: uniqueIdentifierSchema
+});
+
+export const salesOrderLineReserveParamsSchema = z.object({
+  orderId: uniqueIdentifierSchema,
+  lineId: uniqueIdentifierSchema
+});
+
 export const salesOrderStatusSchema = z.enum([
   "DRAFT",
   "SUBMITTED",

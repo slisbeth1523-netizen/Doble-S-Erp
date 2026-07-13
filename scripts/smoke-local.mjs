@@ -626,6 +626,61 @@ async function expectSalesOrderLineUpdateFailure(salesOrderId, lineId, session) 
   return result.body;
 }
 
+async function getInventoryAvailability(query, session) {
+  const params = new URLSearchParams(query);
+  const body = await expectOk(`/inventory/availability?${params.toString()}`, {
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
+async function getSalesOrderReservationLines(salesOrderId, session) {
+  const body = await expectOk(`/sales/orders/${salesOrderId}/reservations`, {
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
+async function reserveSalesOrderLine(salesOrderId, lineId, payload, session) {
+  const body = await expectOk(`/sales/orders/${salesOrderId}/lines/${lineId}/reserve`, {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function releaseInventoryReservation(reservationId, payload, session) {
+  const body = await expectOk(`/inventory/reservations/${reservationId}/release`, {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function expectReservationFailure(path, payload, session) {
+  const result = await request(path, {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  if (result.response.ok || result.body?.success !== false) {
+    fail(`Reservation request ${path} must fail in a controlled way.`);
+  }
+
+  return result.body;
+}
+
+function reservationIdempotencyKey(label) {
+  return `smoke-${label}-${smokeRun}`;
+}
+
 async function applyCustomerCreditNote(customerCreditNoteId, payload, session) {
   const body = await expectOk(`/accounts-receivable/customer-credit-notes/${customerCreditNoteId}/applications`, {
     method: "POST",
@@ -1516,6 +1571,136 @@ async function countSalesOrderForbiddenSideEffects(session) {
       salesInvoiceCount: Number(row?.SalesInvoiceCount ?? 0),
       reservationCount: Number(row?.ReservationCount ?? 0),
       dispatchCount: Number(row?.DispatchCount ?? 0)
+    };
+  } finally {
+    await pool.close();
+  }
+}
+
+async function setSmokeStockQuantity(session, itemId, warehouseId, quantity) {
+  if (!session.user.companyId) {
+    fail("Cannot set smoke stock without company context.");
+  }
+
+  const pool = await sql.connect(getSqlConfig());
+
+  try {
+    await pool
+      .request()
+      .input("TenantId", sql.UniqueIdentifier, session.user.tenantId)
+      .input("CompanyId", sql.UniqueIdentifier, session.user.companyId)
+      .input("ItemId", sql.UniqueIdentifier, itemId)
+      .input("WarehouseId", sql.UniqueIdentifier, warehouseId)
+      .input("Quantity", sql.Decimal(18, 6), quantity)
+      .input("UserId", sql.UniqueIdentifier, session.user.userId ?? null)
+      .query(`
+        IF EXISTS (
+          SELECT 1
+          FROM inventory.ItemStocks
+          WHERE TenantId = @TenantId
+            AND CompanyId = @CompanyId
+            AND ItemId = @ItemId
+            AND WarehouseId = @WarehouseId
+        )
+        BEGIN
+          UPDATE inventory.ItemStocks
+          SET QuantityOnHand = @Quantity,
+              QuantityReserved = 0,
+              UpdatedAt = SYSUTCDATETIME(),
+              UpdatedBy = @UserId
+          WHERE TenantId = @TenantId
+            AND CompanyId = @CompanyId
+            AND ItemId = @ItemId
+            AND WarehouseId = @WarehouseId;
+        END
+        ELSE
+        BEGIN
+          INSERT INTO inventory.ItemStocks (
+            ItemStockId, TenantId, CompanyId, ItemId, WarehouseId, QuantityOnHand, QuantityReserved, IsActive, CreatedBy
+          )
+          VALUES (NEWID(), @TenantId, @CompanyId, @ItemId, @WarehouseId, @Quantity, 0, 1, @UserId);
+        END;
+      `);
+  } finally {
+    await pool.close();
+  }
+}
+
+async function releaseSmokeInventoryReservations(session, itemId, warehouseId) {
+  if (!session.user.companyId) {
+    fail("Cannot release smoke reservations without company context.");
+  }
+
+  const pool = await sql.connect(getSqlConfig());
+
+  try {
+    await pool
+      .request()
+      .input("TenantId", sql.UniqueIdentifier, session.user.tenantId)
+      .input("CompanyId", sql.UniqueIdentifier, session.user.companyId)
+      .input("ItemId", sql.UniqueIdentifier, itemId)
+      .input("WarehouseId", sql.UniqueIdentifier, warehouseId)
+      .input("UserId", sql.UniqueIdentifier, session.user.userId ?? null)
+      .query(`
+        UPDATE inventory.InventoryReservations
+        SET ReleasedQuantity = ReservedQuantity - ConsumedQuantity,
+            Status = 'RELEASED',
+            ReleasedAt = COALESCE(ReleasedAt, SYSUTCDATETIME()),
+            ReleasedBy = COALESCE(ReleasedBy, @UserId),
+            UpdatedAt = SYSUTCDATETIME(),
+            UpdatedBy = @UserId
+        WHERE TenantId = @TenantId
+          AND CompanyId = @CompanyId
+          AND ItemId = @ItemId
+          AND WarehouseId = @WarehouseId
+          AND (
+            Reference LIKE 'RES-%'
+            OR SalesOrderId IN (
+              SELECT SalesOrderId
+              FROM sales.SalesOrders
+              WHERE TenantId = @TenantId
+                AND CompanyId = @CompanyId
+                AND Reference LIKE 'RES-%'
+            )
+          )
+          AND Status IN ('ACTIVE', 'PARTIALLY_RELEASED')
+          AND ReservedQuantity - ReleasedQuantity - ConsumedQuantity > 0;
+      `);
+  } finally {
+    await pool.close();
+  }
+}
+
+async function getSmokeStockSnapshot(session, itemId, warehouseId) {
+  if (!session.user.companyId) {
+    fail("Cannot read smoke stock without company context.");
+  }
+
+  const pool = await sql.connect(getSqlConfig());
+
+  try {
+    const result = await pool
+      .request()
+      .input("TenantId", sql.UniqueIdentifier, session.user.tenantId)
+      .input("CompanyId", sql.UniqueIdentifier, session.user.companyId)
+      .input("ItemId", sql.UniqueIdentifier, itemId)
+      .input("WarehouseId", sql.UniqueIdentifier, warehouseId)
+      .query(`
+        SELECT QuantityOnHand, QuantityReserved, QuantityAvailable
+        FROM inventory.ItemStocks
+        WHERE TenantId = @TenantId
+          AND CompanyId = @CompanyId
+          AND ItemId = @ItemId
+          AND WarehouseId = @WarehouseId;
+      `);
+    const row = result.recordset[0];
+    if (!row) {
+      fail("Smoke stock snapshot was not found.");
+    }
+    return {
+      quantityOnHand: Number(row.QuantityOnHand ?? 0),
+      quantityReserved: Number(row.QuantityReserved ?? 0),
+      quantityAvailable: Number(row.QuantityAvailable ?? 0)
     };
   } finally {
     await pool.close();
@@ -2961,6 +3146,40 @@ async function validateSalesOrderMetadata(session) {
       catalog === "sales-orders"
         ? ["orderNumber", "customerCode", "customerName", "status", "orderDate", "requestedDeliveryDate", "totalAmount"]
         : ["orderNumber", "status", "lineNumber", "itemCode", "warehouseCode", "quantity", "unitPrice", "lineTotal"];
+    const missingFields = expectedFields.filter((field) => !fields.includes(field));
+
+    if (missingFields.length) {
+      fail(`${catalog} metadata is missing fields: ${missingFields.join(", ")}.`);
+    }
+
+    const unavailableActions = ["create", "update", "activate", "deactivate"]
+      .map((actionName) => metadata.data.actions.find((action) => action.action === actionName))
+      .filter((action) => action?.available !== false);
+
+    if (unavailableActions.length) {
+      fail(`${catalog} write actions must be unavailable.`);
+    }
+  }
+}
+
+async function validateInventoryReservationMetadata(session) {
+  for (const catalog of ["item-availability", "inventory-reservations", "sales-order-reservations"]) {
+    smokeStep(`metadata ${catalog}`);
+    const metadata = await expectOk(`/master-data/${catalog}/metadata`, {
+      headers: authHeaders(session)
+    });
+
+    if (metadata.data?.catalog?.readOnly !== true) {
+      fail(`${catalog} metadata must be read-only.`);
+    }
+
+    const fields = metadata.data.fields.map((field) => field.field);
+    const expectedFields =
+      catalog === "item-availability"
+        ? ["itemCode", "warehouseCode", "onHandQuantity", "reservedQuantity", "availableQuantity"]
+        : catalog === "inventory-reservations"
+          ? ["orderNumber", "itemCode", "warehouseCode", "reservedQuantity", "activeQuantity", "status"]
+          : ["orderNumber", "orderStatus", "itemCode", "orderedQuantity", "reservedQuantity", "pendingReservationQuantity"];
     const missingFields = expectedFields.filter((field) => !fields.includes(field));
 
     if (missingFields.length) {
@@ -4748,6 +4967,272 @@ async function validateSalesOrderFlow(session) {
   }
 }
 
+async function createApprovedReservationOrder(session, reference, quantity, withWarehouse = true) {
+  const customer = await getDemoCustomerReferences(session);
+  const { itemId, unitOfMeasureId, warehouseId } = await getDemoPurchaseReferences(session);
+  const order = await createSalesOrder(
+    {
+      customerId: customer.customerId,
+      currencyCode: "DOP",
+      exchangeRate: 1,
+      reference
+    },
+    session
+  );
+  const withLine = await addSalesOrderLine(
+    order.id,
+    {
+      itemId,
+      unitOfMeasureId,
+      warehouseId: withWarehouse ? warehouseId : null,
+      quantity,
+      unitPrice: 10,
+      discountPercent: 0,
+      taxPercent: 0
+    },
+    session
+  );
+  await transitionSalesOrder(order.id, "submit", session);
+  const approved = await transitionSalesOrder(order.id, "approve", session);
+  const line = withLine.lines[0];
+  return { order: approved, line, itemId, warehouseId };
+}
+
+async function validateInventoryReservationFlow(session) {
+  smokeStep("inventory reservation foundation flow");
+  const { itemId, warehouseId } = await getDemoPurchaseReferences(session);
+  await releaseSmokeInventoryReservations(session, itemId, warehouseId);
+  await setSmokeStockQuantity(session, itemId, warehouseId, 10);
+  const stockBefore = await getSmokeStockSnapshot(session, itemId, warehouseId);
+  const sideEffectsBefore = await countSalesOrderForbiddenSideEffects(session);
+
+  smokeStep("inventory reservation complete flow");
+  const complete = await createApprovedReservationOrder(session, `RES-FULL-${smokeRun}`, 5, true);
+  const fullReserveKey = reservationIdempotencyKey("reserve-full");
+  const fullReservation = await reserveSalesOrderLine(
+    complete.order.id,
+    complete.line.id,
+    { idempotencyKey: fullReserveKey, quantity: 5, reference: `RES-FULL-${smokeRun}`, notes: "Reserva completa smoke" },
+    session
+  );
+  if (fullReservation.activeQuantity !== 5 || fullReservation.status !== "ACTIVE") {
+    fail("Complete reservation did not reserve active quantity 5.");
+  }
+  const fullReservationRetry = await reserveSalesOrderLine(
+    complete.order.id,
+    complete.line.id,
+    { idempotencyKey: fullReserveKey, quantity: 5, reference: `RES-FULL-${smokeRun}`, notes: "Reserva completa smoke" },
+    session
+  );
+  if (fullReservationRetry.reservedQuantity !== 5 || fullReservationRetry.activeQuantity !== 5) {
+    fail("Retrying complete reservation duplicated quantity.");
+  }
+  await expectReservationFailure(
+    `/sales/orders/${complete.order.id}/lines/${complete.line.id}/reserve`,
+    { idempotencyKey: fullReserveKey, quantity: 1, reference: `RES-FULL-${smokeRun}`, notes: "Reserva completa smoke" },
+    session
+  );
+
+  const availabilityAfterFull = await getInventoryAvailability({ itemId, warehouseId, page: "1", pageSize: "10" }, session);
+  const fullAvailability = availabilityAfterFull.records[0];
+  if (!fullAvailability) {
+    fail("Item availability was not returned after reservation.");
+  }
+  if (
+    Number(fullAvailability.onHandQuantity) !== 10 ||
+    Number(fullAvailability.reservedQuantity) !== 5 ||
+    Number(fullAvailability.availableQuantity) !== 5
+  ) {
+    fail("Complete reservation availability did not show on hand 10, reserved 5 and available 5.");
+  }
+  const stockAfterFull = await getSmokeStockSnapshot(session, itemId, warehouseId);
+  if (stockAfterFull.quantityOnHand !== 10 || stockAfterFull.quantityReserved !== 0) {
+    fail("Inventory reservation changed ItemStocks physical or reserved quantities.");
+  }
+  await setSmokeStockQuantity(session, itemId, warehouseId, 20);
+  const stockBaseline = await getSmokeStockSnapshot(session, itemId, warehouseId);
+
+  smokeStep("inventory reservation partial and idempotent increment");
+  const partial = await createApprovedReservationOrder(session, `RES-PART-${smokeRun}`, 6, true);
+  const partialNoReferenceKey = reservationIdempotencyKey("reserve-part-no-ref");
+  const partialOne = await reserveSalesOrderLine(
+    partial.order.id,
+    partial.line.id,
+    { idempotencyKey: partialNoReferenceKey, quantity: 2 },
+    session
+  );
+  const partialNoReferenceRetry = await reserveSalesOrderLine(
+    partial.order.id,
+    partial.line.id,
+    { idempotencyKey: partialNoReferenceKey, quantity: 2 },
+    session
+  );
+  if (partialNoReferenceRetry.activeQuantity !== partialOne.activeQuantity) {
+    fail("Retrying reservation without reference duplicated quantity.");
+  }
+  const partialLines = await getSalesOrderReservationLines(partial.order.id, session);
+  const partialLine = partialLines.find((line) => line.salesOrderLineId === partial.line.id);
+  if (!partialLine || partialLine.pendingReservationQuantity !== 4) {
+    fail("Partial reservation did not leave pending quantity 4.");
+  }
+  const partialIncrementKey = reservationIdempotencyKey("reserve-part-increment");
+  await reserveSalesOrderLine(
+    partial.order.id,
+    partial.line.id,
+    { idempotencyKey: partialIncrementKey, quantity: 4, reference: `RES-PART-B-${smokeRun}` },
+    session
+  );
+  const partialRetry = await reserveSalesOrderLine(
+    partial.order.id,
+    partial.line.id,
+    { idempotencyKey: partialIncrementKey, quantity: 4, reference: `RES-PART-B-${smokeRun}` },
+    session
+  );
+  if (partialRetry.activeQuantity !== 6) {
+    fail("Retrying reservation with same reference duplicated quantity or failed to preserve total 6.");
+  }
+  await expectReservationFailure(
+    `/sales/orders/${partial.order.id}/lines/${partial.line.id}/reserve`,
+    { idempotencyKey: partialIncrementKey, quantity: 3, reference: `RES-PART-B-${smokeRun}` },
+    session
+  );
+  const extraOrder = await createApprovedReservationOrder(session, `RES-EXTRA-${smokeRun}`, 1, true);
+  const extraReservation = await reserveSalesOrderLine(
+    extraOrder.order.id,
+    extraOrder.line.id,
+    { idempotencyKey: reservationIdempotencyKey("reserve-extra"), quantity: 1 },
+    session
+  );
+  if (extraReservation.activeQuantity !== 1) {
+    fail("A different idempotency key did not allow a valid additional reservation.");
+  }
+
+  smokeStep("inventory reservation insufficient availability rejected");
+  const unavailable = await createApprovedReservationOrder(session, `RES-NO-STOCK-${smokeRun}`, 99, true);
+  const reservationsBeforeFailure = await getInventoryAvailability({ itemId, warehouseId, page: "1", pageSize: "10" }, session);
+  await expectReservationFailure(
+    `/sales/orders/${unavailable.order.id}/lines/${unavailable.line.id}/reserve`,
+    { idempotencyKey: reservationIdempotencyKey("reserve-no-stock"), quantity: 99, reference: `RES-NO-STOCK-${smokeRun}` },
+    session
+  );
+  const reservationsAfterFailure = await getInventoryAvailability({ itemId, warehouseId, page: "1", pageSize: "10" }, session);
+  if (JSON.stringify(reservationsAfterFailure.records[0]) !== JSON.stringify(reservationsBeforeFailure.records[0])) {
+    fail("Failed reservation changed availability.");
+  }
+
+  smokeStep("inventory reservation partial release");
+  const availabilityBeforePartialRelease = await getInventoryAvailability({ itemId, warehouseId, page: "1", pageSize: "10" }, session);
+  const partialReleaseKey = reservationIdempotencyKey("release-partial");
+  const releasedPartial = await releaseInventoryReservation(
+    fullReservation.id,
+    { idempotencyKey: partialReleaseKey, quantity: 2, reason: "Liberacion parcial smoke" },
+    session
+  );
+  if (releasedPartial.status !== "PARTIALLY_RELEASED" || releasedPartial.activeQuantity !== 3) {
+    fail("Partial release did not leave active quantity 3.");
+  }
+  const releasedPartialRetry = await releaseInventoryReservation(
+    fullReservation.id,
+    { idempotencyKey: partialReleaseKey, quantity: 2, reason: "Liberacion parcial smoke" },
+    session
+  );
+  if (releasedPartialRetry.releasedQuantity !== releasedPartial.releasedQuantity || releasedPartialRetry.activeQuantity !== releasedPartial.activeQuantity) {
+    fail("Retrying partial release duplicated ReleasedQuantity.");
+  }
+  await expectReservationFailure(
+    `/inventory/reservations/${fullReservation.id}/release`,
+    { idempotencyKey: partialReleaseKey, quantity: 1, reason: "Liberacion parcial smoke" },
+    session
+  );
+  const availabilityAfterPartialRelease = await getInventoryAvailability({ itemId, warehouseId, page: "1", pageSize: "10" }, session);
+  if (
+    Number(availabilityAfterPartialRelease.records[0]?.availableQuantity ?? 0) !==
+    Number(availabilityBeforePartialRelease.records[0]?.availableQuantity ?? 0) + 2
+  ) {
+    fail("Partial release did not increase availability.");
+  }
+
+  smokeStep("inventory reservation total release and retry rejected");
+  const releasedFull = await releaseInventoryReservation(
+    fullReservation.id,
+    { idempotencyKey: reservationIdempotencyKey("release-full"), quantity: 3, reason: "Liberacion total smoke" },
+    session
+  );
+  if (releasedFull.status !== "RELEASED" || releasedFull.activeQuantity !== 0) {
+    fail("Total release did not close reservation.");
+  }
+  await expectReservationFailure(
+    `/inventory/reservations/${fullReservation.id}/release`,
+    { idempotencyKey: reservationIdempotencyKey("release-after-full"), quantity: 1, reason: "Reintento smoke" },
+    session
+  );
+
+  smokeStep("inventory reservation security rejections");
+  const draftCustomer = await getDemoCustomerReferences(session);
+  const { unitOfMeasureId } = await getDemoPurchaseReferences(session);
+  const draftOrder = await createSalesOrder(
+    {
+      customerId: draftCustomer.customerId,
+      currencyCode: "DOP",
+      exchangeRate: 1,
+      reference: `RES-DRAFT-${smokeRun}`
+    },
+    session
+  );
+  const draftWithLine = await addSalesOrderLine(
+    draftOrder.id,
+    { itemId, unitOfMeasureId, warehouseId, quantity: 1, unitPrice: 10 },
+    session
+  );
+  await expectReservationFailure(
+    `/sales/orders/${draftOrder.id}/lines/${draftWithLine.lines[0].id}/reserve`,
+    { idempotencyKey: reservationIdempotencyKey("reserve-draft"), quantity: 1, reference: `RES-DRAFT-${smokeRun}` },
+    session
+  );
+
+  const noWarehouse = await createApprovedReservationOrder(session, `RES-NO-WHS-${smokeRun}`, 1, false);
+  await expectReservationFailure(
+    `/sales/orders/${noWarehouse.order.id}/lines/${noWarehouse.line.id}/reserve`,
+    { idempotencyKey: reservationIdempotencyKey("reserve-no-whs"), quantity: 1, reference: `RES-NO-WHS-${smokeRun}` },
+    session
+  );
+
+  const isolated = await request(`/sales/orders/${partial.order.id}/lines/${partial.line.id}/reserve`, {
+    method: "POST",
+    headers: {
+      ...authHeaders(session),
+      "x-company-id": "99999999-9999-9999-9999-999999999999"
+    },
+    body: JSON.stringify({ idempotencyKey: reservationIdempotencyKey("reserve-isolated"), quantity: 1, reference: `RES-ISO-${smokeRun}` })
+  });
+  if (isolated.response.ok || isolated.body?.success !== false) {
+    fail("Reservation must remain isolated by tenant and company.");
+  }
+
+  const runtimeRows = await expectOk(`/master-data/inventory-reservations?search=${encodeURIComponent(partial.order.orderNumber)}&page=1&pageSize=10`, {
+    headers: authHeaders(session)
+  });
+  if (!runtimeRows.data?.some((record) => record.orderNumber === partial.order.orderNumber)) {
+    fail("/master-data/inventory-reservations did not expose the created reservation.");
+  }
+
+  const stockAfter = await getSmokeStockSnapshot(session, itemId, warehouseId);
+  if (stockAfter.quantityOnHand !== stockBaseline.quantityOnHand || stockAfter.quantityReserved !== stockBaseline.quantityReserved) {
+    fail("Reservation flow changed ItemStocks quantities.");
+  }
+
+  const sideEffectsAfter = await countSalesOrderForbiddenSideEffects(session);
+  if (
+    sideEffectsAfter.inventoryMovementCount !== sideEffectsBefore.inventoryMovementCount ||
+    sideEffectsAfter.inventoryLedgerEntryCount !== sideEffectsBefore.inventoryLedgerEntryCount ||
+    sideEffectsAfter.accountsReceivableDocumentCount !== sideEffectsBefore.accountsReceivableDocumentCount ||
+    sideEffectsAfter.salesInvoiceCount !== sideEffectsBefore.salesInvoiceCount ||
+    sideEffectsAfter.dispatchCount !== sideEffectsBefore.dispatchCount
+  ) {
+    fail("Reservation flow created forbidden movements, ledger entries, invoices, dispatches or AR documents.");
+  }
+}
+
 async function validateCrud(session) {
   const suffix = smokeRun;
   const customerCode = `QA-CUST-${suffix}`;
@@ -4965,6 +5450,7 @@ async function main() {
   await validateInventoryLedgerMetadata(session);
   await validateSalesQuotationMetadata(session);
   await validateSalesOrderMetadata(session);
+  await validateInventoryReservationMetadata(session);
   await validatePurchaseOrderMetadata(session);
   await validatePurchaseReceiptMetadata(session);
   await validateSupplierPaymentMetadata(session);
@@ -4983,6 +5469,7 @@ async function main() {
   await validateCustomerStatementAndAgingFlow(session);
   await validateSalesQuotationFlow(session);
   await validateSalesOrderFlow(session);
+  await validateInventoryReservationFlow(session);
   await validateCrud(session);
   console.log("smoke: local runtime validation OK");
 }

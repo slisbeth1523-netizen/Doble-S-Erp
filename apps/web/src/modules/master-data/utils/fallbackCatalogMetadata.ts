@@ -513,6 +513,35 @@ const catalogFields: Record<string, FieldInput[]> = {
     { field: "lastMovementAt", label: "Ultimo movimiento", type: "datetime", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 160 },
     { field: "isActive", label: "Activo", type: "boolean", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 96, align: "center", format: "boolean" }
   ],
+  "item-availability": [
+    { field: "itemCode", label: "Articulo", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, width: 130 },
+    { field: "itemDescription", label: "Descripcion", searchable: true, editable: false, readOnly: true, visibleInForm: false, width: 240 },
+    { field: "warehouseCode", label: "Almacen", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, width: 130 },
+    { field: "onHandQuantity", label: "Existencia fisica", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, width: 140, align: "right" },
+    { field: "reservedQuantity", label: "Reservado", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, width: 130, align: "right" },
+    { field: "availableQuantity", label: "Disponible", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, width: 130, align: "right" }
+  ],
+  "inventory-reservations": [
+    { field: "orderNumber", label: "Pedido", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, width: 150 },
+    { field: "lineNumber", label: "Linea", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, width: 80, align: "right" },
+    { field: "itemCode", label: "Articulo", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, width: 130 },
+    { field: "warehouseCode", label: "Almacen", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, width: 130 },
+    { field: "reservedQuantity", label: "Reservado original", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, width: 150, align: "right" },
+    { field: "releasedQuantity", label: "Liberado", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, width: 120, align: "right" },
+    { field: "activeQuantity", label: "Reserva activa", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, width: 140, align: "right" },
+    { field: "status", label: "Estado", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, width: 130 }
+  ],
+  "sales-order-reservations": [
+    { field: "orderNumber", label: "Pedido", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, width: 150 },
+    { field: "orderStatus", label: "Estado pedido", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, width: 130 },
+    { field: "lineNumber", label: "Linea", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, width: 80, align: "right" },
+    { field: "itemCode", label: "Articulo", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, width: 130 },
+    { field: "warehouseCode", label: "Almacen", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, width: 130 },
+    { field: "orderedQuantity", label: "Cantidad pedido", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, width: 140, align: "right" },
+    { field: "reservedQuantity", label: "Reservado", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, width: 120, align: "right" },
+    { field: "pendingReservationQuantity", label: "Pendiente reserva", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, width: 150, align: "right" },
+    { field: "availableQuantity", label: "Disponible", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, width: 130, align: "right" }
+  ],
   "inventory-movements": [
     { field: "movementNumber", label: "Movimiento", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 150 },
     { field: "movementType", label: "Tipo", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 190 },
@@ -638,6 +667,9 @@ export function getFallbackCatalogMetadata(catalog: string): CatalogMetadata | n
   const inputs = catalogFields[catalog];
   const catalogReadOnly = [
     "inventory-stocks",
+    "item-availability",
+    "inventory-reservations",
+    "sales-order-reservations",
     "inventory-movements",
     "inventory-movement-lines",
     "inventory-ledger",

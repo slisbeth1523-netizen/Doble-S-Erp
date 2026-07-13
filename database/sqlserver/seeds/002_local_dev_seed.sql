@@ -164,7 +164,11 @@ VALUES
   ('inventory', 'inventory.physical-counts.create', 'Local create physical counts'),
   ('inventory', 'inventory.physical-counts.count', 'Local count physical inventory lines'),
   ('inventory', 'inventory.physical-counts.complete', 'Local complete physical counts'),
-  ('inventory', 'inventory.physical-counts.adjust', 'Local create physical count adjustments');
+  ('inventory', 'inventory.physical-counts.adjust', 'Local create physical count adjustments'),
+  ('inventory', 'inventory.reservations.read', 'Local read inventory reservations'),
+  ('inventory', 'inventory.reservations.create', 'Local create inventory reservations'),
+  ('inventory', 'inventory.reservations.release', 'Local release inventory reservations'),
+  ('inventory', 'inventory.availability.read', 'Local read inventory availability');
 
 INSERT INTO security.Permissions (ModuleCode, ActionCode, Description, IsActive)
 SELECT p.ModuleCode, p.ActionCode, p.Description, 1

@@ -472,6 +472,9 @@ export function SalesOrdersPreview() {
           <Button disabled={saving || (order?.status !== "DRAFT" && order?.status !== "SUBMITTED")} onClick={handleCancel} type="button" variant="danger">
             Cancelar
           </Button>
+          <Button disabled={order?.status !== "APPROVED"} onClick={() => navigate("/sales/reservations")} type="button" variant="secondary">
+            Reservar
+          </Button>
         </div>
 
         {order ? (
@@ -541,12 +544,15 @@ export function SalesOrdersPreview() {
         )}
 
         <Table
-          columns={["Linea", "Articulo", "Almacen", "Cantidad", "Precio", "Total", "Acciones"]}
+          columns={["Linea", "Articulo", "Almacen", "Cantidad", "Reservado", "Pendiente", "Disponible", "Precio", "Total", "Acciones"]}
           rows={(order?.lines ?? []).map((line) => [
             line.lineNumber,
             `${line.itemCode} - ${line.description}`,
             line.warehouseCode ?? "-",
             formatNumber(line.quantity),
+            formatNumber(line.reservedQuantity),
+            formatNumber(line.pendingReservationQuantity ?? line.quantity),
+            formatNumber(line.availableQuantity),
             formatNumber(line.unitPrice),
             formatNumber(line.lineTotal),
             <div className="toolbar-row" key={line.id}>

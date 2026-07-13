@@ -34,6 +34,8 @@ const navigation: NavigationItem[] = [
       { label: "Existencias", path: "/master-data/inventory-stocks" },
       { label: "Movimientos", path: "/master-data/inventory-movements" },
       { label: "Kardex", path: "/master-data/inventory-ledger" },
+      { label: "Disponibilidad", path: "/master-data/item-availability" },
+      { label: "Consulta reservas", path: "/master-data/inventory-reservations" },
       { label: "Ajustes", path: "/inventory/adjustments" },
       { label: "Conteos fisicos", path: "/inventory/physical-counts" }
     ]
@@ -44,6 +46,7 @@ const navigation: NavigationItem[] = [
     children: [
       { label: "Cotizaciones", path: "/sales/quotations" },
       { label: "Pedidos", path: "/sales/orders" },
+      { label: "Reservas", path: "/sales/reservations" },
       { label: "Consulta cotizaciones", path: "/master-data/sales-quotations" },
       { label: "Lineas cotizadas", path: "/master-data/sales-quotation-lines" },
       { label: "Consulta pedidos", path: "/master-data/sales-orders" },
@@ -170,7 +173,10 @@ function breadcrumb(path: string) {
     if (
       segments[1] === "inventory-stocks" ||
       segments[1] === "inventory-movements" ||
-      segments[1] === "inventory-ledger"
+      segments[1] === "inventory-ledger" ||
+      segments[1] === "item-availability" ||
+      segments[1] === "inventory-reservations" ||
+      segments[1] === "sales-order-reservations"
     ) {
       return ["Doble S ERP", "Inventario", getCatalogLabel(segments[1] ?? "")];
     }
@@ -196,6 +202,10 @@ function breadcrumb(path: string) {
 
   if (segments[0] === "sales" && segments[1] === "orders") {
     return ["Doble S ERP", "Ventas", "Pedidos"];
+  }
+
+  if (segments[0] === "sales" && segments[1] === "reservations") {
+    return ["Doble S ERP", "Ventas", "Reservas"];
   }
 
   if (segments[0] === "purchasing" && segments[1] === "purchase-receipts") {

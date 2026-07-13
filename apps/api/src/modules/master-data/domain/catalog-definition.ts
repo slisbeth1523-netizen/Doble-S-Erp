@@ -829,6 +829,42 @@ const inventoryStockFields = [
   }
 ] as const satisfies readonly CatalogFieldDefinition[];
 
+const itemAvailabilityFields = [
+  { field: "itemCode", dbColumn: "ItemCode", label: "Articulo", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 10, validation: { nullable: false }, grid: { width: 130, align: "left" } },
+  { field: "itemDescription", dbColumn: "ItemDescription", label: "Descripcion", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: false, editable: false, readOnly: true, displayOrder: 20, validation: { nullable: false }, grid: { width: 240, align: "left" } },
+  { field: "warehouseCode", dbColumn: "WarehouseCode", label: "Almacen", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 30, validation: { nullable: false }, grid: { width: 130, align: "left" } },
+  { field: "warehouseName", dbColumn: "WarehouseName", label: "Nombre almacen", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: false, editable: false, readOnly: true, displayOrder: 40, validation: { nullable: false }, grid: { width: 220, align: "left" } },
+  { field: "onHandQuantity", dbColumn: "OnHandQuantity", label: "Existencia fisica", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 50, validation: { min: 0, nullable: false }, grid: { width: 140, align: "right" } },
+  { field: "reservedQuantity", dbColumn: "ReservedQuantity", label: "Reservado", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 60, validation: { min: 0, nullable: false }, grid: { width: 130, align: "right" } },
+  { field: "availableQuantity", dbColumn: "AvailableQuantity", label: "Disponible", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 70, validation: { nullable: false }, grid: { width: 130, align: "right" } }
+] as const satisfies readonly CatalogFieldDefinition[];
+
+const inventoryReservationFields = [
+  { field: "orderNumber", dbColumn: "OrderNumber", label: "Pedido", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 10, validation: { nullable: false }, grid: { width: 150, align: "left" } },
+  { field: "lineNumber", dbColumn: "LineNumber", label: "Linea", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 20, validation: { min: 1, nullable: false }, grid: { width: 80, align: "right" } },
+  { field: "itemCode", dbColumn: "ItemCode", label: "Articulo", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 30, validation: { nullable: false }, grid: { width: 130, align: "left" } },
+  { field: "itemDescription", dbColumn: "ItemDescription", label: "Descripcion", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: false, editable: false, readOnly: true, displayOrder: 40, validation: { nullable: false }, grid: { width: 240, align: "left" } },
+  { field: "warehouseCode", dbColumn: "WarehouseCode", label: "Almacen", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 50, validation: { nullable: false }, grid: { width: 130, align: "left" } },
+  { field: "reservedQuantity", dbColumn: "ReservedQuantity", label: "Reservado original", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 60, validation: { min: 0, nullable: false }, grid: { width: 150, align: "right" } },
+  { field: "releasedQuantity", dbColumn: "ReleasedQuantity", label: "Liberado", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 70, validation: { min: 0, nullable: false }, grid: { width: 120, align: "right" } },
+  { field: "activeQuantity", dbColumn: "ActiveQuantity", label: "Reserva activa", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 80, validation: { min: 0, nullable: false }, grid: { width: 140, align: "right" } },
+  { field: "status", dbColumn: "Status", label: "Estado", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 90, validation: { nullable: false }, grid: { width: 130, align: "left" } },
+  { field: "reference", dbColumn: "Reference", label: "Referencia", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: false, editable: false, readOnly: true, displayOrder: 100, validation: { nullable: true }, grid: { width: 170, align: "left" } }
+] as const satisfies readonly CatalogFieldDefinition[];
+
+const salesOrderReservationFields = [
+  { field: "orderNumber", dbColumn: "OrderNumber", label: "Pedido", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 10, validation: { nullable: false }, grid: { width: 150, align: "left" } },
+  { field: "orderStatus", dbColumn: "OrderStatus", label: "Estado pedido", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 20, validation: { nullable: false }, grid: { width: 130, align: "left" } },
+  { field: "lineNumber", dbColumn: "LineNumber", label: "Linea", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 30, validation: { min: 1, nullable: false }, grid: { width: 80, align: "right" } },
+  { field: "itemCode", dbColumn: "ItemCode", label: "Articulo", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 40, validation: { nullable: false }, grid: { width: 130, align: "left" } },
+  { field: "warehouseCode", dbColumn: "WarehouseCode", label: "Almacen", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 50, validation: { nullable: true }, grid: { width: 130, align: "left" } },
+  { field: "orderedQuantity", dbColumn: "OrderedQuantity", label: "Cantidad pedido", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 60, validation: { min: 0, nullable: false }, grid: { width: 140, align: "right" } },
+  { field: "reservedQuantity", dbColumn: "ReservedQuantity", label: "Reservado", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 70, validation: { min: 0, nullable: false }, grid: { width: 120, align: "right" } },
+  { field: "pendingReservationQuantity", dbColumn: "PendingReservationQuantity", label: "Pendiente reserva", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 80, validation: { nullable: false }, grid: { width: 150, align: "right" } },
+  { field: "onHandQuantity", dbColumn: "OnHandQuantity", label: "Existencia fisica", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 90, validation: { nullable: true }, grid: { width: 140, align: "right" } },
+  { field: "availableQuantity", dbColumn: "AvailableQuantity", label: "Disponible", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 100, validation: { nullable: true }, grid: { width: 130, align: "right" } }
+] as const satisfies readonly CatalogFieldDefinition[];
+
 const inventoryMovementFields = [
   {
     field: "movementNumber",
@@ -8075,6 +8111,99 @@ export const catalogDefinitions = {
       updatedBy: "UpdatedBy"
     },
     fields: inventoryStockFields
+  },
+  "item-availability": {
+    catalogCode: "item-availability",
+    displayName: "Disponibilidad de inventario",
+    tableName: "inventory.V_ItemAvailability",
+    idColumn: "ItemAvailabilityId",
+    codeColumn: "ItemCode",
+    nameColumn: "ItemDescription",
+    descriptionColumn: "WarehouseName",
+    allowedSearchColumns: ["ItemCode", "ItemDescription", "WarehouseCode", "WarehouseName"],
+    allowedSortColumns: ["ItemCode", "WarehouseCode", "OnHandQuantity", "ReservedQuantity", "AvailableQuantity"],
+    defaultSortBy: "ItemCode",
+    permissions: commonPermissions("inventory.availability"),
+    moduleCode: "inventory",
+    tenantScoped: true,
+    companyScoped: true,
+    readOnly: true,
+    columns: {
+      id: "ItemAvailabilityId",
+      tenantId: "TenantId",
+      companyId: "CompanyId",
+      code: "ItemCode",
+      name: "ItemDescription",
+      description: "WarehouseName",
+      isActive: "IsActive",
+      createdAt: "CreatedAt",
+      updatedAt: "UpdatedAt",
+      createdBy: "CreatedBy",
+      updatedBy: "UpdatedBy"
+    },
+    fields: itemAvailabilityFields
+  },
+  "inventory-reservations": {
+    catalogCode: "inventory-reservations",
+    displayName: "Reservas de inventario",
+    tableName: "inventory.V_InventoryReservationSummary",
+    idColumn: "InventoryReservationId",
+    codeColumn: "OrderNumber",
+    nameColumn: "ItemDescription",
+    descriptionColumn: "WarehouseName",
+    allowedSearchColumns: ["OrderNumber", "ItemCode", "ItemDescription", "WarehouseCode", "Status", "Reference"],
+    allowedSortColumns: ["OrderNumber", "LineNumber", "ItemCode", "WarehouseCode", "ReservedQuantity", "ActiveQuantity", "Status", "ReservedAt"],
+    defaultSortBy: "ReservedAt",
+    permissions: commonPermissions("inventory.reservations"),
+    moduleCode: "inventory",
+    tenantScoped: true,
+    companyScoped: true,
+    readOnly: true,
+    columns: {
+      id: "InventoryReservationId",
+      tenantId: "TenantId",
+      companyId: "CompanyId",
+      code: "OrderNumber",
+      name: "ItemDescription",
+      description: "WarehouseName",
+      isActive: "IsActive",
+      createdAt: "CreatedAt",
+      updatedAt: "UpdatedAt",
+      createdBy: "CreatedBy",
+      updatedBy: "UpdatedBy"
+    },
+    fields: inventoryReservationFields
+  },
+  "sales-order-reservations": {
+    catalogCode: "sales-order-reservations",
+    displayName: "Reservas por pedido",
+    tableName: "inventory.V_SalesOrderReservationSummary",
+    idColumn: "SalesOrderReservationId",
+    codeColumn: "OrderNumber",
+    nameColumn: "ItemDescription",
+    descriptionColumn: "WarehouseName",
+    allowedSearchColumns: ["OrderNumber", "OrderStatus", "ItemCode", "ItemDescription", "WarehouseCode"],
+    allowedSortColumns: ["OrderNumber", "LineNumber", "ItemCode", "WarehouseCode", "OrderedQuantity", "ReservedQuantity", "PendingReservationQuantity", "AvailableQuantity"],
+    defaultSortBy: "OrderNumber",
+    permissions: commonPermissions("inventory.reservations"),
+    moduleCode: "inventory",
+    tenantScoped: true,
+    companyScoped: true,
+    readOnly: true,
+    columns: {
+      id: "SalesOrderReservationId",
+      tenantId: "TenantId",
+      companyId: "CompanyId",
+      code: "OrderNumber",
+      name: "ItemDescription",
+      description: "WarehouseName",
+      isActive: "IsActive",
+      createdAt: "CreatedAt",
+      updatedAt: "UpdatedAt",
+      createdBy: "CreatedBy",
+      updatedBy: "UpdatedBy"
+    },
+    fields: salesOrderReservationFields
   },
   "inventory-movements": {
     catalogCode: "inventory-movements",
