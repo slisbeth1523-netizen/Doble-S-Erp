@@ -449,6 +449,85 @@ async function createCustomerCreditNote(payload, session) {
   return body.data;
 }
 
+async function createSalesQuotation(payload, session) {
+  const body = await expectOk("/sales/quotations", {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function getSalesQuotation(salesQuotationId, session) {
+  const body = await expectOk(`/sales/quotations/${salesQuotationId}`, {
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
+async function getSalesQuotations(query, session) {
+  const params = new URLSearchParams(query);
+  const body = await expectOk(`/sales/quotations?${params.toString()}`, {
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
+async function addSalesQuotationLine(salesQuotationId, payload, session) {
+  const body = await expectOk(`/sales/quotations/${salesQuotationId}/lines`, {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function updateSalesQuotationLine(salesQuotationId, lineId, payload, session) {
+  const body = await expectOk(`/sales/quotations/${salesQuotationId}/lines/${lineId}`, {
+    method: "PATCH",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function deleteSalesQuotationLine(salesQuotationId, lineId, session) {
+  const body = await expectOk(`/sales/quotations/${salesQuotationId}/lines/${lineId}`, {
+    method: "DELETE",
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
+async function transitionSalesQuotation(salesQuotationId, action, session) {
+  const body = await expectOk(`/sales/quotations/${salesQuotationId}/${action}`, {
+    method: "POST",
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
+async function expectSalesQuotationLineUpdateFailure(salesQuotationId, lineId, session) {
+  const result = await request(`/sales/quotations/${salesQuotationId}/lines/${lineId}`, {
+    method: "PATCH",
+    headers: authHeaders(session),
+    body: JSON.stringify({ quantity: 9 })
+  });
+
+  if (result.response.ok || result.body?.success !== false) {
+    fail(`Updating sent sales quotation ${salesQuotationId} must fail in a controlled way.`);
+  }
+
+  return result.body;
+}
+
 async function applyCustomerCreditNote(customerCreditNoteId, payload, session) {
   const body = await expectOk(`/accounts-receivable/customer-credit-notes/${customerCreditNoteId}/applications`, {
     method: "POST",
@@ -1198,6 +1277,58 @@ async function countAccountsReceivableDocuments(session) {
       `);
 
     return Number(result.recordset[0]?.DocumentCount ?? 0);
+  } finally {
+    await pool.close();
+  }
+}
+
+async function countSalesQuotationForbiddenSideEffects(session) {
+  if (!session.user.companyId) {
+    fail("Cannot count sales quotation side effects without company context.");
+  }
+
+  const pool = await sql.connect(getSqlConfig());
+
+  try {
+    const result = await pool
+      .request()
+      .input("TenantId", sql.UniqueIdentifier, session.user.tenantId)
+      .input("CompanyId", sql.UniqueIdentifier, session.user.companyId)
+      .query(`
+        DECLARE @SalesInvoiceCount INT = 0;
+
+        IF OBJECT_ID('sales.SalesInvoices', 'U') IS NOT NULL
+        BEGIN
+          DECLARE @InvoiceSql NVARCHAR(MAX) = N'
+            SELECT @Count = COUNT(1)
+            FROM sales.SalesInvoices
+            WHERE TenantId = @TenantId
+              AND CompanyId = @CompanyId;
+          ';
+          EXEC sp_executesql
+            @InvoiceSql,
+            N'@TenantId UNIQUEIDENTIFIER, @CompanyId UNIQUEIDENTIFIER, @Count INT OUTPUT',
+            @TenantId = @TenantId,
+            @CompanyId = @CompanyId,
+            @Count = @SalesInvoiceCount OUTPUT;
+        END;
+
+        SELECT
+          (SELECT COUNT(1) FROM inventory.ItemStocks WHERE TenantId = @TenantId AND CompanyId = @CompanyId) AS ItemStockCount,
+          (SELECT COUNT(1) FROM inventory.InventoryMovements WHERE TenantId = @TenantId AND CompanyId = @CompanyId) AS InventoryMovementCount,
+          (SELECT COUNT(1) FROM inventory.InventoryLedgerEntries WHERE TenantId = @TenantId AND CompanyId = @CompanyId) AS InventoryLedgerEntryCount,
+          (SELECT COUNT(1) FROM ar.AccountsReceivableDocuments WHERE TenantId = @TenantId AND CompanyId = @CompanyId) AS AccountsReceivableDocumentCount,
+          @SalesInvoiceCount AS SalesInvoiceCount;
+      `);
+
+    const row = result.recordset[0];
+    return {
+      itemStockCount: Number(row?.ItemStockCount ?? 0),
+      inventoryMovementCount: Number(row?.InventoryMovementCount ?? 0),
+      inventoryLedgerEntryCount: Number(row?.InventoryLedgerEntryCount ?? 0),
+      accountsReceivableDocumentCount: Number(row?.AccountsReceivableDocumentCount ?? 0),
+      salesInvoiceCount: Number(row?.SalesInvoiceCount ?? 0)
+    };
   } finally {
     await pool.close();
   }
@@ -2594,6 +2725,38 @@ async function validatePurchaseOrderMetadata(session) {
   }
 }
 
+async function validateSalesQuotationMetadata(session) {
+  for (const catalog of ["sales-quotations", "sales-quotation-lines"]) {
+    smokeStep(`metadata ${catalog}`);
+    const metadata = await expectOk(`/master-data/${catalog}/metadata`, {
+      headers: authHeaders(session)
+    });
+
+    if (metadata.data?.catalog?.readOnly !== true) {
+      fail(`${catalog} metadata must be read-only.`);
+    }
+
+    const fields = metadata.data.fields.map((field) => field.field);
+    const expectedFields =
+      catalog === "sales-quotations"
+        ? ["quotationNumber", "customerCode", "customerName", "status", "quotationDate", "validUntil", "totalAmount"]
+        : ["quotationNumber", "status", "lineNumber", "itemCode", "unitOfMeasureCode", "quantity", "unitPrice", "lineTotal"];
+    const missingFields = expectedFields.filter((field) => !fields.includes(field));
+
+    if (missingFields.length) {
+      fail(`${catalog} metadata is missing fields: ${missingFields.join(", ")}.`);
+    }
+
+    const unavailableActions = ["create", "update", "activate", "deactivate"]
+      .map((actionName) => metadata.data.actions.find((action) => action.action === actionName))
+      .filter((action) => action?.available !== false);
+
+    if (unavailableActions.length) {
+      fail(`${catalog} write actions must be unavailable.`);
+    }
+  }
+}
+
 async function validatePurchaseReceiptMetadata(session) {
   for (const catalog of ["purchase-receipts", "purchase-receipt-lines"]) {
     smokeStep(`metadata ${catalog}`);
@@ -3959,6 +4122,186 @@ async function validateCustomerCreditNoteFlow(session) {
   }
 }
 
+function assertAmount(actual, expected, message) {
+  if (Math.abs(Number(actual ?? 0) - expected) > 0.01) {
+    fail(`${message}. Expected ${expected}, got ${actual}.`);
+  }
+}
+
+async function validateSalesQuotationFlow(session) {
+  smokeStep("sales quotation foundation flow");
+  const customer = await getDemoCustomerReferences(session);
+  const references = await getDemoPurchaseReferences(session);
+  const sideEffectsBefore = await countSalesQuotationForbiddenSideEffects(session);
+  const now = new Date();
+  const validUntil = new Date(Date.now() + 20 * 24 * 60 * 60 * 1000).toISOString();
+
+  const draft = await createSalesQuotation(
+    {
+      customerId: customer.customerId,
+      quotationDate: now.toISOString(),
+      validUntil,
+      currencyCode: "DOP",
+      exchangeRate: 1,
+      reference: `SAL-QA-${smokeRun}`,
+      notes: "Cotizacion smoke local"
+    },
+    session
+  );
+
+  if (draft.status !== "DRAFT" || !String(draft.quotationNumber ?? "").startsWith("COT-")) {
+    fail("Sales quotation was not created in DRAFT with an internal number.");
+  }
+  assertAmount(draft.totalAmount, 0, "Sales quotation DRAFT total must start at zero");
+
+  smokeStep("sales quotation line calculations");
+  const firstLineQuotation = await addSalesQuotationLine(
+    draft.id,
+    {
+      itemId: references.itemId,
+      unitOfMeasureId: references.unitOfMeasureId,
+      description: "Linea simple smoke",
+      quantity: 2,
+      unitPrice: 10,
+      discountPercent: 0,
+      taxPercent: 0
+    },
+    session
+  );
+  assertAmount(firstLineQuotation.totalAmount, 20, "First sales quotation line total was not calculated");
+
+  const secondLineQuotation = await addSalesQuotationLine(
+    draft.id,
+    {
+      itemId: references.itemId,
+      unitOfMeasureId: references.unitOfMeasureId,
+      description: "Linea con descuento e impuesto",
+      quantity: 3,
+      unitPrice: 5,
+      discountPercent: 10,
+      taxPercent: 18
+    },
+    session
+  );
+  assertAmount(secondLineQuotation.subtotalAmount, 35, "Sales quotation subtotal did not consolidate all lines");
+  assertAmount(secondLineQuotation.discountAmount, 1.5, "Sales quotation discount did not consolidate all lines");
+  assertAmount(secondLineQuotation.taxAmount, 2.43, "Sales quotation tax did not consolidate all lines");
+  assertAmount(secondLineQuotation.totalAmount, 35.93, "Sales quotation total did not consolidate all lines");
+
+  smokeStep("sales quotation update and delete lines");
+  const firstLine = secondLineQuotation.lines.find((line) => line.lineNumber === 1);
+  const secondLine = secondLineQuotation.lines.find((line) => line.lineNumber === 2);
+  if (!firstLine || !secondLine) {
+    fail("Sales quotation lines were not returned in detail.");
+  }
+
+  const updatedQuotation = await updateSalesQuotationLine(
+    draft.id,
+    firstLine.id,
+    {
+      quantity: 4,
+      unitPrice: 12,
+      discountPercent: 0,
+      taxPercent: 0
+    },
+    session
+  );
+  assertAmount(updatedQuotation.totalAmount, 63.93, "Sales quotation line update did not recalculate header totals");
+
+  const deletedQuotation = await deleteSalesQuotationLine(draft.id, secondLine.id, session);
+  assertAmount(deletedQuotation.totalAmount, 48, "Sales quotation delete did not recalculate header totals");
+
+  smokeStep("sales quotation send and edit rejection");
+  const sentQuotation = await transitionSalesQuotation(draft.id, "send", session);
+  if (sentQuotation.status !== "SENT") {
+    fail("Sales quotation did not transition to SENT.");
+  }
+  await expectSalesQuotationLineUpdateFailure(draft.id, firstLine.id, session);
+
+  smokeStep("sales quotation approve");
+  const approvedQuotation = await transitionSalesQuotation(draft.id, "approve", session);
+  if (approvedQuotation.status !== "APPROVED") {
+    fail("Sales quotation did not transition to APPROVED.");
+  }
+
+  smokeStep("sales quotation reject");
+  const rejectDraft = await createSalesQuotation(
+    {
+      customerId: customer.customerId,
+      validUntil,
+      currencyCode: "DOP",
+      exchangeRate: 1,
+      reference: `SAL-REJ-${smokeRun}`
+    },
+    session
+  );
+  const rejectWithLine = await addSalesQuotationLine(
+    rejectDraft.id,
+    {
+      itemId: references.itemId,
+      unitOfMeasureId: references.unitOfMeasureId,
+      description: "Linea para rechazo",
+      quantity: 1,
+      unitPrice: 15
+    },
+    session
+  );
+  await transitionSalesQuotation(rejectWithLine.id, "send", session);
+  const rejectedQuotation = await transitionSalesQuotation(rejectWithLine.id, "reject", session);
+  if (rejectedQuotation.status !== "REJECTED") {
+    fail("Sales quotation did not transition to REJECTED.");
+  }
+
+  smokeStep("sales quotation expire");
+  const expireDraft = await createSalesQuotation(
+    {
+      customerId: customer.customerId,
+      validUntil,
+      currencyCode: "DOP",
+      exchangeRate: 1,
+      reference: `SAL-EXP-${smokeRun}`
+    },
+    session
+  );
+  const expiredQuotation = await transitionSalesQuotation(expireDraft.id, "expire", session);
+  if (expiredQuotation.status !== "EXPIRED") {
+    fail("Sales quotation did not transition to EXPIRED.");
+  }
+
+  smokeStep("sales quotation list and isolation");
+  const list = await getSalesQuotations({ search: approvedQuotation.quotationNumber, page: "1", pageSize: "10" }, session);
+  if (!list.records?.some((record) => record.id === approvedQuotation.id)) {
+    fail("Sales quotation list did not return the approved quotation.");
+  }
+  const detail = await getSalesQuotation(approvedQuotation.id, session);
+  if (detail.id !== approvedQuotation.id || detail.lines.length !== 1) {
+    fail("Sales quotation detail did not return the expected line.");
+  }
+
+  const isolated = await request(`/sales/quotations/${approvedQuotation.id}`, {
+    headers: {
+      ...authHeaders(session),
+      "x-company-id": "99999999-9999-9999-9999-999999999999"
+    }
+  });
+  if (isolated.response.ok || isolated.body?.success !== false) {
+    fail("Sales quotation must not be visible from another company context.");
+  }
+
+  const runtimeRows = await expectOk(
+    `/master-data/sales-quotations?search=${encodeURIComponent(approvedQuotation.quotationNumber)}&page=1&pageSize=10`,
+    { headers: authHeaders(session) }
+  );
+  if (!runtimeRows.data?.some((record) => record.quotationNumber === approvedQuotation.quotationNumber)) {
+    fail("/master-data/sales-quotations did not return the created quotation.");
+  }
+
+  const sideEffectsAfter = await countSalesQuotationForbiddenSideEffects(session);
+  if (JSON.stringify(sideEffectsAfter) !== JSON.stringify(sideEffectsBefore)) {
+    fail("Sales quotation flow changed inventory, ledger, AR or invoice side effects.");
+  }
+}
+
 async function validateCrud(session) {
   const suffix = smokeRun;
   const customerCode = `QA-CUST-${suffix}`;
@@ -4174,6 +4517,7 @@ async function main() {
   const session = await loginDemo();
   await validateCatalogs(session);
   await validateInventoryLedgerMetadata(session);
+  await validateSalesQuotationMetadata(session);
   await validatePurchaseOrderMetadata(session);
   await validatePurchaseReceiptMetadata(session);
   await validateSupplierPaymentMetadata(session);
@@ -4190,6 +4534,7 @@ async function main() {
   await validateCustomerReceiptFlow(session);
   await validateCustomerCreditNoteFlow(session);
   await validateCustomerStatementAndAgingFlow(session);
+  await validateSalesQuotationFlow(session);
   await validateCrud(session);
   console.log("smoke: local runtime validation OK");
 }
