@@ -1978,6 +1978,300 @@ const accountsReceivableDocumentFields = [
   }
 ] as const satisfies readonly CatalogFieldDefinition[];
 
+const customerReceiptFields = [
+  {
+    field: "receiptNumber",
+    dbColumn: "ReceiptNumber",
+    label: "Recibo",
+    type: "text",
+    required: true,
+    visibleInGrid: true,
+    visibleInForm: false,
+    searchable: true,
+    sortable: true,
+    editable: false,
+    readOnly: true,
+    displayOrder: 10,
+    validation: { required: true, nullable: false },
+    grid: { width: 160, align: "left" }
+  },
+  {
+    field: "customerCode",
+    dbColumn: "CustomerCode",
+    label: "Cliente",
+    type: "text",
+    required: true,
+    visibleInGrid: true,
+    visibleInForm: false,
+    searchable: true,
+    sortable: true,
+    editable: false,
+    readOnly: true,
+    displayOrder: 20,
+    validation: { required: true, nullable: false },
+    grid: { width: 130, align: "left" }
+  },
+  {
+    field: "customerName",
+    dbColumn: "CustomerName",
+    label: "Nombre cliente",
+    type: "text",
+    required: true,
+    visibleInGrid: true,
+    visibleInForm: false,
+    searchable: true,
+    sortable: true,
+    editable: false,
+    readOnly: true,
+    displayOrder: 30,
+    validation: { required: true, nullable: false },
+    grid: { width: 220, align: "left" }
+  },
+  {
+    field: "receiptDate",
+    dbColumn: "ReceiptDate",
+    label: "Fecha recibo",
+    type: "datetime",
+    required: true,
+    visibleInGrid: true,
+    visibleInForm: false,
+    searchable: false,
+    sortable: true,
+    editable: false,
+    readOnly: true,
+    displayOrder: 40,
+    validation: { required: true, nullable: false },
+    grid: { width: 150, align: "left" }
+  },
+  {
+    field: "status",
+    dbColumn: "Status",
+    label: "Estado",
+    type: "text",
+    required: true,
+    visibleInGrid: true,
+    visibleInForm: false,
+    searchable: true,
+    sortable: true,
+    editable: false,
+    readOnly: true,
+    displayOrder: 50,
+    validation: { required: true, nullable: false },
+    grid: { width: 110, align: "left" }
+  },
+  {
+    field: "totalAmount",
+    dbColumn: "TotalAmount",
+    label: "Monto total",
+    type: "number",
+    required: true,
+    visibleInGrid: true,
+    visibleInForm: false,
+    searchable: false,
+    sortable: true,
+    editable: false,
+    readOnly: true,
+    displayOrder: 60,
+    validation: { required: true, min: 0, nullable: false },
+    grid: { width: 130, align: "right", format: "currency" }
+  },
+  {
+    field: "appliedAmount",
+    dbColumn: "AppliedAmount",
+    label: "Aplicado",
+    type: "number",
+    required: true,
+    visibleInGrid: true,
+    visibleInForm: false,
+    searchable: false,
+    sortable: true,
+    editable: false,
+    readOnly: true,
+    displayOrder: 70,
+    validation: { required: true, min: 0, nullable: false },
+    grid: { width: 120, align: "right", format: "currency" }
+  },
+  {
+    field: "unappliedAmount",
+    dbColumn: "UnappliedAmount",
+    label: "Sin aplicar",
+    type: "number",
+    required: true,
+    visibleInGrid: true,
+    visibleInForm: false,
+    searchable: false,
+    sortable: true,
+    editable: false,
+    readOnly: true,
+    displayOrder: 80,
+    validation: { required: true, nullable: false },
+    grid: { width: 120, align: "right", format: "currency" }
+  },
+  {
+    field: "applicationCount",
+    dbColumn: "ApplicationCount",
+    label: "Aplicaciones",
+    type: "number",
+    required: true,
+    visibleInGrid: true,
+    visibleInForm: false,
+    searchable: false,
+    sortable: true,
+    editable: false,
+    readOnly: true,
+    displayOrder: 90,
+    validation: { required: true, min: 0, nullable: false },
+    grid: { width: 120, align: "right" }
+  },
+  {
+    field: "reference",
+    dbColumn: "Reference",
+    label: "Referencia",
+    type: "text",
+    required: false,
+    visibleInGrid: true,
+    visibleInForm: false,
+    searchable: true,
+    sortable: true,
+    editable: false,
+    readOnly: true,
+    displayOrder: 100,
+    validation: { nullable: true },
+    grid: { width: 170, align: "left" }
+  },
+  {
+    field: "postedAt",
+    dbColumn: "PostedAt",
+    label: "Posteado",
+    type: "datetime",
+    required: false,
+    visibleInGrid: true,
+    visibleInForm: false,
+    searchable: false,
+    sortable: true,
+    editable: false,
+    readOnly: true,
+    displayOrder: 110,
+    validation: { nullable: true },
+    grid: { width: 150, align: "left" }
+  }
+] as const satisfies readonly CatalogFieldDefinition[];
+
+const customerReceiptApplicationFields = [
+  {
+    field: "receiptNumber",
+    dbColumn: "ReceiptNumber",
+    label: "Recibo",
+    type: "text",
+    required: true,
+    visibleInGrid: true,
+    visibleInForm: false,
+    searchable: true,
+    sortable: true,
+    editable: false,
+    readOnly: true,
+    displayOrder: 10,
+    validation: { required: true, nullable: false },
+    grid: { width: 160, align: "left" }
+  },
+  {
+    field: "lineNumber",
+    dbColumn: "LineNumber",
+    label: "Linea",
+    type: "number",
+    required: true,
+    visibleInGrid: true,
+    visibleInForm: false,
+    searchable: false,
+    sortable: true,
+    editable: false,
+    readOnly: true,
+    displayOrder: 20,
+    validation: { required: true, min: 1, nullable: false },
+    grid: { width: 90, align: "right" }
+  },
+  {
+    field: "documentNumber",
+    dbColumn: "DocumentNumber",
+    label: "Documento CxC",
+    type: "text",
+    required: true,
+    visibleInGrid: true,
+    visibleInForm: false,
+    searchable: true,
+    sortable: true,
+    editable: false,
+    readOnly: true,
+    displayOrder: 30,
+    validation: { required: true, nullable: false },
+    grid: { width: 160, align: "left" }
+  },
+  {
+    field: "customerCode",
+    dbColumn: "CustomerCode",
+    label: "Cliente",
+    type: "text",
+    required: true,
+    visibleInGrid: true,
+    visibleInForm: false,
+    searchable: true,
+    sortable: true,
+    editable: false,
+    readOnly: true,
+    displayOrder: 40,
+    validation: { required: true, nullable: false },
+    grid: { width: 130, align: "left" }
+  },
+  {
+    field: "documentStatus",
+    dbColumn: "DocumentStatus",
+    label: "Estado doc.",
+    type: "text",
+    required: true,
+    visibleInGrid: true,
+    visibleInForm: false,
+    searchable: true,
+    sortable: true,
+    editable: false,
+    readOnly: true,
+    displayOrder: 50,
+    validation: { required: true, nullable: false },
+    grid: { width: 120, align: "left" }
+  },
+  {
+    field: "appliedAmount",
+    dbColumn: "AppliedAmount",
+    label: "Aplicado",
+    type: "number",
+    required: true,
+    visibleInGrid: true,
+    visibleInForm: false,
+    searchable: false,
+    sortable: true,
+    editable: false,
+    readOnly: true,
+    displayOrder: 60,
+    validation: { required: true, min: 0, nullable: false },
+    grid: { width: 120, align: "right", format: "currency" }
+  },
+  {
+    field: "documentRemainingAmount",
+    dbColumn: "DocumentRemainingAmount",
+    label: "Saldo doc.",
+    type: "number",
+    required: true,
+    visibleInGrid: true,
+    visibleInForm: false,
+    searchable: false,
+    sortable: true,
+    editable: false,
+    readOnly: true,
+    displayOrder: 70,
+    validation: { required: true, min: 0, nullable: false },
+    grid: { width: 130, align: "right", format: "currency" }
+  }
+] as const satisfies readonly CatalogFieldDefinition[];
+
 const customerReceivableBalanceFields = [
   {
     field: "customerCode",
@@ -3724,7 +4018,7 @@ const supplierStatementFields = [
   readOnlyField("daysPastDue", "DaysPastDue", "Dias vencidos", "number", 120, {
     grid: { width: 120, align: "right" }
   }),
-  readOnlyField("agingBucket", "AgingBucket", "Bucket", "text", 130, {
+  readOnlyField("agingBucket", "AgingBucket", "Rango", "text", 130, {
     searchable: true,
     grid: { width: 110, align: "left" }
   }),
@@ -3742,19 +4036,19 @@ const supplierAgingFields = [
     sortable: false,
     grid: { width: 240, align: "left" }
   }),
-  readOnlyField("currentAmount", "CurrentAmount", "CURRENT", "number", 30, {
+  readOnlyField("currentAmount", "CurrentAmount", "Corriente", "number", 30, {
     grid: { width: 130, align: "right", format: "currency" }
   }),
-  readOnlyField("days1To30Amount", "Days1To30Amount", "1-30", "number", 40, {
+  readOnlyField("days1To30Amount", "Days1To30Amount", "1 a 30", "number", 40, {
     grid: { width: 130, align: "right", format: "currency" }
   }),
-  readOnlyField("days31To60Amount", "Days31To60Amount", "31-60", "number", 50, {
+  readOnlyField("days31To60Amount", "Days31To60Amount", "31 a 60", "number", 50, {
     grid: { width: 130, align: "right", format: "currency" }
   }),
-  readOnlyField("days61To90Amount", "Days61To90Amount", "61-90", "number", 60, {
+  readOnlyField("days61To90Amount", "Days61To90Amount", "61 a 90", "number", 60, {
     grid: { width: 130, align: "right", format: "currency" }
   }),
-  readOnlyField("daysOver90Amount", "DaysOver90Amount", "90+", "number", 70, {
+  readOnlyField("daysOver90Amount", "DaysOver90Amount", "Mas de 90", "number", 70, {
     grid: { width: 130, align: "right", format: "currency" }
   }),
   readOnlyField("totalOpenAmount", "TotalOpenAmount", "Total abierto", "number", 80, {
@@ -5336,6 +5630,96 @@ export const catalogDefinitions = {
       updatedBy: "UpdatedBy"
     },
     fields: accountsReceivableDocumentFields
+  },
+  "customer-receipts": {
+    catalogCode: "customer-receipts",
+    displayName: "Recibos de clientes",
+    tableName: "ar.V_CustomerReceiptSummary",
+    idColumn: "CustomerReceiptId",
+    codeColumn: "ReceiptNumber",
+    nameColumn: "CustomerName",
+    descriptionColumn: "Reference",
+    allowedSearchColumns: ["ReceiptNumber", "CustomerCode", "CustomerName", "Status", "Reference"],
+    allowedSortColumns: [
+      "ReceiptNumber",
+      "CustomerCode",
+      "CustomerName",
+      "ReceiptDate",
+      "Status",
+      "TotalAmount",
+      "AppliedAmount",
+      "UnappliedAmount",
+      "ApplicationCount",
+      "PostedAt",
+      "CreatedAt"
+    ],
+    defaultSortBy: "ReceiptDate",
+    permissions: commonPermissions("ar.receipts"),
+    moduleCode: "receivables",
+    tenantScoped: true,
+    companyScoped: true,
+    readOnly: true,
+    columns: {
+      id: "CustomerReceiptId",
+      tenantId: "TenantId",
+      companyId: "CompanyId",
+      code: "ReceiptNumber",
+      name: "CustomerName",
+      description: "Reference",
+      isActive: "IsActive",
+      createdAt: "CreatedAt",
+      updatedAt: "UpdatedAt",
+      createdBy: "CreatedBy",
+      updatedBy: "UpdatedBy"
+    },
+    fields: customerReceiptFields
+  },
+  "customer-receipt-applications": {
+    catalogCode: "customer-receipt-applications",
+    displayName: "Aplicaciones de recibos",
+    tableName: "ar.V_CustomerReceiptApplicationSummary",
+    idColumn: "CustomerReceiptApplicationId",
+    codeColumn: "ReceiptNumber",
+    nameColumn: "DocumentNumber",
+    descriptionColumn: "Notes",
+    allowedSearchColumns: [
+      "ReceiptNumber",
+      "DocumentNumber",
+      "SourceDocumentNumber",
+      "CustomerCode",
+      "CustomerName",
+      "DocumentStatus"
+    ],
+    allowedSortColumns: [
+      "ReceiptNumber",
+      "LineNumber",
+      "DocumentNumber",
+      "CustomerCode",
+      "DocumentStatus",
+      "AppliedAmount",
+      "DocumentRemainingAmount",
+      "CreatedAt"
+    ],
+    defaultSortBy: "ReceiptNumber",
+    permissions: commonPermissions("ar.receipts"),
+    moduleCode: "receivables",
+    tenantScoped: true,
+    companyScoped: true,
+    readOnly: true,
+    columns: {
+      id: "CustomerReceiptApplicationId",
+      tenantId: "TenantId",
+      companyId: "CompanyId",
+      code: "ReceiptNumber",
+      name: "DocumentNumber",
+      description: "Notes",
+      isActive: "IsActive",
+      createdAt: "CreatedAt",
+      updatedAt: "UpdatedAt",
+      createdBy: "CreatedBy",
+      updatedBy: "UpdatedBy"
+    },
+    fields: customerReceiptApplicationFields
   },
   "customer-receivable-balances": {
     catalogCode: "customer-receivable-balances",

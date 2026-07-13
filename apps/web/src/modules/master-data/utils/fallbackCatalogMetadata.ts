@@ -214,6 +214,28 @@ const catalogFields: Record<string, FieldInput[]> = {
     { field: "remainingAmount", label: "Saldo", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 120, align: "right", format: "currency" },
     { field: "reference", label: "Referencia", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 170 }
   ],
+  "customer-receipts": [
+    { field: "receiptNumber", label: "Recibo", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 160 },
+    { field: "customerCode", label: "Cliente", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 130 },
+    { field: "customerName", label: "Nombre cliente", searchable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 220 },
+    { field: "receiptDate", label: "Fecha recibo", type: "datetime", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 150 },
+    { field: "status", label: "Estado", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 110 },
+    { field: "totalAmount", label: "Monto total", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 130, align: "right", format: "currency" },
+    { field: "appliedAmount", label: "Aplicado", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 120, align: "right", format: "currency" },
+    { field: "unappliedAmount", label: "Sin aplicar", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 120, align: "right", format: "currency" },
+    { field: "applicationCount", label: "Aplicaciones", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 120, align: "right" },
+    { field: "reference", label: "Referencia", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 170 },
+    { field: "postedAt", label: "Posteado", type: "datetime", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 150 }
+  ],
+  "customer-receipt-applications": [
+    { field: "receiptNumber", label: "Recibo", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 160 },
+    { field: "lineNumber", label: "Linea", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 1, nullable: false }, width: 90, align: "right" },
+    { field: "documentNumber", label: "Documento CxC", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 160 },
+    { field: "customerCode", label: "Cliente", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 130 },
+    { field: "documentStatus", label: "Estado doc.", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 120 },
+    { field: "appliedAmount", label: "Aplicado", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 120, align: "right", format: "currency" },
+    { field: "documentRemainingAmount", label: "Saldo doc.", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 130, align: "right", format: "currency" }
+  ],
   "customer-receivable-balances": [
     { field: "customerCode", label: "Cliente", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 130 },
     { field: "customerName", label: "Nombre cliente", searchable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 240 },
@@ -237,17 +259,17 @@ const catalogFields: Record<string, FieldInput[]> = {
     { field: "paidAmount", label: "Pagado", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 120, align: "right", format: "currency" },
     { field: "remainingAmount", label: "Saldo", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 120, align: "right", format: "currency" },
     { field: "daysPastDue", label: "Dias vencidos", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 120, align: "right" },
-    { field: "agingBucket", label: "Bucket", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 100 }
+    { field: "agingBucket", label: "Rango", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 100 }
   ],
   "supplier-aging": [
     { field: "supplierId", label: "Proveedor Id", editable: false, readOnly: true, visibleInGrid: false, visibleInForm: false, validation: { nullable: false } },
     { field: "supplierCode", label: "Proveedor", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 130 },
     { field: "supplierName", label: "Nombre proveedor", searchable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 220 },
-    { field: "currentAmount", label: "CURRENT", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 120, align: "right", format: "currency" },
-    { field: "days1To30Amount", label: "1-30", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 120, align: "right", format: "currency" },
-    { field: "days31To60Amount", label: "31-60", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 120, align: "right", format: "currency" },
-    { field: "days61To90Amount", label: "61-90", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 120, align: "right", format: "currency" },
-    { field: "daysOver90Amount", label: "90+", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 120, align: "right", format: "currency" },
+    { field: "currentAmount", label: "Corriente", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 120, align: "right", format: "currency" },
+    { field: "days1To30Amount", label: "1 a 30", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 120, align: "right", format: "currency" },
+    { field: "days31To60Amount", label: "31 a 60", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 120, align: "right", format: "currency" },
+    { field: "days61To90Amount", label: "61 a 90", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 120, align: "right", format: "currency" },
+    { field: "daysOver90Amount", label: "Mas de 90", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 120, align: "right", format: "currency" },
     { field: "totalOpenAmount", label: "Total abierto", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 130, align: "right", format: "currency" },
     { field: "overdueAmount", label: "Vencido", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 120, align: "right", format: "currency" },
     { field: "notDueAmount", label: "Por vencer", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 120, align: "right", format: "currency" },
@@ -524,6 +546,8 @@ export function getFallbackCatalogMetadata(catalog: string): CatalogMetadata | n
     "supplier-adjustments",
     "supplier-adjustment-applications",
     "accounts-receivable-documents",
+    "customer-receipts",
+    "customer-receipt-applications",
     "customer-receivable-balances"
   ].includes(catalog);
   const catalogActions = catalogReadOnly ? readOnlyActions : actions;

@@ -68,7 +68,9 @@ const navigation: NavigationItem[] = [
     children: [
       { label: "Documentos", path: "/accounts-receivable/documents" },
       { label: "Saldos por cliente", path: "/accounts-receivable/customer-balances" },
+      { label: "Recibos", path: "/accounts-receivable/receipts" },
       { label: "Consulta documentos", path: "/master-data/accounts-receivable-documents" },
+      { label: "Consulta recibos", path: "/master-data/customer-receipts" },
       { label: "Consulta saldos", path: "/master-data/customer-receivable-balances" }
     ]
   },
@@ -126,6 +128,8 @@ function breadcrumb(path: string) {
 
     if (
       segments[1] === "accounts-receivable-documents" ||
+      segments[1] === "customer-receipts" ||
+      segments[1] === "customer-receipt-applications" ||
       segments[1] === "customer-receivable-balances"
     ) {
       return ["Doble S ERP", "Cuentas por cobrar", getCatalogLabel(segments[1] ?? "")];
@@ -188,6 +192,10 @@ function breadcrumb(path: string) {
 
   if (segments[0] === "accounts-receivable" && segments[1] === "customer-balances") {
     return ["Doble S ERP", "Cuentas por cobrar", "Saldos por cliente"];
+  }
+
+  if (segments[0] === "accounts-receivable" && segments[1] === "receipts") {
+    return ["Doble S ERP", "Cuentas por cobrar", "Recibos"];
   }
 
   const labels: Record<string, string> = {
