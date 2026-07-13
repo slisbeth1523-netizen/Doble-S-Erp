@@ -9,9 +9,17 @@ import { sendSuccess } from "../../../../utils/responseBuilder.js";
 import { validateRequest } from "../../../../utils/validateRequest.js";
 import { inventoryAdjustmentService } from "../../application/InventoryAdjustmentService.js";
 import { inventoryPostingService } from "../../application/InventoryPostingService.js";
+import { inventoryReservationService } from "../../application/InventoryReservationService.js";
 import { physicalCountService } from "../../application/PhysicalCountService.js";
 import { inventoryAdjustmentCreateSchema } from "../../validators/inventory-adjustment.validators.js";
 import { inventoryMovementIdParamsSchema } from "../../validators/inventory.validators.js";
+import {
+  inventoryAvailabilityItemParamsSchema,
+  inventoryAvailabilityListQuerySchema,
+  inventoryReservationIdParamsSchema,
+  inventoryReservationListQuerySchema,
+  inventoryReservationReleaseSchema
+} from "../../validators/inventory-reservation.validators.js";
 import {
   physicalCountCreateSchema,
   physicalCountIdParamsSchema,
@@ -21,6 +29,69 @@ import {
 export const inventoryRouter = Router();
 
 inventoryRouter.use(requireAuth, requireTenantContext, requireCompanyContext);
+
+function inventoryContext(request: Parameters<typeof getRequestContext>[0]) {
+  const context = getRequestContext(request);
+
+  return {
+    tenantId: request.tenantContext!.tenantId,
+    companyId: request.tenantContext!.companyId!,
+    userId: context.userId,
+    requestId: context.requestId,
+    correlationId: context.correlationId
+  };
+}
+
+inventoryRouter.get(
+  "/availability",
+  validateRequest({ query: inventoryAvailabilityListQuerySchema }),
+  requirePermission("inventory", "inventory.availability.read"),
+  asyncHandler(async (request, response) => {
+    const result = await inventoryReservationService.listAvailability(inventoryContext(request), request.query);
+
+    sendSuccess(response, result);
+  })
+);
+
+inventoryRouter.get(
+  "/availability/:itemId",
+  validateRequest({ params: inventoryAvailabilityItemParamsSchema }),
+  requirePermission("inventory", "inventory.availability.read"),
+  asyncHandler(async (request, response) => {
+    const result = await inventoryReservationService.getAvailabilityByItem(
+      inventoryContext(request),
+      request.params.itemId!
+    );
+
+    sendSuccess(response, result);
+  })
+);
+
+inventoryRouter.get(
+  "/reservations",
+  validateRequest({ query: inventoryReservationListQuerySchema }),
+  requirePermission("inventory", "inventory.reservations.read"),
+  asyncHandler(async (request, response) => {
+    const result = await inventoryReservationService.listReservations(inventoryContext(request), request.query);
+
+    sendSuccess(response, result);
+  })
+);
+
+inventoryRouter.post(
+  "/reservations/:reservationId/release",
+  validateRequest({ params: inventoryReservationIdParamsSchema, body: inventoryReservationReleaseSchema }),
+  requirePermission("inventory", "inventory.reservations.release"),
+  asyncHandler(async (request, response) => {
+    const result = await inventoryReservationService.releaseReservation(
+      inventoryContext(request),
+      request.params.reservationId!,
+      request.body
+    );
+
+    sendSuccess(response, result);
+  })
+);
 
 inventoryRouter.post(
   "/adjustments",

@@ -30,6 +30,10 @@ export type SalesOrderLine = {
   lineSubtotal: number;
   lineTotal: number;
   notes?: string;
+  reservedQuantity?: number;
+  pendingReservationQuantity?: number;
+  onHandQuantity?: number;
+  availableQuantity?: number;
 };
 
 export type SalesOrder = {

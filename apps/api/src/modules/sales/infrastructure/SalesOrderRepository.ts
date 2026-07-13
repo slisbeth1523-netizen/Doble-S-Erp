@@ -53,6 +53,10 @@ export type SalesOrderLineResult = {
   lineSubtotal: number;
   lineTotal: number;
   notes?: string;
+  reservedQuantity?: number;
+  pendingReservationQuantity?: number;
+  onHandQuantity?: number;
+  availableQuantity?: number;
 };
 
 export type SalesOrderResult = {
@@ -143,6 +147,10 @@ type LineRow = {
   LineSubtotal: number;
   LineTotal: number;
   Notes: string | null;
+  ReservedQuantity?: number | null;
+  PendingReservationQuantity?: number | null;
+  OnHandQuantity?: number | null;
+  AvailableQuantity?: number | null;
 };
 
 type CountRow = {
@@ -1454,7 +1462,11 @@ export class SalesOrderRepository extends BaseSqlRepository {
       taxAmount: Number(row.TaxAmount),
       lineSubtotal: Number(row.LineSubtotal),
       lineTotal: Number(row.LineTotal),
-      notes: row.Notes ?? undefined
+      notes: row.Notes ?? undefined,
+      reservedQuantity: row.ReservedQuantity == null ? undefined : Number(row.ReservedQuantity),
+      pendingReservationQuantity: row.PendingReservationQuantity == null ? undefined : Number(row.PendingReservationQuantity),
+      onHandQuantity: row.OnHandQuantity == null ? undefined : Number(row.OnHandQuantity),
+      availableQuantity: row.AvailableQuantity == null ? undefined : Number(row.AvailableQuantity)
     };
   }
 }

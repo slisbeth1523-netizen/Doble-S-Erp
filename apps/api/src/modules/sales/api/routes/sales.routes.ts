@@ -7,17 +7,21 @@ import { requirePermission } from "../../../security/api/permission.middleware.j
 import { getRequestContext } from "../../../../utils/requestContext.js";
 import { sendSuccess } from "../../../../utils/responseBuilder.js";
 import { validateRequest } from "../../../../utils/validateRequest.js";
+import { inventoryReservationService } from "../../../inventory/application/InventoryReservationService.js";
+import { inventoryReservationCreateSchema } from "../../../inventory/validators/inventory-reservation.validators.js";
 import { salesOrderService } from "../../application/SalesOrderService.js";
 import { salesQuotationService } from "../../application/SalesQuotationService.js";
 import {
   salesOrderCancelSchema,
   salesOrderCreateSchema,
   salesOrderIdParamsSchema,
+  salesOrderLineReserveParamsSchema,
   salesOrderLineCreateSchema,
   salesOrderLineIdParamsSchema,
   salesOrderLineUpdateSchema,
   salesOrderListQuerySchema,
   salesOrderQuotationIdParamsSchema,
+  salesOrderReservationParamsSchema,
   salesOrderUpdateSchema
 } from "../../validators/sales-order.validators.js";
 import {
@@ -45,6 +49,36 @@ function salesContext(request: Parameters<typeof getRequestContext>[0]) {
     correlationId: context.correlationId
   };
 }
+
+salesRouter.get(
+  "/orders/:orderId/reservations",
+  validateRequest({ params: salesOrderReservationParamsSchema }),
+  requirePermission("inventory", "inventory.reservations.read"),
+  asyncHandler(async (request, response) => {
+    const result = await inventoryReservationService.getSalesOrderReservations(
+      salesContext(request),
+      request.params.orderId!
+    );
+
+    sendSuccess(response, result);
+  })
+);
+
+salesRouter.post(
+  "/orders/:orderId/lines/:lineId/reserve",
+  validateRequest({ params: salesOrderLineReserveParamsSchema, body: inventoryReservationCreateSchema }),
+  requirePermission("inventory", "inventory.reservations.create"),
+  asyncHandler(async (request, response) => {
+    const result = await inventoryReservationService.reserveSalesOrderLine(
+      salesContext(request),
+      request.params.orderId!,
+      request.params.lineId!,
+      request.body
+    );
+
+    sendSuccess(response, result, 201);
+  })
+);
 
 salesRouter.get(
   "/orders",
