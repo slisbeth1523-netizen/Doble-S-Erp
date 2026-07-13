@@ -12,6 +12,7 @@ import { SupplierInvoicesPreview } from "./pages/SupplierInvoicesPreview.js";
 import { AccountsPayablePreview } from "./pages/AccountsPayablePreview.js";
 import { AccountsReceivableDocumentsPreview } from "./pages/AccountsReceivableDocumentsPreview.js";
 import { CustomerReceivableBalancesPreview } from "./pages/CustomerReceivableBalancesPreview.js";
+import { CustomerCreditNotesPreview } from "./pages/CustomerCreditNotesPreview.js";
 import { CustomerReceiptsPreview } from "./pages/CustomerReceiptsPreview.js";
 import { SupplierPaymentsPreview } from "./pages/SupplierPaymentsPreview.js";
 import { SupplierAdjustmentsPreview } from "./pages/SupplierAdjustmentsPreview.js";
@@ -98,6 +99,10 @@ export function App() {
 
     if (path === "/accounts-receivable/receipts") {
       return <CustomerReceiptsPreview />;
+    }
+
+    if (path === "/accounts-receivable/customer-credit-notes") {
+      return <CustomerCreditNotesPreview />;
     }
 
     if (path === "/security") {

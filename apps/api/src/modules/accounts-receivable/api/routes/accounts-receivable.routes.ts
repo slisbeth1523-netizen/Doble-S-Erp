@@ -8,6 +8,7 @@ import { getRequestContext } from "../../../../utils/requestContext.js";
 import { sendSuccess } from "../../../../utils/responseBuilder.js";
 import { validateRequest } from "../../../../utils/validateRequest.js";
 import { accountsReceivableDocumentService } from "../../application/AccountsReceivableDocumentService.js";
+import { customerCreditNoteService } from "../../application/CustomerCreditNoteService.js";
 import { customerReceiptService } from "../../application/CustomerReceiptService.js";
 import {
   accountsReceivableDocumentCreateSchema,
@@ -16,6 +17,12 @@ import {
   customerBalanceListQuerySchema,
   customerBalanceParamsSchema
 } from "../../validators/accounts-receivable-document.validators.js";
+import {
+  customerCreditNoteApplicationCreateSchema,
+  customerCreditNoteCreateSchema,
+  customerCreditNoteIdParamsSchema,
+  customerCreditNoteListQuerySchema
+} from "../../validators/customer-credit-note.validators.js";
 import {
   customerReceiptApplicationCreateSchema,
   customerReceiptCreateSchema,
@@ -78,6 +85,77 @@ accountsReceivableRouter.post(
     );
 
     sendSuccess(response, result, 201);
+  })
+);
+
+accountsReceivableRouter.get(
+  "/customer-credit-notes",
+  validateRequest({ query: customerCreditNoteListQuerySchema }),
+  requirePermission("receivables", "ar.customer-credit-notes.read"),
+  asyncHandler(async (request, response) => {
+    const result = await customerCreditNoteService.listCustomerCreditNotes(
+      accountsReceivableContext(request),
+      request.query
+    );
+
+    sendSuccess(response, result);
+  })
+);
+
+accountsReceivableRouter.get(
+  "/customer-credit-notes/:id",
+  validateRequest({ params: customerCreditNoteIdParamsSchema }),
+  requirePermission("receivables", "ar.customer-credit-notes.read"),
+  asyncHandler(async (request, response) => {
+    const result = await customerCreditNoteService.getCustomerCreditNote(
+      accountsReceivableContext(request),
+      request.params.id!
+    );
+
+    sendSuccess(response, result);
+  })
+);
+
+accountsReceivableRouter.post(
+  "/customer-credit-notes",
+  validateRequest({ body: customerCreditNoteCreateSchema }),
+  requirePermission("receivables", "ar.customer-credit-notes.create"),
+  asyncHandler(async (request, response) => {
+    const result = await customerCreditNoteService.createCustomerCreditNote(
+      accountsReceivableContext(request),
+      request.body
+    );
+
+    sendSuccess(response, result, 201);
+  })
+);
+
+accountsReceivableRouter.post(
+  "/customer-credit-notes/:id/applications",
+  validateRequest({ params: customerCreditNoteIdParamsSchema, body: customerCreditNoteApplicationCreateSchema }),
+  requirePermission("receivables", "ar.customer-credit-notes.update"),
+  asyncHandler(async (request, response) => {
+    const result = await customerCreditNoteService.addApplication(
+      accountsReceivableContext(request),
+      request.params.id!,
+      request.body
+    );
+
+    sendSuccess(response, result);
+  })
+);
+
+accountsReceivableRouter.post(
+  "/customer-credit-notes/:id/post",
+  validateRequest({ params: customerCreditNoteIdParamsSchema }),
+  requirePermission("receivables", "ar.customer-credit-notes.post"),
+  asyncHandler(async (request, response) => {
+    const result = await customerCreditNoteService.postCustomerCreditNote(
+      accountsReceivableContext(request),
+      request.params.id!
+    );
+
+    sendSuccess(response, result);
   })
 );
 

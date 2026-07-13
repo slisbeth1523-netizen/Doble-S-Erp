@@ -29,6 +29,8 @@ export const catalogLabels: Record<string, string> = {
   "accounts-receivable-documents": "Documentos de cuentas por cobrar",
   "customer-receipts": "Recibos de clientes",
   "customer-receipt-applications": "Aplicaciones de recibos",
+  "customer-credit-notes": "Notas de credito de clientes",
+  "customer-credit-note-applications": "Aplicaciones de notas de credito",
   "customer-receivable-balances": "Saldos por cliente"
 };
 

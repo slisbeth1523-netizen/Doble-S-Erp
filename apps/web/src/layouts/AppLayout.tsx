@@ -69,8 +69,10 @@ const navigation: NavigationItem[] = [
       { label: "Documentos", path: "/accounts-receivable/documents" },
       { label: "Saldos por cliente", path: "/accounts-receivable/customer-balances" },
       { label: "Recibos", path: "/accounts-receivable/receipts" },
+      { label: "Notas de credito", path: "/accounts-receivable/customer-credit-notes" },
       { label: "Consulta documentos", path: "/master-data/accounts-receivable-documents" },
       { label: "Consulta recibos", path: "/master-data/customer-receipts" },
+      { label: "Consulta notas credito", path: "/master-data/customer-credit-notes" },
       { label: "Consulta saldos", path: "/master-data/customer-receivable-balances" }
     ]
   },
@@ -130,6 +132,8 @@ function breadcrumb(path: string) {
       segments[1] === "accounts-receivable-documents" ||
       segments[1] === "customer-receipts" ||
       segments[1] === "customer-receipt-applications" ||
+      segments[1] === "customer-credit-notes" ||
+      segments[1] === "customer-credit-note-applications" ||
       segments[1] === "customer-receivable-balances"
     ) {
       return ["Doble S ERP", "Cuentas por cobrar", getCatalogLabel(segments[1] ?? "")];
@@ -196,6 +200,10 @@ function breadcrumb(path: string) {
 
   if (segments[0] === "accounts-receivable" && segments[1] === "receipts") {
     return ["Doble S ERP", "Cuentas por cobrar", "Recibos"];
+  }
+
+  if (segments[0] === "accounts-receivable" && segments[1] === "customer-credit-notes") {
+    return ["Doble S ERP", "Cuentas por cobrar", "Notas de credito"];
   }
 
   const labels: Record<string, string> = {
