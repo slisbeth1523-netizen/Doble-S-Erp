@@ -663,6 +663,52 @@ async function releaseInventoryReservation(reservationId, payload, session) {
   return body.data;
 }
 
+async function createSalesShipment(payload, session) {
+  const body = await expectOk("/sales/shipments", {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function addSalesShipmentLine(salesShipmentId, payload, session) {
+  const body = await expectOk(`/sales/shipments/${salesShipmentId}/lines`, {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function postSalesShipment(salesShipmentId, payload, session) {
+  const body = await expectOk(`/sales/shipments/${salesShipmentId}/post`, {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function getSalesShipment(salesShipmentId, session) {
+  const body = await expectOk(`/sales/shipments/${salesShipmentId}`, {
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
+async function getSalesOrderShipmentLines(salesOrderId, session) {
+  const body = await expectOk(`/sales/shipments/orders/${salesOrderId}/lines`, {
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
 async function expectReservationFailure(path, payload, session) {
   const result = await request(path, {
     method: "POST",
@@ -672,6 +718,20 @@ async function expectReservationFailure(path, payload, session) {
 
   if (result.response.ok || result.body?.success !== false) {
     fail(`Reservation request ${path} must fail in a controlled way.`);
+  }
+
+  return result.body;
+}
+
+async function expectSalesShipmentFailure(path, payload, session) {
+  const result = await request(path, {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  if (result.response.ok || result.body?.success !== false) {
+    fail(`Sales shipment request ${path} must fail in a controlled way.`);
   }
 
   return result.body;
@@ -1577,6 +1637,52 @@ async function countSalesOrderForbiddenSideEffects(session) {
   }
 }
 
+async function countSalesShipmentForbiddenSideEffects(session) {
+  if (!session.user.companyId) {
+    fail("Cannot count sales shipment side effects without company context.");
+  }
+
+  const pool = await sql.connect(getSqlConfig());
+
+  try {
+    const result = await pool
+      .request()
+      .input("TenantId", sql.UniqueIdentifier, session.user.tenantId)
+      .input("CompanyId", sql.UniqueIdentifier, session.user.companyId)
+      .query(`
+        DECLARE @SalesInvoiceCount INT = 0;
+
+        IF OBJECT_ID('sales.SalesInvoices', 'U') IS NOT NULL
+        BEGIN
+          DECLARE @InvoiceSql NVARCHAR(MAX) = N'
+            SELECT @Count = COUNT(1)
+            FROM sales.SalesInvoices
+            WHERE TenantId = @TenantId
+              AND CompanyId = @CompanyId;
+          ';
+          EXEC sp_executesql
+            @InvoiceSql,
+            N'@TenantId UNIQUEIDENTIFIER, @CompanyId UNIQUEIDENTIFIER, @Count INT OUTPUT',
+            @TenantId = @TenantId,
+            @CompanyId = @CompanyId,
+            @Count = @SalesInvoiceCount OUTPUT;
+        END;
+
+        SELECT
+          (SELECT COUNT(1) FROM ar.AccountsReceivableDocuments WHERE TenantId = @TenantId AND CompanyId = @CompanyId) AS AccountsReceivableDocumentCount,
+          @SalesInvoiceCount AS SalesInvoiceCount;
+      `);
+
+    const row = result.recordset[0];
+    return {
+      accountsReceivableDocumentCount: Number(row?.AccountsReceivableDocumentCount ?? 0),
+      salesInvoiceCount: Number(row?.SalesInvoiceCount ?? 0)
+    };
+  } finally {
+    await pool.close();
+  }
+}
+
 async function setSmokeStockQuantity(session, itemId, warehouseId, quantity) {
   if (!session.user.companyId) {
     fail("Cannot set smoke stock without company context.");
@@ -1666,6 +1772,50 @@ async function releaseSmokeInventoryReservations(session, itemId, warehouseId) {
           AND Status IN ('ACTIVE', 'PARTIALLY_RELEASED')
           AND ReservedQuantity - ReleasedQuantity - ConsumedQuantity > 0;
       `);
+  } finally {
+    await pool.close();
+  }
+}
+
+async function getInventoryReservationSnapshot(session, reservationId) {
+  if (!session.user.companyId) {
+    fail("Cannot read reservation snapshot without company context.");
+  }
+
+  const pool = await sql.connect(getSqlConfig());
+
+  try {
+    const result = await pool
+      .request()
+      .input("TenantId", sql.UniqueIdentifier, session.user.tenantId)
+      .input("CompanyId", sql.UniqueIdentifier, session.user.companyId)
+      .input("ReservationId", sql.UniqueIdentifier, reservationId)
+      .query(`
+        SELECT
+          ReservedQuantity,
+          ReleasedQuantity,
+          ConsumedQuantity,
+          ActiveQuantity,
+          Status
+        FROM inventory.InventoryReservations
+        WHERE TenantId = @TenantId
+          AND CompanyId = @CompanyId
+          AND InventoryReservationId = @ReservationId;
+      `);
+
+    const row = result.recordset[0];
+
+    if (!row) {
+      fail(`Inventory reservation ${reservationId} was not found.`);
+    }
+
+    return {
+      reservedQuantity: Number(row.ReservedQuantity ?? 0),
+      releasedQuantity: Number(row.ReleasedQuantity ?? 0),
+      consumedQuantity: Number(row.ConsumedQuantity ?? 0),
+      activeQuantity: Number(row.ActiveQuantity ?? 0),
+      status: row.Status
+    };
   } finally {
     await pool.close();
   }
@@ -3180,6 +3330,40 @@ async function validateInventoryReservationMetadata(session) {
         : catalog === "inventory-reservations"
           ? ["orderNumber", "itemCode", "warehouseCode", "reservedQuantity", "activeQuantity", "status"]
           : ["orderNumber", "orderStatus", "itemCode", "orderedQuantity", "reservedQuantity", "pendingReservationQuantity"];
+    const missingFields = expectedFields.filter((field) => !fields.includes(field));
+
+    if (missingFields.length) {
+      fail(`${catalog} metadata is missing fields: ${missingFields.join(", ")}.`);
+    }
+
+    const unavailableActions = ["create", "update", "activate", "deactivate"]
+      .map((actionName) => metadata.data.actions.find((action) => action.action === actionName))
+      .filter((action) => action?.available !== false);
+
+    if (unavailableActions.length) {
+      fail(`${catalog} write actions must be unavailable.`);
+    }
+  }
+}
+
+async function validateSalesShipmentMetadata(session) {
+  for (const catalog of ["sales-shipments", "sales-shipment-lines", "sales-order-shipments"]) {
+    smokeStep(`metadata ${catalog}`);
+    const metadata = await expectOk(`/master-data/${catalog}/metadata`, {
+      headers: authHeaders(session)
+    });
+
+    if (metadata.data?.catalog?.readOnly !== true) {
+      fail(`${catalog} metadata must be read-only.`);
+    }
+
+    const fields = metadata.data.fields.map((field) => field.field);
+    const expectedFields =
+      catalog === "sales-shipments"
+        ? ["shipmentNumber", "orderNumber", "customerName", "status", "shipmentDate", "totalQuantity"]
+        : catalog === "sales-shipment-lines"
+          ? ["shipmentNumber", "orderNumber", "lineNumber", "itemCode", "warehouseCode", "quantity"]
+          : ["orderNumber", "orderStatus", "itemCode", "orderedQuantity", "previouslyShippedQuantity", "pendingShipmentQuantity"];
     const missingFields = expectedFields.filter((field) => !fields.includes(field));
 
     if (missingFields.length) {
@@ -5233,6 +5417,228 @@ async function validateInventoryReservationFlow(session) {
   }
 }
 
+async function validateSalesShipmentFlow(session) {
+  smokeStep("sales shipment foundation flow");
+  const { itemId, warehouseId } = await getDemoPurchaseReferences(session);
+  await releaseSmokeInventoryReservations(session, itemId, warehouseId);
+  await setSmokeStockQuantity(session, itemId, warehouseId, 10);
+
+  const sideEffectsBefore = await countSalesShipmentForbiddenSideEffects(session);
+  const stockBefore = await getSmokeStockSnapshot(session, itemId, warehouseId);
+
+  const shipmentOrder = await createApprovedReservationOrder(session, `RES-SHP-${smokeRun}`, 10, true);
+  const reservation = await reserveSalesOrderLine(
+    shipmentOrder.order.id,
+    shipmentOrder.line.id,
+    {
+      idempotencyKey: reservationIdempotencyKey("shipment-reserve"),
+      quantity: 10,
+      reference: `RES-SHP-${smokeRun}`,
+      notes: "Reserva para despacho smoke"
+    },
+    session
+  );
+
+  if (reservation.activeQuantity !== 10 || reservation.status !== "ACTIVE") {
+    fail("Shipment smoke reservation did not reserve active quantity 10.");
+  }
+
+  smokeStep("sales shipment create draft");
+  const shipment = await createSalesShipment(
+    {
+      salesOrderId: shipmentOrder.order.id,
+      reference: `SHP-QA-${smokeRun}`,
+      notes: "Despacho creado por smoke local"
+    },
+    session
+  );
+
+  if (shipment.status !== "DRAFT" || !String(shipment.shipmentNumber ?? "").startsWith("DSP-")) {
+    fail("Sales shipment was not created as DRAFT with an internal number.");
+  }
+
+  const stockAfterDraft = await getSmokeStockSnapshot(session, itemId, warehouseId);
+  const reservationAfterDraft = await getInventoryReservationSnapshot(session, reservation.id);
+
+  if (stockAfterDraft.quantityOnHand !== stockBefore.quantityOnHand || reservationAfterDraft.consumedQuantity !== 0) {
+    fail("Creating a draft sales shipment changed stock or consumed reservation.");
+  }
+
+  smokeStep("sales shipment add line");
+  const shipmentWithLine = await addSalesShipmentLine(
+    shipment.id,
+    {
+      salesOrderLineId: shipmentOrder.line.id,
+      inventoryReservationId: reservation.id,
+      quantity: 4,
+      notes: "Linea parcial de despacho smoke"
+    },
+    session
+  );
+
+  if (shipmentWithLine.lineCount !== 1 || Number(shipmentWithLine.totalQuantity ?? 0) !== 4) {
+    fail("Sales shipment line did not update draft totals.");
+  }
+
+  const orderShipmentLines = await getSalesOrderShipmentLines(shipmentOrder.order.id, session);
+  const orderShipmentLine = orderShipmentLines.find((line) => line.salesOrderLineId === shipmentOrder.line.id);
+
+  if (!orderShipmentLine || Number(orderShipmentLine.pendingShipmentQuantity ?? 0) !== 10) {
+    fail("Sales order shipment summary changed pending quantity before posting the draft shipment.");
+  }
+
+  smokeStep("sales shipment post");
+  const postKey = reservationIdempotencyKey("shipment-post-one");
+  const postedShipment = await postSalesShipment(shipment.id, { idempotencyKey: postKey }, session);
+
+  if (postedShipment.status !== "POSTED" || !postedShipment.inventoryMovementId || !postedShipment.movementNumber) {
+    fail("Sales shipment did not post with an inventory movement.");
+  }
+
+  const stockAfterPost = await getSmokeStockSnapshot(session, itemId, warehouseId);
+  const reservationAfterPost = await getInventoryReservationSnapshot(session, reservation.id);
+
+  if (stockAfterPost.quantityOnHand !== stockBefore.quantityOnHand - 4) {
+    fail("Posting a sales shipment did not decrease stock by 4.");
+  }
+
+  if (reservationAfterPost.consumedQuantity !== 4 || reservationAfterPost.activeQuantity !== 6) {
+    fail("Posting a sales shipment did not consume reservation quantity 4.");
+  }
+
+  const orderShipmentLinesAfterPost = await getSalesOrderShipmentLines(shipmentOrder.order.id, session);
+  const orderShipmentLineAfterPost = orderShipmentLinesAfterPost.find((line) => line.salesOrderLineId === shipmentOrder.line.id);
+
+  if (!orderShipmentLineAfterPost || Number(orderShipmentLineAfterPost.pendingShipmentQuantity ?? 0) !== 6) {
+    fail("Sales order shipment summary did not show pending quantity 6 after posting the shipment.");
+  }
+
+  await assertInventoryLedgerEntries(session, postedShipment.movementNumber, [
+    {
+      movementType: "SALES_SHIPMENT",
+      ledgerDirection: "OUT",
+      warehouseCode: "ALM-PRINCIPAL",
+      quantityIn: 0,
+      quantityOut: 4,
+      quantityBalanceImpact: -4
+    }
+  ]);
+
+  smokeStep("sales shipment repost idempotent");
+  const retriedShipment = await postSalesShipment(shipment.id, { idempotencyKey: postKey }, session);
+  const stockAfterRetry = await getSmokeStockSnapshot(session, itemId, warehouseId);
+  const reservationAfterRetry = await getInventoryReservationSnapshot(session, reservation.id);
+
+  if (retriedShipment.inventoryMovementId !== postedShipment.inventoryMovementId) {
+    fail("Retrying sales shipment post did not return the original movement.");
+  }
+
+  if (
+    stockAfterRetry.quantityOnHand !== stockAfterPost.quantityOnHand ||
+    reservationAfterRetry.consumedQuantity !== reservationAfterPost.consumedQuantity
+  ) {
+    fail("Retrying sales shipment post duplicated stock or reservation consumption.");
+  }
+
+  await expectSalesShipmentFailure(
+    `/sales/shipments/${shipment.id}/post`,
+    { idempotencyKey: reservationIdempotencyKey("shipment-post-again") },
+    session
+  );
+
+  smokeStep("sales shipment over-ship rejected");
+  const overShipment = await createSalesShipment(
+    {
+      salesOrderId: shipmentOrder.order.id,
+      reference: `SHP-OVER-${smokeRun}`,
+      notes: "Despacho excedente smoke"
+    },
+    session
+  );
+  await expectSalesShipmentFailure(
+    `/sales/shipments/${overShipment.id}/lines`,
+    {
+      salesOrderLineId: shipmentOrder.line.id,
+      inventoryReservationId: reservation.id,
+      quantity: 7,
+      notes: "Intento excedente smoke"
+    },
+    session
+  );
+
+  smokeStep("sales shipment final post closes order");
+  const finalShipment = await createSalesShipment(
+    {
+      salesOrderId: shipmentOrder.order.id,
+      reference: `SHP-FINAL-${smokeRun}`,
+      notes: "Despacho final smoke"
+    },
+    session
+  );
+  const finalShipmentWithLine = await addSalesShipmentLine(
+    finalShipment.id,
+    {
+      salesOrderLineId: shipmentOrder.line.id,
+      inventoryReservationId: reservation.id,
+      quantity: 6,
+      notes: "Linea final de despacho smoke"
+    },
+    session
+  );
+
+  if (Number(finalShipmentWithLine.totalQuantity ?? 0) !== 6) {
+    fail("Final sales shipment did not keep quantity 6.");
+  }
+
+  const postedFinalShipment = await postSalesShipment(
+    finalShipment.id,
+    { idempotencyKey: reservationIdempotencyKey("shipment-post-final") },
+    session
+  );
+
+  const stockAfterFinal = await getSmokeStockSnapshot(session, itemId, warehouseId);
+  const reservationAfterFinal = await getInventoryReservationSnapshot(session, reservation.id);
+  const closedOrder = await getSalesOrder(shipmentOrder.order.id, session);
+
+  if (postedFinalShipment.status !== "POSTED" || stockAfterFinal.quantityOnHand !== stockBefore.quantityOnHand - 10) {
+    fail("Final sales shipment did not post the remaining stock quantity.");
+  }
+
+  if (reservationAfterFinal.status !== "CONSUMED" || reservationAfterFinal.activeQuantity !== 0) {
+    fail("Final sales shipment did not fully consume the reservation.");
+  }
+
+  if (closedOrder.status !== "CLOSED") {
+    fail("Sales order was not closed after shipping all reserved quantity.");
+  }
+
+  await assertInventoryLedgerEntries(session, postedFinalShipment.movementNumber, [
+    {
+      movementType: "SALES_SHIPMENT",
+      ledgerDirection: "OUT",
+      warehouseCode: "ALM-PRINCIPAL",
+      quantityIn: 0,
+      quantityOut: 6,
+      quantityBalanceImpact: -6
+    }
+  ]);
+
+  const runtimeShipment = await findCatalogRecord("sales-shipments", postedShipment.shipmentNumber, session);
+  if (!runtimeShipment || runtimeShipment.status !== "POSTED") {
+    fail("/master-data/sales-shipments did not expose the posted shipment.");
+  }
+
+  const runtimeShipmentLine = await findCatalogRecord("sales-shipment-lines", postedShipment.shipmentNumber, session);
+  if (!runtimeShipmentLine || Number(runtimeShipmentLine.quantity ?? 0) !== 4) {
+    fail("/master-data/sales-shipment-lines did not expose the posted shipment line.");
+  }
+
+  const sideEffectsAfter = await countSalesShipmentForbiddenSideEffects(session);
+  if (JSON.stringify(sideEffectsAfter) !== JSON.stringify(sideEffectsBefore)) {
+    fail("Sales shipment flow created invoices or accounts receivable documents.");
+  }
+}
+
 async function validateCrud(session) {
   const suffix = smokeRun;
   const customerCode = `QA-CUST-${suffix}`;
@@ -5451,6 +5857,7 @@ async function main() {
   await validateSalesQuotationMetadata(session);
   await validateSalesOrderMetadata(session);
   await validateInventoryReservationMetadata(session);
+  await validateSalesShipmentMetadata(session);
   await validatePurchaseOrderMetadata(session);
   await validatePurchaseReceiptMetadata(session);
   await validateSupplierPaymentMetadata(session);
@@ -5470,6 +5877,7 @@ async function main() {
   await validateSalesQuotationFlow(session);
   await validateSalesOrderFlow(session);
   await validateInventoryReservationFlow(session);
+  await validateSalesShipmentFlow(session);
   await validateCrud(session);
   console.log("smoke: local runtime validation OK");
 }
