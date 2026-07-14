@@ -9,6 +9,7 @@ export type InventoryMovementType =
   | "ADJUSTMENT_OUT"
   | "TRANSFER"
   | "PURCHASE_RECEIPT_PLACEHOLDER"
+  | "SALES_SHIPMENT"
   | "SALES_ISSUE_PLACEHOLDER"
   | "RETURN_IN_PLACEHOLDER"
   | "RETURN_OUT_PLACEHOLDER";
@@ -289,7 +290,7 @@ export class InventoryPostingRepository extends BaseSqlRepository {
       ];
     }
 
-    if (movementType === "ADJUSTMENT_OUT") {
+    if (movementType === "ADJUSTMENT_OUT" || movementType === "SALES_SHIPMENT") {
       return [
         {
           line,
@@ -433,7 +434,7 @@ export class InventoryPostingRepository extends BaseSqlRepository {
       return;
     }
 
-    if (movementType === "ADJUSTMENT_OUT") {
+    if (movementType === "ADJUSTMENT_OUT" || movementType === "SALES_SHIPMENT") {
       const stock = await this.lockStock(transaction, input, line.ItemId, line.WarehouseId);
       await this.postOutboundLine(transaction, input, line, stock, quantity);
       return;

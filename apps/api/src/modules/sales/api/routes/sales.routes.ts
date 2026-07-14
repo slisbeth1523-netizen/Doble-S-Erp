@@ -11,6 +11,7 @@ import { inventoryReservationService } from "../../../inventory/application/Inve
 import { inventoryReservationCreateSchema } from "../../../inventory/validators/inventory-reservation.validators.js";
 import { salesOrderService } from "../../application/SalesOrderService.js";
 import { salesQuotationService } from "../../application/SalesQuotationService.js";
+import { salesShipmentService } from "../../application/SalesShipmentService.js";
 import {
   salesOrderCancelSchema,
   salesOrderCreateSchema,
@@ -33,6 +34,15 @@ import {
   salesQuotationListQuerySchema,
   salesQuotationUpdateSchema
 } from "../../validators/sales-quotation.validators.js";
+import {
+  salesShipmentCreateSchema,
+  salesShipmentIdParamsSchema,
+  salesShipmentLineCreateSchema,
+  salesShipmentLineIdParamsSchema,
+  salesShipmentLineUpdateSchema,
+  salesShipmentListQuerySchema,
+  salesShipmentPostSchema
+} from "../../validators/sales-shipment.validators.js";
 
 export const salesRouter = Router();
 
@@ -77,6 +87,99 @@ salesRouter.post(
     );
 
     sendSuccess(response, result, 201);
+  })
+);
+
+salesRouter.get(
+  "/shipments",
+  validateRequest({ query: salesShipmentListQuerySchema }),
+  requirePermission("sales", "sales.shipments.read"),
+  asyncHandler(async (request, response) => {
+    const result = await salesShipmentService.listShipments(salesContext(request), request.query);
+
+    sendSuccess(response, result);
+  })
+);
+
+salesRouter.get(
+  "/shipments/orders/:id/lines",
+  validateRequest({ params: salesShipmentIdParamsSchema }),
+  requirePermission("sales", "sales.shipments.read"),
+  asyncHandler(async (request, response) => {
+    const result = await salesShipmentService.getOrderShipmentLines(salesContext(request), request.params.id!);
+
+    sendSuccess(response, result);
+  })
+);
+
+salesRouter.get(
+  "/shipments/:id",
+  validateRequest({ params: salesShipmentIdParamsSchema }),
+  requirePermission("sales", "sales.shipments.read"),
+  asyncHandler(async (request, response) => {
+    const result = await salesShipmentService.getShipment(salesContext(request), request.params.id!);
+
+    sendSuccess(response, result);
+  })
+);
+
+salesRouter.post(
+  "/shipments",
+  validateRequest({ body: salesShipmentCreateSchema }),
+  requirePermission("sales", "sales.shipments.create"),
+  asyncHandler(async (request, response) => {
+    const result = await salesShipmentService.createShipment(salesContext(request), request.body);
+
+    sendSuccess(response, result, 201);
+  })
+);
+
+salesRouter.post(
+  "/shipments/:id/lines",
+  validateRequest({ params: salesShipmentIdParamsSchema, body: salesShipmentLineCreateSchema }),
+  requirePermission("sales", "sales.shipments.update"),
+  asyncHandler(async (request, response) => {
+    const result = await salesShipmentService.addLine(salesContext(request), request.params.id!, request.body);
+
+    sendSuccess(response, result, 201);
+  })
+);
+
+salesRouter.patch(
+  "/shipments/:id/lines/:lineId",
+  validateRequest({ params: salesShipmentLineIdParamsSchema, body: salesShipmentLineUpdateSchema }),
+  requirePermission("sales", "sales.shipments.update"),
+  asyncHandler(async (request, response) => {
+    const result = await salesShipmentService.updateLine(
+      salesContext(request),
+      request.params.id!,
+      request.params.lineId!,
+      request.body
+    );
+
+    sendSuccess(response, result);
+  })
+);
+
+salesRouter.delete(
+  "/shipments/:id/lines/:lineId",
+  validateRequest({ params: salesShipmentLineIdParamsSchema }),
+  requirePermission("sales", "sales.shipments.update"),
+  asyncHandler(async (request, response) => {
+    const result = await salesShipmentService.deleteLine(salesContext(request), request.params.id!, request.params.lineId!);
+
+    sendSuccess(response, result);
+  })
+);
+
+salesRouter.post(
+  "/shipments/:id/post",
+  validateRequest({ params: salesShipmentIdParamsSchema, body: salesShipmentPostSchema }),
+  requirePermission("sales", "sales.shipments.post"),
+  asyncHandler(async (request, response) => {
+    const result = await salesShipmentService.postShipment(salesContext(request), request.params.id!, request.body);
+
+    sendSuccess(response, result);
   })
 );
 
