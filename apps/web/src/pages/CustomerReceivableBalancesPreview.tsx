@@ -1,6 +1,6 @@
 import { type FormEvent, useEffect, useState } from "react";
 
-import { Alert, Button, Card, EmptyState, ErrorState, Input, LoadingState, PageHeader, Table } from "../components/ui/index.js";
+import { Alert, Button, Card, EmptyState, ErrorState, Input, LoadingState, PageHeader, Table, FormField, FilterBar } from "../components/ui/index.js";
 import {
   loadCustomerReceivableBalances,
   type BalancesResponse,
@@ -44,17 +44,21 @@ export function CustomerReceivableBalancesPreview() {
   }
 
   const rows = (snapshot?.records ?? []).map((record: CustomerReceivableBalance) => [
-    record.customerCode,
-    record.customerName,
-    money(record.totalDocumentAmount),
-    money(record.totalPaidAmount),
-    money(record.totalOpenAmount),
-    money(record.overdueAmount),
-    money(record.notDueAmount),
-    record.openDocumentCount,
-    record.overdueDocumentCount,
-    shortDate(record.lastDocumentDate),
-    <a className="ui-button ui-button-ghost" href={`/accounts-receivable/documents?customerId=${record.customerId}`} key={record.customerId}>Detalle</a>
+    <strong style={{ textAlign: "left", display: "block" }}>{record.customerCode}</strong>,
+    <div style={{ textAlign: "left" }}>{record.customerName}</div>,
+    <div style={{ textAlign: "right" }}>{money(record.totalDocumentAmount)}</div>,
+    <div style={{ textAlign: "right" }}>{money(record.totalPaidAmount)}</div>,
+    <div style={{ textAlign: "right", fontWeight: "600" }}>{money(record.totalOpenAmount)}</div>,
+    <div style={{ textAlign: "right" }}>{money(record.overdueAmount)}</div>,
+    <div style={{ textAlign: "right" }}>{money(record.notDueAmount)}</div>,
+    <div style={{ textAlign: "right" }}>{record.openDocumentCount}</div>,
+    <div style={{ textAlign: "right" }}>{record.overdueDocumentCount}</div>,
+    <div style={{ textAlign: "center" }}>{shortDate(record.lastDocumentDate)}</div>,
+    <div style={{ display: "flex", justifyContent: "center" }}>
+      <a className="ui-button ui-button-ghost" href={`/accounts-receivable/documents?customerId=${record.customerId}`} key={record.customerId} style={{ padding: "4px 8px", fontSize: "0.85rem" }}>
+        Detalle
+      </a>
+    </div>
   ]);
 
   if (loading && !snapshot) {
@@ -65,39 +69,67 @@ export function CustomerReceivableBalancesPreview() {
     <div className="page-stack">
       <PageHeader
         eyebrow="Cuentas por cobrar"
-        title="Saldos por cliente"
-        description="Resumen consolidado read-only de saldos abiertos y vencidos por cliente."
-        actions={<a className="ui-button ui-button-secondary" href="/accounts-receivable/documents">Documentos</a>}
+        title="Saldos por cobrar"
+        description="Consulta los balances pendientes de tus clientes y documentos por cobrar."
+        actions={
+          <div className="runtime-page-actions">
+            <a className="ui-button ui-button-secondary" href="/accounts-receivable/documents">Documentos CxC</a>
+          </div>
+        }
       />
 
       {error && <ErrorState title="API no disponible" message={error} />}
-      {!error && <Alert tone="success">Consulta conectada a API y calculada desde documentos CxC.</Alert>}
+      {!error && <Alert tone="success">Consulta conectada a la API y calculada desde documentos CxC.</Alert>}
 
       <Card>
-        <form className="settings-form" onSubmit={handleSubmit}>
-          <label>
-            Buscar cliente
-            <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Codigo o nombre" />
-          </label>
-          <Button disabled={loading} type="submit">Consultar</Button>
+        <form onSubmit={handleSubmit}>
+          <FilterBar>
+            <FormField label="Buscar cliente" style={{ flex: "1 1 300px" }}>
+              <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Código o nombre del cliente..." />
+            </FormField>
+          </FilterBar>
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "12px" }}>
+            <Button disabled={loading} type="submit" variant="primary">
+              {loading ? "Consultando..." : "Consultar saldos"}
+            </Button>
+          </div>
         </form>
       </Card>
 
-      <div className="metric-grid">
-        <Card><strong>{money(snapshot?.summary.totalOpenAmount)}</strong><span>Total abierto</span></Card>
-        <Card><strong>{money(snapshot?.summary.overdueAmount)}</strong><span>Total vencido</span></Card>
-        <Card><strong>{snapshot?.summary.openDocumentCount ?? 0}</strong><span>Docs abiertos</span></Card>
-        <Card><strong>{snapshot?.summary.overdueDocumentCount ?? 0}</strong><span>Docs vencidos</span></Card>
+      <div className="metric-grid" style={{ marginBottom: "24px" }}>
+        <Card className="metric-card">
+          <span>Total abierto</span>
+          <strong>{money(snapshot?.summary.totalOpenAmount)}</strong>
+          <small style={{ color: "var(--muted)" }}>Pendiente de cobro</small>
+        </Card>
+        <Card className="metric-card">
+          <span>Total vencido</span>
+          <strong style={{ color: "var(--red)" }}>{money(snapshot?.summary.overdueAmount)}</strong>
+          <small style={{ color: "var(--muted)" }}>Cartera fuera de plazo</small>
+        </Card>
+        <Card className="metric-card">
+          <span>Docs abiertos</span>
+          <strong>{snapshot?.summary.openDocumentCount ?? 0}</strong>
+          <small style={{ color: "var(--muted)" }}>Facturas pendientes</small>
+        </Card>
+        <Card className="metric-card">
+          <span>Docs vencidos</span>
+          <strong style={{ color: "var(--amber)" }}>{snapshot?.summary.overdueDocumentCount ?? 0}</strong>
+          <small style={{ color: "var(--muted)" }}>Facturas vencidas</small>
+        </Card>
       </div>
 
-      {rows.length ? (
-        <Table
-          columns={["Codigo", "Cliente", "Total", "Cobrado", "Abierto", "Vencido", "Por vencer", "Docs", "Vencidos", "Ultimo", "Detalle"]}
-          rows={rows}
-        />
-      ) : (
-        <EmptyState title="Sin saldos CxC" description="No hay saldos para los filtros seleccionados." />
-      )}
+      <Card>
+        <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "16px" }}>Consolidado de Saldos</h3>
+        {rows.length ? (
+          <Table
+            columns={["Código", "Cliente", "Total", "Cobrado", "Abierto", "Vencido", "Por vencer", "Docs", "Vencidos", "Último", "Acciones"]}
+            rows={rows}
+          />
+        ) : (
+          <EmptyState title="Sin saldos CxC" description="No existen saldos pendientes para mostrar." />
+        )}
+      </Card>
     </div>
   );
 }

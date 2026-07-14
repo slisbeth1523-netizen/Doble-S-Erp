@@ -1,194 +1,281 @@
-import { type FormEvent, useEffect, useMemo, useState } from "react";
-
-import { Alert, Badge, Button, Card, ErrorState, Input, LoadingState, PageHeader, Select, Textarea } from "../components/ui/index.js";
-import type { CatalogRecord, LookupOption } from "../modules/runtime-ui/types/runtime-ui.types.js";
+import { type FormEvent, useEffect, useState, useMemo } from "react";
+import { Alert, Badge, Button, Card, Input, LoadingState, PageHeader, Select, Textarea, FormField, FormSection, FilterBar } from "../components/ui/index.js";
 import {
-  addSupplierPaymentApplication,
+  listSupplierPayments,
+  getSupplierPayment,
   createSupplierPayment,
-  loadSupplierPaymentOptions,
-  openDocumentsForSupplier,
-  postSupplierPayment,
-  type SupplierPayment
+  applyPayment,
+  removeApplication,
+  postPayment,
+  listOpenDocuments,
+  listSuppliers,
+  type SupplierPayment,
+  type SupplierPaymentApplication,
+  type AccountsPayableDocument,
+  type SupplierPaymentStatus
 } from "../services/supplierPaymentsClient.js";
+import type { CatalogRecord } from "../modules/runtime-ui/types/runtime-ui.types.js";
+import { statusLabel } from "../utils/displayLabels.js";
 
 type Feedback = {
   tone: "success" | "warning" | "error";
   message: string;
 };
 
-function formatNumber(value: unknown) {
-  return Number(value ?? 0).toLocaleString("es-DO", {
-    maximumFractionDigits: 2,
-    minimumFractionDigits: 0
-  });
-}
-
-function statusTone(status?: string) {
-  switch (status) {
-    case "POSTED":
-    case "PAID":
-      return "green";
-    case "PARTIALLY_PAID":
-      return "blue";
-    case "CANCELLED":
-      return "red";
-    default:
-      return "amber";
-  }
-}
-
 export function SupplierPaymentsPreview() {
-  const [suppliers, setSuppliers] = useState<LookupOption[]>([]);
+  const [payments, setPayments] = useState<SupplierPayment[]>([]);
+  const [suppliers, setSuppliers] = useState<CatalogRecord[]>([]);
+  const [selectedPayment, setSelectedPayment] = useState<SupplierPayment | null>(null);
+  const [isTogglerOpen, setIsTogglerOpen] = useState(false);
+  const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>({
+    proveedor: true,
+    fecha: true,
+    total: true,
+    aplicado: true,
+    estado: true,
+    referencia: false
+  });
+  
+  // Create payment inputs
+  const [isCreating, setIsCreating] = useState(false);
   const [selectedSupplierId, setSelectedSupplierId] = useState("");
-  const [documents, setDocuments] = useState<CatalogRecord[]>([]);
-  const [selectedDocumentId, setSelectedDocumentId] = useState("");
-  const [paymentsList, setPaymentsList] = useState<CatalogRecord[]>([]);
-  const [createdPayment, setCreatedPayment] = useState<SupplierPayment | null>(null);
-  const [paymentDate, setPaymentDate] = useState("");
-  const [totalAmount, setTotalAmount] = useState(0);
-  const [reference, setReference] = useState("");
-  const [notes, setNotes] = useState("");
+  const [paymentTotalAmount, setPaymentTotalAmount] = useState(0);
+  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().substring(0, 10));
+  const [paymentReference, setPaymentReference] = useState("");
+  const [paymentNotes, setPaymentNotes] = useState("");
+
+  // Application inputs
+  const [openDocuments, setOpenDocuments] = useState<AccountsPayableDocument[]>([]);
+  const [selectedDocId, setSelectedDocId] = useState("");
   const [appliedAmount, setAppliedAmount] = useState(0);
-  const [applicationNotes, setApplicationNotes] = useState("");
+  const [appNotes, setAppNotes] = useState("");
+
+  // Loading and feedback states
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
 
-  const selectedSupplier = useMemo(
-    () => suppliers.find((supplier) => supplier.value === selectedSupplierId) ?? null,
-    [selectedSupplierId, suppliers]
-  );
-
-  const openDocuments = useMemo(
-    () => openDocumentsForSupplier(documents, selectedSupplier),
-    [documents, selectedSupplier]
-  );
-
-  const selectedDocument = useMemo(
-    () => openDocuments.find((document) => String(document.id) === selectedDocumentId) ?? null,
-    [openDocuments, selectedDocumentId]
-  );
-
-  const canCreatePayment = Boolean(selectedSupplier && totalAmount > 0 && !createdPayment);
-  const canApply = Boolean(createdPayment?.status === "DRAFT" && selectedDocument && appliedAmount > 0);
-  const canPost = Boolean(createdPayment?.status === "DRAFT" && createdPayment.applicationCount > 0);
-
-  async function refreshData() {
-    const snapshot = await loadSupplierPaymentOptions();
-    setSuppliers(snapshot.suppliers);
-    setDocuments(snapshot.documents);
-    setPaymentsList(snapshot.payments);
-
-    if (!selectedSupplierId && snapshot.suppliers[0]) {
-      setSelectedSupplierId(snapshot.suppliers[0].value);
+  // Load initial data
+  async function loadInitialData() {
+    try {
+      setLoading(true);
+      const [paymentsList, suppliersList] = await Promise.all([
+        listSupplierPayments(),
+        listSuppliers()
+      ]);
+      setPayments(paymentsList);
+      setSuppliers(suppliersList);
+    } catch (err: unknown) {
+      setFeedback({
+        tone: "error",
+        message: err instanceof Error ? err.message : "Error al cargar datos iniciales."
+      });
+    } finally {
+      setLoading(false);
     }
   }
 
   useEffect(() => {
-    let active = true;
-
-    refreshData()
-      .catch((error: unknown) => {
-        if (active) {
-          setFeedback({ tone: "error", message: error instanceof Error ? error.message : "No se pudo conectar la API." });
-        }
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-
-    return () => {
-      active = false;
-    };
+    loadInitialData();
   }, []);
 
+  // When a supplier is selected for a new payment, load their open documents
   useEffect(() => {
-    const firstDocument = openDocuments[0];
-    setSelectedDocumentId(firstDocument ? String(firstDocument.id) : "");
-    const pendingBalance = Number(firstDocument?.remainingAmount ?? 0);
-    setAppliedAmount(createdPayment ? Math.min(createdPayment.unappliedAmount, pendingBalance) : pendingBalance);
-  }, [openDocuments, createdPayment]);
-
-  async function handleCreatePayment(event: FormEvent) {
-    event.preventDefault();
-    if (!selectedSupplier || totalAmount <= 0) return;
-
-    setSaving(true);
-    setFeedback(null);
-
-    try {
-      const payment = await createSupplierPayment({
-        supplierId: selectedSupplier.value,
-        paymentDate: paymentDate ? new Date(paymentDate).toISOString() : undefined,
-        totalAmount,
-        reference: reference.trim() || undefined,
-        notes: notes.trim() || undefined
+    if (!selectedSupplierId) {
+      setOpenDocuments([]);
+      return;
+    }
+    listOpenDocuments(selectedSupplierId)
+      .then(setOpenDocuments)
+      .catch((err) => {
+        setFeedback({
+          tone: "error",
+          message: err instanceof Error ? err.message : "Error al cargar documentos pendientes."
+        });
       });
+  }, [selectedSupplierId]);
 
-      setCreatedPayment(payment);
-      setFeedback({ tone: "success", message: `Pago ${payment.paymentNumber} creado en borrador. El saldo CxP sigue intacto hasta postear.` });
-      await refreshData();
-    } catch (error: unknown) {
-      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "Error al crear pago." });
+  // When payment details are loaded, also load open documents for application dropdown
+  useEffect(() => {
+    if (!selectedPayment || selectedPayment.Status !== "DRAFT") {
+      setOpenDocuments([]);
+      return;
+    }
+    listOpenDocuments(selectedPayment.SupplierId)
+      .then(setOpenDocuments)
+      .catch((err) => {
+        setFeedback({
+          tone: "error",
+          message: err instanceof Error ? err.message : "Error al cargar documentos pendientes."
+        });
+      });
+  }, [selectedPayment]);
+
+  // Select a payment to view details
+  async function handleSelectPayment(id: string) {
+    try {
+      setLoading(true);
+      const detail = await getSupplierPayment(id);
+      setSelectedPayment(detail);
+      setIsCreating(false);
+      setFeedback(null);
+      // Reset application inputs
+      setSelectedDocId("");
+      setAppliedAmount(0);
+      setAppNotes("");
+    } catch (err: unknown) {
+      setFeedback({
+        tone: "error",
+        message: err instanceof Error ? err.message : "Error al cargar detalles del pago."
+      });
     } finally {
-      setSaving(false);
+      setLoading(false);
     }
   }
 
-  async function handleAddApplication(event: FormEvent) {
-    event.preventDefault();
-    if (!createdPayment || !selectedDocument) return;
-
-    setSaving(true);
-    setFeedback(null);
-
+  // Handle creating new payment
+  async function handleCreatePayment(e: FormEvent) {
+    e.preventDefault();
+    if (!selectedSupplierId || paymentTotalAmount <= 0) {
+      setFeedback({ tone: "warning", message: "Selecciona un proveedor y define un monto total válido." });
+      return;
+    }
     try {
-      const payment = await addSupplierPaymentApplication(createdPayment.id, {
-        accountsPayableDocumentId: String(selectedDocument.id),
+      setSubmitting(true);
+      const newPayment = await createSupplierPayment({
+        supplierId: selectedSupplierId,
+        totalAmount: paymentTotalAmount,
+        paymentDate,
+        reference: paymentReference || null,
+        notes: paymentNotes || null
+      });
+      setFeedback({ tone: "success", message: `Pago ${newPayment.PaymentNumber} creado en borrador.` });
+      
+      // Update list and select the new payment
+      const updatedList = await listSupplierPayments();
+      setPayments(updatedList);
+      setSelectedPayment(newPayment);
+      setIsCreating(false);
+    } catch (err: unknown) {
+      setFeedback({
+        tone: "error",
+        message: err instanceof Error ? err.message : "Error al registrar el pago."
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  // Handle adding an application line
+  async function handleAddApplication(e: FormEvent) {
+    e.preventDefault();
+    if (!selectedPayment || !selectedDocId || appliedAmount <= 0) {
+      setFeedback({ tone: "warning", message: "Seleccione un documento e ingrese un monto a aplicar mayor a cero." });
+      return;
+    }
+    try {
+      setSubmitting(true);
+      const updated = await applyPayment(selectedPayment.SupplierPaymentId, {
+        accountsPayableDocumentId: selectedDocId,
         appliedAmount,
-        notes: applicationNotes.trim() || undefined
+        notes: appNotes || null
       });
+      setSelectedPayment(updated);
+      setFeedback({ tone: "success", message: "Aplicación guardada correctamente." });
+      
+      // Reset application inputs
+      setSelectedDocId("");
+      setAppliedAmount(0);
+      setAppNotes("");
 
-      setCreatedPayment(payment);
-      setApplicationNotes("");
-      setFeedback({ tone: "success", message: "Aplicacion registrada en el pago borrador." });
-      await refreshData();
-    } catch (error: unknown) {
-      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "Error al aplicar pago." });
+      // Update list
+      const updatedList = await listSupplierPayments();
+      setPayments(updatedList);
+    } catch (err: unknown) {
+      setFeedback({
+        tone: "error",
+        message: err instanceof Error ? err.message : "Error al guardar la aplicación."
+      });
     } finally {
-      setSaving(false);
+      setSubmitting(false);
     }
   }
 
-  async function handlePostPayment() {
-    if (!createdPayment) return;
-
-    setSaving(true);
-    setFeedback(null);
-
+  // Handle deleting an application line
+  async function handleDeleteApplication(docId: string) {
+    if (!selectedPayment) return;
     try {
-      const payment = await postSupplierPayment(createdPayment.id);
-      setCreatedPayment(payment);
-      setFeedback({ tone: "success", message: `Pago ${payment.paymentNumber} posteado. Los saldos CxP fueron actualizados.` });
-      await refreshData();
-    } catch (error: unknown) {
-      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "Error al postear pago." });
+      setSubmitting(true);
+      const updated = await removeApplication(selectedPayment.SupplierPaymentId, docId);
+      setSelectedPayment(updated);
+      setFeedback({ tone: "success", message: "Aplicación de pago eliminada." });
+      
+      // Update list
+      const updatedList = await listSupplierPayments();
+      setPayments(updatedList);
+    } catch (err: unknown) {
+      setFeedback({
+        tone: "error",
+        message: err instanceof Error ? err.message : "Error al eliminar la aplicación."
+      });
     } finally {
-      setSaving(false);
+      setSubmitting(false);
     }
   }
 
-  function handleReset() {
-    setCreatedPayment(null);
-    setTotalAmount(0);
-    setPaymentDate("");
-    setReference("");
-    setNotes("");
-    setApplicationNotes("");
-    setFeedback(null);
+  // Handle posting a payment
+  async function handlePostPayment() {
+    if (!selectedPayment) return;
+    if (Math.abs(selectedPayment.AppliedAmountTotal - selectedPayment.TotalAmount) > 0.001) {
+      setFeedback({ tone: "warning", message: "El monto total aplicado debe coincidir exactamente con el monto total del pago antes de postear." });
+      return;
+    }
+    if (!confirm("¿Está seguro de que desea postear este pago? Esta acción no se puede deshacer y aplicará los saldos en CxP.")) {
+      return;
+    }
+    try {
+      setSubmitting(true);
+      const posted = await postPayment(selectedPayment.SupplierPaymentId);
+      setSelectedPayment(posted);
+      setFeedback({ tone: "success", message: `Pago ${posted.PaymentNumber} posteado y aplicado de manera exitosa.` });
+      
+      // Update list
+      const updatedList = await listSupplierPayments();
+      setPayments(updatedList);
+    } catch (err: unknown) {
+      setFeedback({
+        tone: "error",
+        message: err instanceof Error ? err.message : "Error al completar el pago."
+      });
+    } finally {
+      setSubmitting(false);
+    }
   }
 
-  if (loading) {
+  const selectedDocInfo = useMemo(() => {
+    return openDocuments.find((d) => d.AccountsPayableDocumentId === selectedDocId);
+  }, [selectedDocId, openDocuments]);
+
+  function formatMoney(val: unknown) {
+    return Number(val ?? 0).toLocaleString("es-DO", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  }
+
+  function getStatusTone(status?: SupplierPaymentStatus) {
+    switch (status) {
+      case "POSTED":
+        return "green";
+      case "CANCELLED":
+        return "red";
+      case "DRAFT":
+      default:
+        return "amber";
+    }
+  }
+
+  if (loading && payments.length === 0) {
     return <LoadingState label="Cargando pagos a proveedores..." />;
   }
 
@@ -196,8 +283,8 @@ export function SupplierPaymentsPreview() {
     <div className="page-stack">
       <PageHeader
         eyebrow="Cuentas por pagar"
-        title="Pagos a Proveedores"
-        description="Crea pagos en borrador, aplÃ­calos a documentos abiertos y postea la reducciÃ³n de saldos de CxP."
+        title="Pagos a Proveedores (CxP)"
+        description="Emisión de comprobantes de pago, distribución de saldos y aplicación transaccional a facturas pendientes."
       />
 
       {feedback && (
@@ -206,243 +293,420 @@ export function SupplierPaymentsPreview() {
         </Alert>
       )}
 
-      {!suppliers.length && (
-        <ErrorState
-          title="Sin proveedores disponibles"
-          message="Agrega un proveedor activo para crear pagos de cuentas por pagar."
-        />
+      {/* Detail or Creation workspace */}
+      {(selectedPayment || isCreating) && (
+        <div style={{ borderLeft: "4px solid var(--primary)", borderRadius: "var(--radius)" }}>
+          <Card className="ui-card">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+              <h3>
+                {isCreating ? "Registrar Nuevo Pago a Proveedor" : `Detalle de Pago: ${selectedPayment?.PaymentNumber}`}
+              </h3>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setSelectedPayment(null);
+                  setIsCreating(false);
+                  setFeedback(null);
+                }}
+              >
+                Cerrar Detalle
+              </Button>
+            </div>
+
+          {isCreating ? (
+              <form onSubmit={handleCreatePayment}>
+                <FormSection title="Registrar Nuevo Pago a Proveedor">
+                  <div className="grid-2">
+                    <FormField label="Proveedor" required>
+                      <Select
+                        value={selectedSupplierId}
+                        onChange={(e) => setSelectedSupplierId(e.target.value)}
+                        required
+                      >
+                        <option value="">Seleccione un proveedor...</option>
+                        {suppliers.map((s) => (
+                          <option key={String(s.id)} value={String(s.id)}>
+                            {String(s.name)} ({String(s.code)})
+                          </option>
+                        ))}
+                      </Select>
+                    </FormField>
+
+                    <FormField label="Monto Total a Pagar" required>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        value={paymentTotalAmount || ""}
+                        onChange={(e) => setPaymentTotalAmount(parseFloat(e.target.value) || 0)}
+                        required
+                      />
+                    </FormField>
+                  </div>
+
+                  <div className="grid-2">
+                    <FormField label="Fecha de Pago" required>
+                      <Input
+                        type="date"
+                        value={paymentDate}
+                        onChange={(e) => setPaymentDate(e.target.value)}
+                        required
+                      />
+                    </FormField>
+
+                    <FormField label="Referencia (No. Cheque / Transferencia)">
+                      <Input
+                        type="text"
+                        placeholder="Ej. TR-00192"
+                        value={paymentReference}
+                        onChange={(e) => setPaymentReference(e.target.value)}
+                      />
+                    </FormField>
+                  </div>
+
+                  <FormField label="Notas / Justificación">
+                    <Textarea
+                      placeholder="Observaciones de este pago..."
+                      value={paymentNotes}
+                      onChange={(e) => setPaymentNotes(e.target.value)}
+                    />
+                  </FormField>
+
+                  <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end", marginTop: "16px", paddingTop: "16px", borderTop: "1px solid var(--border)" }}>
+                    <Button
+                      variant="secondary"
+                      onClick={() => setIsCreating(false)}
+                      type="button"
+                    >
+                      Cancelar
+                    </Button>
+                    <Button variant="primary" type="submit" disabled={submitting}>
+                      {submitting ? "Guardando..." : "Guardar borrador"}
+                    </Button>
+                  </div>
+                </FormSection>
+              </form>
+            ) : (
+              selectedPayment && (
+                <div className="page-stack" style={{ gap: "24px" }}>
+                  {/* Metrics header */}
+                  <div className="metric-grid">
+                    <Card className="metric-card">
+                      <span>Monto Total del Pago</span>
+                      <strong style={{ color: "var(--primary)" }}>${formatMoney(selectedPayment.TotalAmount)}</strong>
+                      <small>Monto total emitido</small>
+                    </Card>
+                    <Card className="metric-card">
+                      <span>Monto Aplicado</span>
+                      <strong style={{ color: "var(--green)" }}>${formatMoney(selectedPayment.AppliedAmountTotal)}</strong>
+                      <small>Saldado contra facturas</small>
+                    </Card>
+                    <Card className="metric-card">
+                      <span>Balance Sin Aplicar</span>
+                      <strong style={{ color: selectedPayment.TotalAmount - selectedPayment.AppliedAmountTotal > 0.001 ? "var(--amber)" : "var(--text)" }}>
+                        ${formatMoney(selectedPayment.TotalAmount - selectedPayment.AppliedAmountTotal)}
+                      </strong>
+                      <small>Pendiente de distribuir</small>
+                    </Card>
+                    <Card className="metric-card">
+                      <span>Estado del Pago</span>
+                      <div style={{ marginTop: "8px" }}>
+                          <Badge tone={getStatusTone(selectedPayment.Status)}>{statusLabel(selectedPayment.Status)}</Badge>
+                      </div>
+                      <small>Secuencia: {selectedPayment.PaymentNumber}</small>
+                    </Card>
+                  </div>
+
+                  <div style={{ background: "var(--surface-muted)", borderRadius: "var(--radius)", padding: "20px", border: "1px solid var(--border)", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "20px" }}>
+                    <div>
+                      <h4 style={{ margin: "0 0 12px 0", fontSize: "1rem", fontWeight: 700, borderBottom: "1px solid var(--border)", paddingBottom: "6px" }}>Información del Proveedor</h4>
+                      <p style={{ margin: "6px 0", fontSize: "0.9rem" }}><span style={{ color: "var(--muted)" }}>Código:</span> <strong>{selectedPayment.SupplierCode}</strong></p>
+                      <p style={{ margin: "6px 0", fontSize: "0.9rem" }}><span style={{ color: "var(--muted)" }}>Nombre:</span> <strong>{selectedPayment.SupplierName}</strong></p>
+                      <p style={{ margin: "6px 0", fontSize: "0.9rem" }}><span style={{ color: "var(--muted)" }}>Fecha Emisión:</span> <strong>{new Date(selectedPayment.PaymentDate).toLocaleDateString("es-DO")}</strong></p>
+                    </div>
+                    <div>
+                      <h4 style={{ margin: "0 0 12px 0", fontSize: "1rem", fontWeight: 700, borderBottom: "1px solid var(--border)", paddingBottom: "6px" }}>Referencias</h4>
+                      <p style={{ margin: "6px 0", fontSize: "0.9rem" }}><span style={{ color: "var(--muted)" }}>Referencia:</span> <strong>{selectedPayment.Reference || "N/A"}</strong></p>
+                      <p style={{ margin: "6px 0", fontSize: "0.9rem" }}><span style={{ color: "var(--muted)" }}>Notas:</span> <strong>{selectedPayment.Notes || "Sin notas"}</strong></p>
+                      {selectedPayment.PostedAt && (
+                        <p style={{ margin: "6px 0", fontSize: "0.9rem" }}><span style={{ color: "var(--muted)" }}>Posteado el:</span> <strong>{new Date(selectedPayment.PostedAt).toLocaleString("es-DO")}</strong></p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Applications section */}
+                  {selectedPayment.Status === "DRAFT" && (
+                    <div style={{ border: "1px dashed var(--border)", borderRadius: "var(--radius)", padding: "20px", background: "var(--surface-muted)" }}>
+                      <form onSubmit={handleAddApplication}>
+                        <FormSection title="Aplicar a Documento de Cuenta por Pagar" description="Selecciona facturas pendientes para distribuir el monto de este pago.">
+                          {openDocuments.length === 0 ? (
+                            <p style={{ color: "var(--muted)", fontStyle: "italic", margin: 0 }}>
+                              Este proveedor no posee documentos o facturas pendientes en cuentas por pagar (CxP).
+                            </p>
+                          ) : (
+                            <>
+                              <div className="grid-3" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px" }}>
+                                <FormField label="Documento CxP" required>
+                                  <Select
+                                    value={selectedDocId}
+                                    onChange={(e) => {
+                                      setSelectedDocId(e.target.value);
+                                      const doc = openDocuments.find((d) => d.AccountsPayableDocumentId === e.target.value);
+                                      if (doc) {
+                                        // Default to document remaining balance or remaining unapplied payment amount, whichever is smaller
+                                        const maxPayable = Math.min(doc.RemainingAmount, selectedPayment.TotalAmount - selectedPayment.AppliedAmountTotal);
+                                        setAppliedAmount(maxPayable > 0 ? maxPayable : doc.RemainingAmount);
+                                      }
+                                    }}
+                                    required
+                                  >
+                                    <option value="">Seleccione documento...</option>
+                                    {openDocuments.map((d) => (
+                                      <option key={d.AccountsPayableDocumentId} value={d.AccountsPayableDocumentId}>
+                                        {d.DocumentNumber} ({d.SourceDocumentNumber}) - Bal: ${formatMoney(d.RemainingAmount)}
+                                      </option>
+                                    ))}
+                                  </Select>
+                                </FormField>
+
+                                <FormField label="Monto a Aplicar" required>
+                                  <Input
+                                    type="number"
+                                    step="0.01"
+                                    min="0.01"
+                                    max={selectedDocInfo?.RemainingAmount}
+                                    value={appliedAmount || ""}
+                                    onChange={(e) => setAppliedAmount(parseFloat(e.target.value) || 0)}
+                                    required
+                                  />
+                                </FormField>
+
+                                <div style={{ display: "flex", alignSelf: "flex-end", height: "42px" }}>
+                                  <Button type="submit" style={{ width: "100%" }} disabled={submitting} variant="primary">
+                                    {submitting ? "Aplicando..." : "Aplicar"}
+                                  </Button>
+                                </div>
+                              </div>
+
+                              {selectedDocInfo && (
+                                <div style={{ background: "var(--surface)", border: "1px solid var(--border)", padding: "12px", borderRadius: "var(--radius-sm)", fontSize: "0.85rem", display: "flex", gap: "24px" }}>
+                                  <p style={{ margin: 0 }}><strong>Monto Total Documento:</strong> ${formatMoney(selectedDocInfo.TotalAmount)}</p>
+                                  <p style={{ margin: 0 }}><strong>Balance Pendiente:</strong> ${formatMoney(selectedDocInfo.RemainingAmount)}</p>
+                                </div>
+                              )}
+
+                              <FormField label="Comentario de aplicación">
+                                <Input
+                                  type="text"
+                                  placeholder="Ej. Abono parcial a factura..."
+                                  value={appNotes}
+                                  onChange={(e) => setAppNotes(e.target.value)}
+                                />
+                              </FormField>
+                            </>
+                          )}
+                        </FormSection>
+                      </form>
+                    </div>
+                  )}
+
+                  {/* Applications list */}
+                  <div>
+                    <h4 style={{ marginBottom: "10px" }}>Documentos Aplicados</h4>
+                    {!selectedPayment.applications || selectedPayment.applications.length === 0 ? (
+                      <p style={{ color: "var(--muted)", fontStyle: "italic", textAlign: "center", padding: "20px 0" }}>
+                        No se han aplicado documentos a este pago.
+                      </p>
+                    ) : (
+                      <div className="ui-table-wrap">
+                        <table className="ui-table">
+                          <thead>
+                            <tr>
+                              <th style={{ textAlign: "left" }}>No. Documento CxP</th>
+                              <th style={{ textAlign: "left" }}>Factura No.</th>
+                              <th style={{ textAlign: "right" }}>Monto Aplicado</th>
+                              <th style={{ textAlign: "left" }}>Notas</th>
+                              {selectedPayment.Status === "DRAFT" && <th style={{ textAlign: "center" }}>Acciones</th>}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {selectedPayment.applications.map((app) => (
+                              <tr key={app.SupplierPaymentApplicationId}>
+                                <td style={{ textAlign: "left" }}>{app.DocumentNumber}</td>
+                                <td style={{ textAlign: "left" }}>{app.SourceDocumentNumber}</td>
+                                <td style={{ textAlign: "right", fontWeight: "600" }}>${formatMoney(app.AppliedAmount)}</td>
+                                <td style={{ textAlign: "left" }}>{app.Notes || "-"}</td>
+                                {selectedPayment.Status === "DRAFT" && (
+                                  <td style={{ textAlign: "center" }}>
+                                    <Button
+                                      variant="danger"
+                                      onClick={() => handleDeleteApplication(app.AccountsPayableDocumentId)}
+                                      disabled={submitting}
+                                    >
+                                      Eliminar
+                                    </Button>
+                                  </td>
+                                )}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Post payment action */}
+                  {selectedPayment.Status === "DRAFT" && (
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", borderTop: "1px solid var(--border)", paddingTop: "20px" }}>
+                      <Button
+                        onClick={handlePostPayment}
+                        disabled={submitting || Math.abs(selectedPayment.AppliedAmountTotal - selectedPayment.TotalAmount) > 0.001}
+                        style={{ paddingLeft: "32px", paddingRight: "32px" }}
+                        variant="primary"
+                      >
+                        {submitting ? "Posteando..." : "Postear y Aplicar Pago"}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )
+            )}
+          </Card>
+        </div>
       )}
 
-      {suppliers.length > 0 && (
-        <div className="content-grid">
-          <div className="ui-card">
-            <form className="settings-form" onSubmit={handleCreatePayment}>
-              <h2>1. Crear pago borrador</h2>
-
-              <div className="runtime-field">
-                <span>Proveedor</span>
-                <Select
-                  value={selectedSupplierId}
-                  onChange={(event) => {
-                    setSelectedSupplierId(event.target.value);
-                    setCreatedPayment(null);
-                  }}
-                  disabled={saving || Boolean(createdPayment)}
+      {/* Main List view */}
+      {!selectedPayment && !isCreating && (
+        <Card className="ui-card">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+            <h3>Historial de Pagos a Proveedores</h3>
+            <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+              <div className="column-toggler-container">
+                <button
+                  className="column-toggler-btn"
+                  onClick={() => setIsTogglerOpen(!isTogglerOpen)}
+                  type="button"
                 >
-                  {suppliers.map((supplier) => (
-                    <option key={supplier.value} value={supplier.value}>
-                      {supplier.label}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-
-              <div className="runtime-field">
-                <span>Total del pago</span>
-                <Input
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  value={totalAmount || ""}
-                  onChange={(event) => setTotalAmount(Number(event.target.value))}
-                  disabled={saving || Boolean(createdPayment)}
-                  required
-                />
-              </div>
-
-              <div className="runtime-field">
-                <span>Fecha</span>
-                <Input
-                  type="datetime-local"
-                  value={paymentDate}
-                  onChange={(event) => setPaymentDate(event.target.value)}
-                  disabled={saving || Boolean(createdPayment)}
-                />
-              </div>
-
-              <div className="runtime-field">
-                <span>Referencia</span>
-                <Input
-                  value={reference}
-                  onChange={(event) => setReference(event.target.value)}
-                  disabled={saving || Boolean(createdPayment)}
-                  placeholder="Transferencia, cheque o referencia interna"
-                />
-              </div>
-
-              <div className="runtime-field">
-                <span>Notas</span>
-                <Textarea
-                  value={notes}
-                  onChange={(event) => setNotes(event.target.value)}
-                  disabled={saving || Boolean(createdPayment)}
-                  rows={3}
-                />
-              </div>
-
-              <div className="form-actions">
-                <Button disabled={!canCreatePayment || saving} type="submit">
-                  Crear pago DRAFT
-                </Button>
-                <Button disabled={saving} onClick={handleReset} type="button" variant="secondary">
-                  Nuevo
-                </Button>
-              </div>
-            </form>
-
-            {createdPayment && (
-              <div style={{ marginTop: "24px" }}>
-                <h2>2. Aplicar a documentos CxP</h2>
-                <div className="metric-grid">
-                  <Card className="metric-card">
-                    <span>Pago</span>
-                    <strong>{createdPayment.paymentNumber}</strong>
-                    <small><Badge tone={statusTone(createdPayment.status)}>{createdPayment.status}</Badge></small>
-                  </Card>
-                  <Card className="metric-card">
-                    <span>Sin aplicar</span>
-                    <strong>${formatNumber(createdPayment.unappliedAmount)}</strong>
-                    <small>Total ${formatNumber(createdPayment.totalAmount)}</small>
-                  </Card>
-                </div>
-
-                <form className="settings-form" onSubmit={handleAddApplication}>
-                  <div className="runtime-field">
-                    <span>Documento abierto</span>
-                    <Select
-                      value={selectedDocumentId}
-                      onChange={(event) => setSelectedDocumentId(event.target.value)}
-                      disabled={saving || createdPayment.status !== "DRAFT" || openDocuments.length === 0}
-                    >
-                      {openDocuments.map((document) => (
-                        <option key={String(document.id)} value={String(document.id)}>
-                          {String(document.code)} - Balance ${formatNumber(document.remainingAmount)}
-                        </option>
-                      ))}
-                    </Select>
-                    <small>
-                      <a href="/accounts-payable/documents">Ver Documentos CxP</a>
-                    </small>
-                  </div>
-
-                  <div className="runtime-field">
-                    <span>Monto aplicado</span>
-                    <Input
-                      type="number"
-                      min="0.01"
-                      step="0.01"
-                      max={Number(selectedDocument?.remainingAmount ?? createdPayment.unappliedAmount)}
-                      value={appliedAmount || ""}
-                      onChange={(event) => setAppliedAmount(Number(event.target.value))}
-                      disabled={saving || createdPayment.status !== "DRAFT"}
-                      required
-                    />
-                  </div>
-
-                  <div className="runtime-field">
-                    <span>Notas de aplicacion</span>
-                    <Input
-                      value={applicationNotes}
-                      onChange={(event) => setApplicationNotes(event.target.value)}
-                      disabled={saving || createdPayment.status !== "DRAFT"}
-                    />
-                  </div>
-
-                  <div className="form-actions">
-                    <Button disabled={!canApply || saving} type="submit">
-                      Aplicar monto
-                    </Button>
-                    <Button disabled={!canPost || saving} onClick={handlePostPayment} type="button">
-                      Postear pago
-                    </Button>
-                  </div>
-                </form>
-
-                {createdPayment.applications.length > 0 && (
-                  <div className="ui-table-wrap" style={{ marginTop: "16px" }}>
-                    <table className="ui-table">
-                      <thead>
-                        <tr>
-                          <th>Documento</th>
-                          <th>Aplicado</th>
-                          <th>Balance doc.</th>
-                          <th>Estado doc.</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {createdPayment.applications.map((application) => (
-                          <tr key={application.id}>
-                            <td>{application.documentNumber}</td>
-                            <td>${formatNumber(application.appliedAmount)}</td>
-                            <td>${formatNumber(application.documentRemainingAmount)}</td>
-                            <td><Badge tone={statusTone(application.documentStatus)}>{application.documentStatus}</Badge></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  ⚙️ Columnas
+                </button>
+                {isTogglerOpen && (
+                  <div className="column-toggler-dropdown">
+                    <label className="column-toggler-item">
+                      <input
+                        type="checkbox"
+                        checked={visibleColumns.proveedor}
+                        onChange={(e) => setVisibleColumns({ ...visibleColumns, proveedor: e.target.checked })}
+                      />
+                      Proveedor
+                    </label>
+                    <label className="column-toggler-item">
+                      <input
+                        type="checkbox"
+                        checked={visibleColumns.fecha}
+                        onChange={(e) => setVisibleColumns({ ...visibleColumns, fecha: e.target.checked })}
+                      />
+                      Fecha
+                    </label>
+                    <label className="column-toggler-item">
+                      <input
+                        type="checkbox"
+                        checked={visibleColumns.total}
+                        onChange={(e) => setVisibleColumns({ ...visibleColumns, total: e.target.checked })}
+                      />
+                      Total Pago
+                    </label>
+                    <label className="column-toggler-item">
+                      <input
+                        type="checkbox"
+                        checked={visibleColumns.aplicado}
+                        onChange={(e) => setVisibleColumns({ ...visibleColumns, aplicado: e.target.checked })}
+                      />
+                      Aplicado
+                    </label>
+                    <label className="column-toggler-item">
+                      <input
+                        type="checkbox"
+                        checked={visibleColumns.estado}
+                        onChange={(e) => setVisibleColumns({ ...visibleColumns, estado: e.target.checked })}
+                      />
+                      Estado
+                    </label>
+                    <label className="column-toggler-item">
+                      <input
+                        type="checkbox"
+                        checked={visibleColumns.referencia}
+                        onChange={(e) => setVisibleColumns({ ...visibleColumns, referencia: e.target.checked })}
+                      />
+                      Referencia
+                    </label>
                   </div>
                 )}
               </div>
-            )}
+
+              <Button
+                variant="primary"
+                onClick={() => {
+                  setIsCreating(true);
+                  setSelectedSupplierId("");
+                  setPaymentTotalAmount(0);
+                  setPaymentReference("");
+                  setPaymentNotes("");
+                  setFeedback(null);
+                }}
+              >
+                + Nuevo Pago
+              </Button>
+            </div>
           </div>
 
-          <div className="page-stack">
-            <div className="ui-card">
-              <h2>Documentos abiertos</h2>
-              {openDocuments.length === 0 ? (
-                <p style={{ color: "var(--muted)" }}>No hay documentos abiertos para el proveedor seleccionado.</p>
-              ) : (
-                <div className="ui-table-wrap">
-                  <table className="ui-table">
-                    <thead>
-                      <tr>
-                        <th>Documento</th>
-                        <th>Balance</th>
-                        <th>Estado</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {openDocuments.slice(0, 8).map((document) => (
-                        <tr key={String(document.id)}>
-                          <td>{String(document.code)}</td>
-                          <td>${formatNumber(document.remainingAmount)}</td>
-                          <td><Badge tone={statusTone(document.status as string)}>{String(document.status)}</Badge></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-
-            <div className="ui-card">
-              <h2>Pagos recientes</h2>
-              <div className="ui-table-wrap">
-                <table className="ui-table">
-                  <thead>
-                    <tr>
-                      <th>Pago</th>
-                      <th>Total</th>
-                      <th>Estado</th>
+          {payments.length === 0 ? (
+            <p style={{ textAlign: "center", color: "var(--muted)", margin: "40px 0" }}>
+              No se han registrado pagos. Haga clic en "+ Nuevo Pago" para crear uno.
+            </p>
+          ) : (
+            <div className="ui-table-wrap">
+              <table className="ui-table">
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: "left" }}>Número de Pago</th>
+                    {visibleColumns.proveedor && <th style={{ textAlign: "left" }}>Proveedor</th>}
+                    {visibleColumns.fecha && <th style={{ textAlign: "center" }}>Fecha</th>}
+                    {visibleColumns.total && <th style={{ textAlign: "right" }}>Total Pago</th>}
+                    {visibleColumns.aplicado && <th style={{ textAlign: "right" }}>Aplicado</th>}
+                    {visibleColumns.estado && <th style={{ textAlign: "center" }}>Estado</th>}
+                    {visibleColumns.referencia && <th style={{ textAlign: "left" }}>Referencia</th>}
+                    <th style={{ textAlign: "center" }}>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {payments.map((p) => (
+                    <tr key={p.SupplierPaymentId}>
+                      <td style={{ textAlign: "left" }}><strong>{p.PaymentNumber}</strong></td>
+                      {visibleColumns.proveedor && <td style={{ textAlign: "left" }}>{p.SupplierName} ({p.SupplierCode})</td>}
+                      {visibleColumns.fecha && <td style={{ textAlign: "center" }}>{new Date(p.PaymentDate).toLocaleDateString("es-DO")}</td>}
+                      {visibleColumns.total && <td style={{ textAlign: "right", fontWeight: "600" }}>${formatMoney(p.TotalAmount)}</td>}
+                      {visibleColumns.aplicado && <td style={{ textAlign: "right" }}>${formatMoney(p.AppliedAmountTotal)}</td>}
+                      {visibleColumns.estado && (
+                        <td style={{ textAlign: "center" }}>
+                            <Badge tone={getStatusTone(p.Status)}>{statusLabel(p.Status)}</Badge>
+                        </td>
+                      )}
+                      {visibleColumns.referencia && <td style={{ textAlign: "left" }}>{p.Reference || "-"}</td>}
+                      <td style={{ textAlign: "center" }}>
+                        <Button
+                          variant="secondary"
+                          onClick={() => handleSelectPayment(p.SupplierPaymentId)}
+                        >
+                          Ver Detalle
+                        </Button>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {paymentsList.map((payment) => (
-                      <tr key={String(payment.id)}>
-                        <td>{String(payment.code)}</td>
-                        <td>${formatNumber(payment.totalAmount)}</td>
-                        <td><Badge tone={statusTone(payment.status as string)}>{String(payment.status)}</Badge></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <p style={{ marginTop: "14px" }}>
-                <a href="/master-data/supplier-payments">Consulta read-only de pagos</a>
-              </p>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          </div>
-        </div>
+          )}
+        </Card>
       )}
     </div>
   );

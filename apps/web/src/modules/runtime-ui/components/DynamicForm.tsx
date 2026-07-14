@@ -23,6 +23,17 @@ function normalizeInputValue(field: RuntimeFormField, value: string | boolean) {
   return value;
 }
 
+function getSafeColumnSpan(span: any): number {
+  if (span === undefined || span === null || span === "" || Number.isNaN(Number(span))) {
+    return 12;
+  }
+  const parsed = Number(span);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 12) {
+    return 12;
+  }
+  return parsed;
+}
+
 function renderField(
   field: RuntimeFormField,
   value: RuntimeFormValues[string],
@@ -127,6 +138,26 @@ export function DynamicForm({ catalog, initialValues, onSubmit }: DynamicFormPro
     }
   }, [initialValues, metadata.data]);
 
+  // Group fields by section if section-based rendering is used
+  const hasSections = useMemo(() => fields.some((f) => !!f.section), [fields]);
+
+  const groupedFields = useMemo(() => {
+    if (!hasSections) return [];
+
+    const sectionsList: { name: string; fields: RuntimeFormField[] }[] = [];
+    const sectionsMap = new Map<string, RuntimeFormField[]>();
+
+    for (const field of fields) {
+      const sectionName = field.section?.trim() || "General";
+      if (!sectionsMap.has(sectionName)) {
+        sectionsMap.set(sectionName, []);
+        sectionsList.push({ name: sectionName, fields: sectionsMap.get(sectionName)! });
+      }
+      sectionsMap.get(sectionName)!.push(field);
+    }
+    return sectionsList;
+  }, [fields, hasSections]);
+
   if (metadata.loading) {
     return <div className="runtime-state">Cargando formulario...</div>;
   }
@@ -156,21 +187,86 @@ export function DynamicForm({ catalog, initialValues, onSubmit }: DynamicFormPro
         }
       }}
     >
-      {fields.map((field) => (
-        <label className="runtime-field" key={field.field} htmlFor={field.field}>
-          <span>
-            {field.label}
-            {field.required ? <strong aria-label="requerido">*</strong> : null}
-          </span>
-          {renderField(field, values[field.field], (fieldName, value) =>
-            setValues((current) => ({ ...current, [fieldName]: value }))
-          )}
-          {field.helpText ? <small>{field.helpText}</small> : null}
-          {submitted && errors[field.field] ? (
-            <small className="runtime-error">{errors[field.field]}</small>
-          ) : null}
-        </label>
-      ))}
+      {hasSections ? (
+        <div className="form-sections-container">
+          {groupedFields.map((group) => (
+            <div className="form-section" key={group.name}>
+              <h3 className="form-section-title">{group.name}</h3>
+              <div className="form-grid-12">
+                {group.fields.map((field) => (
+                  <label
+                    className={`runtime-field col-span-${getSafeColumnSpan(field.columnSpan)} ${
+                      field.inputType === "boolean" ? "checkbox-row" : ""
+                    }`}
+                    key={field.field}
+                    htmlFor={field.field}
+                  >
+                    {field.inputType === "boolean" ? (
+                      <>
+                        {renderField(field, values[field.field], (fieldName, value) =>
+                          setValues((current) => ({ ...current, [fieldName]: value }))
+                        )}
+                        <span>
+                          {field.label}
+                          {field.required ? <strong aria-label="requerido">*</strong> : null}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <span>
+                          {field.label}
+                          {field.required ? <strong aria-label="requerido">*</strong> : null}
+                        </span>
+                        {renderField(field, values[field.field], (fieldName, value) =>
+                          setValues((current) => ({ ...current, [fieldName]: value }))
+                        )}
+                      </>
+                    )}
+                    {field.helpText ? <small>{field.helpText}</small> : null}
+                    {submitted && errors[field.field] ? (
+                      <small className="runtime-error">{errors[field.field]}</small>
+                    ) : null}
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        fields.map((field) => (
+          <label
+            className={`runtime-field ${field.inputType === "boolean" ? "checkbox-row" : ""}`}
+            key={field.field}
+            htmlFor={field.field}
+          >
+            {field.inputType === "boolean" ? (
+              <>
+                {renderField(field, values[field.field], (fieldName, value) =>
+                  setValues((current) => ({ ...current, [fieldName]: value }))
+                )}
+                <span>
+                  {field.label}
+                  {field.required ? <strong aria-label="requerido">*</strong> : null}
+                </span>
+              </>
+            ) : (
+              <>
+                <span>
+                  {field.label}
+                  {field.required ? <strong aria-label="requerido">*</strong> : null}
+                </span>
+                {renderField(field, values[field.field], (fieldName, value) =>
+                  setValues((current) => ({ ...current, [fieldName]: value }))
+                )}
+              </>
+            )}
+            {field.helpText ? <small>{field.helpText}</small> : null}
+            {submitted && errors[field.field] ? (
+              <small className="runtime-error">{errors[field.field]}</small>
+            ) : null}
+          </label>
+        ))
+      )}
       <button className="runtime-primary-action" type="submit">
         Guardar
       </button>

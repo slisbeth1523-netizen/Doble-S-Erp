@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { ReactNode, useState, useMemo, useEffect } from "react";
 
 import { Badge } from "../components/ui/index.js";
 import { getCatalogLabel } from "../modules/master-data/utils/catalogLabels.js";
@@ -100,6 +100,22 @@ const navigation: NavigationItem[] = [
       { label: "Consulta recibos", path: "/master-data/customer-receipts" },
       { label: "Consulta notas credito", path: "/master-data/customer-credit-notes" },
       { label: "Consulta saldos", path: "/master-data/customer-receivable-balances" }
+    ]
+  },
+  {
+    label: "Facturación Fiscal",
+    path: "/dgii/electronic-invoices",
+    children: [
+      { label: "Comprobantes e-CF", path: "/dgii/electronic-invoices" },
+      { label: "Reportes DGII", path: "/dgii/reports" },
+      { label: "Certificación e-CF", path: "/dgii/certification" }
+    ]
+  },
+  {
+    label: "Contabilidad",
+    path: "/accounting/chart-of-accounts",
+    children: [
+      { label: "Catálogo de Cuentas", path: "/accounting/chart-of-accounts" }
     ]
   },
   { label: "Workflows", path: "/workflows" },
@@ -370,6 +386,24 @@ function renderIcon(label: string) {
           <path d="M19 14h-7a3 3 0 0 0 0 6h1"></path>
         </svg>
       );
+    case "Facturación Fiscal":
+      return (
+        <svg {...commonProps}>
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+          <polyline points="14 2 14 8 20 8"></polyline>
+          <line x1="16" y1="13" x2="8" y2="13"></line>
+          <line x1="16" y1="17" x2="8" y2="17"></line>
+          <polyline points="10 9 9 9 8 9"></polyline>
+        </svg>
+      );
+    case "Contabilidad":
+      return (
+        <svg {...commonProps}>
+          <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+          <line x1="22" y1="6" x2="2" y2="6"></line>
+          <line x1="8" y1="2" x2="8" y2="22"></line>
+        </svg>
+      );
     case "Seguridad":
       return (
         <svg {...commonProps}>
@@ -390,70 +424,253 @@ function renderIcon(label: string) {
 
 export function AppLayout({ children, currentPath, onNavigate }: AppLayoutProps) {
   const crumbs = breadcrumb(currentPath);
+  
+  // Track which groups are expanded
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {};
+    navigation.forEach((item) => {
+      if (item.children?.some((child) => child.path === currentPath)) {
+        initial[item.label] = true;
+      }
+    });
+    return initial;
+  });
+
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const searchItems = [
+    { label: "Clientes", category: "Catálogos / Ventas", path: "/master-data/customers" },
+    { label: "Proveedores", category: "Catálogos / Compras", path: "/master-data/suppliers" },
+    { label: "Artículos", category: "Catálogos / Inventario", path: "/master-data/items" },
+    { label: "Categorías", category: "Catálogos", path: "/master-data/categories" },
+    { label: "Marcas", category: "Catálogos", path: "/master-data/brands" },
+    { label: "Almacenes", category: "Catálogos", path: "/master-data/warehouses" },
+    { label: "Existencias de Inventario", category: "Inventario", path: "/master-data/inventory-stocks" },
+    { label: "Movimientos de Inventario", category: "Inventario", path: "/master-data/inventory-movements" },
+    { label: "Kardex de Inventario", category: "Inventario", path: "/master-data/inventory-ledger" },
+    { label: "Ajustes de Inventario", category: "Inventario", path: "/inventory/adjustments" },
+    { label: "Conteos Físicos", category: "Inventario", path: "/inventory/physical-counts" },
+    { label: "Órdenes de Compra", category: "Compras", path: "/purchasing/purchase-orders" },
+    { label: "Recepciones de Compra", category: "Compras", path: "/purchasing/purchase-receipts" },
+    { label: "Facturas de Proveedor", category: "Compras / CxP", path: "/purchasing/supplier-invoices" },
+    { label: "Documentos de CxP (Cuentas por pagar)", category: "Cuentas por pagar", path: "/accounts-payable/documents" },
+    { label: "Pagos a Proveedores", category: "Cuentas por pagar", path: "/accounts-payable/payments" },
+    { label: "Comprobantes Fiscales e-CF", category: "Facturación Fiscal / DGII", path: "/dgii/electronic-invoices" },
+    { label: "Reportes DGII (606, 607, 608, 609)", category: "Facturación Fiscal / DGII", path: "/dgii/reports" },
+    { label: "Certificación e-CF (Emisor Electrónico)", category: "Facturación Fiscal / DGII", path: "/dgii/certification" },
+    { label: "Catálogo de Cuentas Contables", category: "Contabilidad", path: "/accounting/chart-of-accounts" },
+    { label: "Seguridad y Accesos", category: "Configuración", path: "/security" },
+    { label: "Configuración General", category: "Configuración", path: "/settings" }
+  ];
+
+  const filteredSearch = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    const query = searchQuery.toLowerCase();
+    return searchItems.filter(
+      (item) =>
+        item.label.toLowerCase().includes(query) ||
+        item.category.toLowerCase().includes(query)
+    );
+  }, [searchQuery]);
 
   return (
-    <div className="app-layout">
-      <aside className="app-sidebar">
+    <div className={`app-layout ${isSidebarCollapsed ? "app-layout-collapsed" : ""}`}>
+      <aside className={`app-sidebar ${isSidebarCollapsed ? "app-sidebar-collapsed" : ""} ${isMobileMenuOpen ? "app-sidebar-mobile-open" : ""}`}>
         <button className="brand" onClick={() => onNavigate("/dashboard")} type="button">
           <span className="brand-mark">DS</span>
-          <span>
-            <strong>Doble S ERP</strong>
-            <small>Vista de desarrollo</small>
-          </span>
+          {!isSidebarCollapsed && (
+            <span>
+              <strong>Doble S ERP</strong>
+              <small>Vista de desarrollo</small>
+            </span>
+          )}
         </button>
 
         <nav aria-label="Principal" className="sidebar-nav">
-          {navigation.map((item) => (
-            <div className="nav-group" key={item.label}>
-              <button
-                className={isActive(currentPath, item) ? "nav-link nav-link-active" : "nav-link"}
-                onClick={() => onNavigate(item.path)}
-                type="button"
-              >
-                {renderIcon(item.label)}
-                <span>{item.label}</span>
-              </button>
-              {item.children ? (
-                <div className="nav-children">
-                  {item.children.map((child) => (
-                    <button
-                      className={
-                        currentPath === child.path ? "nav-link nav-link-child nav-link-active" : "nav-link nav-link-child"
-                      }
-                      key={child.path}
-                      onClick={() => onNavigate(child.path)}
-                      type="button"
+          {navigation.map((item) => {
+            const isGroupExpanded = expandedGroups[item.label];
+            const isGroupActive = isActive(currentPath, item);
+            return (
+              <div className="nav-group" key={item.label}>
+                <button
+                  className={isGroupActive ? "nav-link nav-link-active" : "nav-link"}
+                  onClick={() => {
+                    if (item.children) {
+                      setExpandedGroups((prev) => ({
+                        ...prev,
+                        [item.label]: !prev[item.label]
+                      }));
+                    } else {
+                      onNavigate(item.path);
+                    }
+                  }}
+                  type="button"
+                >
+                  {renderIcon(item.label)}
+                  {!isSidebarCollapsed && <span style={{ flex: 1 }}>{item.label}</span>}
+                  {!isSidebarCollapsed && item.children && (
+                    <svg
+                      className="group-arrow"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      style={{
+                        transform: isGroupExpanded ? "rotate(180deg)" : "rotate(0deg)",
+                        transition: "transform 0.2s"
+                      }}
                     >
-                      <span style={{
-                        display: "inline-block",
-                        width: "5px",
-                        height: "5px",
-                        borderRadius: "50%",
-                        background: "currentColor",
-                        marginRight: "8px",
-                        opacity: currentPath === child.path ? 1 : 0.45
-                      }}></span>
-                      {child.label}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          ))}
+                      <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                  )}
+                </button>
+                {item.children && isGroupExpanded && !isSidebarCollapsed ? (
+                  <div className="nav-children">
+                    {item.children.map((child) => (
+                      <button
+                        className={
+                          currentPath === child.path ? "nav-link nav-link-child nav-link-active" : "nav-link nav-link-child"
+                        }
+                        key={child.path}
+                        onClick={() => {
+                          onNavigate(child.path);
+                          setIsMobileMenuOpen(false);
+                        }}
+                        type="button"
+                      >
+                        <span style={{
+                          display: "inline-block",
+                          width: "5px",
+                          height: "5px",
+                          borderRadius: "50%",
+                          background: "currentColor",
+                          marginRight: "8px",
+                          opacity: currentPath === child.path ? 1 : 0.45
+                        }}></span>
+                        {child.label}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
         </nav>
+
+        {/* Collapsible toggle button */}
+        <button
+          className="toggle-collapse-btn"
+          onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+          type="button"
+          title={isSidebarCollapsed ? "Expandir menú" : "Colapsar menú"}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            {isSidebarCollapsed ? (
+              <polyline points="13 17 18 12 13 7 M6 17 11 12 6 7" />
+            ) : (
+              <polyline points="11 17 6 12 11 7 M18 17 13 12 18 7" />
+            )}
+          </svg>
+        </button>
       </aside>
 
       <section className="app-main-shell">
         <header className="app-topbar">
+          <button
+            className="mobile-menu-toggle"
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            aria-label={isMobileMenuOpen ? "Cerrar menú" : "Abrir menú"}
+            aria-expanded={isMobileMenuOpen}
+            type="button"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              {isMobileMenuOpen ? (
+                <>
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </>
+              ) : (
+                <>
+                  <line x1="3" y1="12" x2="21" y2="12"></line>
+                  <line x1="3" y1="6" x2="21" y2="6"></line>
+                  <line x1="3" y1="18" x2="21" y2="18"></line>
+                </>
+              )}
+            </svg>
+          </button>
+
           <div className="breadcrumb" aria-label="Ruta actual">
             {crumbs.map((crumb, index) => (
               <span key={`${crumb}-${index}`}>{crumb}</span>
             ))}
           </div>
+
+          {/* Global Search Component */}
+          <div className="global-search-container">
+            <svg className="global-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input
+              className="global-search-input"
+              type="text"
+              placeholder="Buscar clientes, facturas, compras..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {filteredSearch.length > 0 && (
+              <div className="global-search-dropdown">
+                {filteredSearch.map((item) => (
+                  <button
+                    key={item.path}
+                    className="global-search-item"
+                    onClick={() => {
+                      onNavigate(item.path);
+                      setSearchQuery("");
+                    }}
+                    type="button"
+                  >
+                    <span>{item.label}</span>
+                    <small>{item.category}</small>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Quick Actions Component */}
+          <div className="quick-actions-bar">
+            <button className="quick-action-btn" onClick={() => onNavigate("/purchasing/supplier-invoices")} type="button">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              Nueva factura de proveedor
+            </button>
+            <button className="quick-action-btn" onClick={() => onNavigate("/accounts-payable/payments")} type="button">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect>
+                <line x1="12" y1="4" x2="12" y2="20"></line>
+              </svg>
+              Registrar pago a proveedor
+            </button>
+            <button className="quick-action-btn" onClick={() => onNavigate("/purchasing/purchase-orders")} type="button">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <circle cx="9" cy="21" r="1"></circle>
+                <circle cx="20" cy="21" r="1"></circle>
+                <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+              </svg>
+              Nueva orden de compra
+            </button>
+          </div>
+
           <div className="tenant-pill">
-            <Badge tone="blue">Vista previa</Badge>
-            <span>Usuario demo</span>
-            <strong>Empresa actual</strong>
+            <Badge tone="blue">Entorno Demo</Badge>
+            <span>Bienvenido</span>
           </div>
         </header>
         <main className="app-content">{children}</main>

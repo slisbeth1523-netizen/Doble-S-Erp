@@ -24,6 +24,8 @@ type FieldInput = {
   placeholder?: string;
   helpText?: string;
   lookupCatalog?: string;
+  section?: string;
+  columnSpan?: number;
   validation?: RuntimeValidation;
   width?: number;
   align?: "left" | "center" | "right";
@@ -534,21 +536,184 @@ const catalogFields: Record<string, FieldInput[]> = {
     technicalFields[3]!
   ],
   categories: [
-    ...technicalFields.slice(0, 3),
-    { field: "parentCategoryId", label: "Categoría padre", type: "lookup", lookupCatalog: "categories", visibleInGrid: false },
-    { field: "isSalesCategory", label: "Categoría de ventas", type: "boolean", defaultValue: true, align: "center" },
-    { field: "isPurchaseCategory", label: "Categoría de compras", type: "boolean", defaultValue: true, align: "center" },
-    { field: "isInventoryCategory", label: "Categoría de inventario", type: "boolean", defaultValue: true, align: "center" },
-    technicalFields[3]!
+    {
+      field: "code",
+      label: "Código",
+      required: true,
+      searchable: true,
+      sortable: true,
+      validation: { required: true, minLength: 1, maxLength: 40, nullable: false },
+      width: 120,
+      section: "Información de la categoría",
+      columnSpan: 6
+    },
+    {
+      field: "name",
+      label: "Nombre",
+      required: true,
+      searchable: true,
+      sortable: true,
+      validation: { required: true, minLength: 1, maxLength: 160, nullable: false },
+      width: 220,
+      section: "Información de la categoría",
+      columnSpan: 6
+    },
+    {
+      field: "description",
+      label: "Descripción",
+      type: "textarea",
+      searchable: true,
+      validation: { maxLength: 250, nullable: true },
+      width: 280,
+      section: "Información de la categoría",
+      columnSpan: 12
+    },
+    {
+      field: "parentCategoryId",
+      label: "Categoría padre",
+      type: "lookup",
+      lookupCatalog: "categories",
+      visibleInGrid: false,
+      section: "Información de la categoría",
+      columnSpan: 6
+    },
+    {
+      field: "isSalesCategory",
+      label: "Categoría de ventas",
+      type: "boolean",
+      defaultValue: true,
+      align: "center",
+      section: "Información de la categoría",
+      columnSpan: 4
+    },
+    {
+      field: "isPurchaseCategory",
+      label: "Categoría de compras",
+      type: "boolean",
+      defaultValue: true,
+      align: "center",
+      section: "Información de la categoría",
+      columnSpan: 4
+    },
+    {
+      field: "isInventoryCategory",
+      label: "Categoría de inventario",
+      type: "boolean",
+      defaultValue: true,
+      align: "center",
+      section: "Información de la categoría",
+      columnSpan: 4
+    },
+    {
+      field: "isActive",
+      label: "Activo",
+      type: "boolean",
+      sortable: true,
+      defaultValue: true,
+      validation: { nullable: false },
+      width: 96,
+      align: "center",
+      format: "boolean",
+      section: "Información de la categoría",
+      columnSpan: 6
+    }
   ],
   brands: [
-    ...technicalFields.slice(0, 3),
-    { field: "website", label: "Sitio web", validation: { maxLength: 250, nullable: true }, width: 220 },
-    { field: "countryCode", label: "País", validation: { maxLength: 3, nullable: true }, width: 90 },
-    technicalFields[3]!
+    {
+      field: "code",
+      label: "Código",
+      required: true,
+      searchable: true,
+      sortable: true,
+      validation: { required: true, minLength: 1, maxLength: 40, nullable: false },
+      width: 120,
+      section: "Información de la marca",
+      columnSpan: 6
+    },
+    {
+      field: "name",
+      label: "Nombre",
+      required: true,
+      searchable: true,
+      sortable: true,
+      validation: { required: true, minLength: 1, maxLength: 160, nullable: false },
+      width: 220,
+      section: "Información de la marca",
+      columnSpan: 6
+    },
+    {
+      field: "description",
+      label: "Descripción",
+      type: "textarea",
+      searchable: true,
+      validation: { maxLength: 250, nullable: true },
+      width: 280,
+      section: "Información de la marca",
+      columnSpan: 12
+    },
+    {
+      field: "website",
+      label: "Sitio web",
+      validation: { maxLength: 250, nullable: true },
+      width: 220,
+      section: "Información de la marca",
+      columnSpan: 6
+    },
+    {
+      field: "countryCode",
+      label: "País",
+      validation: { maxLength: 3, nullable: true },
+      width: 90,
+      section: "Información de la marca",
+      columnSpan: 6
+    },
+    {
+      field: "isActive",
+      label: "Activo",
+      type: "boolean",
+      sortable: true,
+      defaultValue: true,
+      validation: { nullable: false },
+      width: 96,
+      align: "center",
+      format: "boolean",
+      section: "Información de la marca",
+      columnSpan: 12
+    }
   ],
   warehouses: [
-    ...technicalFields.slice(0, 3),
+    {
+      field: "code",
+      label: "Código",
+      required: true,
+      searchable: true,
+      sortable: true,
+      validation: { required: true, minLength: 1, maxLength: 40, nullable: false },
+      width: 120,
+      section: "Información general",
+      columnSpan: 6
+    },
+    {
+      field: "name",
+      label: "Nombre",
+      required: true,
+      searchable: true,
+      sortable: true,
+      validation: { required: true, minLength: 1, maxLength: 160, nullable: false },
+      width: 220,
+      section: "Información general",
+      columnSpan: 6
+    },
+    {
+      field: "description",
+      label: "Descripción",
+      type: "textarea",
+      searchable: true,
+      validation: { maxLength: 250, nullable: true },
+      width: 280,
+      section: "Información general",
+      columnSpan: 12
+    },
     {
       field: "warehouseType",
       label: "Tipo almacen",
@@ -561,19 +726,114 @@ const catalogFields: Record<string, FieldInput[]> = {
         regex: "^(NORMAL|PRODUCTION|CONSIGNMENT|TRANSIT|VIRTUAL)$",
         nullable: false
       },
-      width: 150
+      width: 150,
+      section: "Información general",
+      columnSpan: 6
     },
-    { field: "addressLine1", label: "Direccion 1", visibleInGrid: false, validation: { maxLength: 250, nullable: true } },
-    { field: "addressLine2", label: "Direccion 2", visibleInGrid: false, validation: { maxLength: 250, nullable: true } },
-    { field: "city", label: "Ciudad", searchable: true, validation: { maxLength: 120, nullable: true }, width: 150 },
-    { field: "province", label: "Provincia", searchable: true, validation: { maxLength: 120, nullable: true }, width: 150 },
-    { field: "countryCode", label: "Pais", visibleInGrid: false, validation: { maxLength: 3, nullable: true } },
-    { field: "responsibleUserId", label: "Responsable", type: "lookup", visibleInGrid: false, visibleInForm: false },
-    { field: "allowsNegativeInventory", label: "Permite negativo", type: "boolean", defaultValue: false, visibleInGrid: false },
-    { field: "isDefault", label: "Predeterminado", type: "boolean", defaultValue: false, width: 130, align: "center", format: "boolean" },
-    { field: "isTransit", label: "Transito", type: "boolean", defaultValue: false, width: 110, align: "center", format: "boolean" },
-    { field: "isVirtual", label: "Virtual", type: "boolean", defaultValue: false, width: 100, align: "center", format: "boolean" },
-    technicalFields[3]!
+    {
+      field: "addressLine1",
+      label: "Direccion 1",
+      visibleInGrid: false,
+      validation: { maxLength: 250, nullable: true },
+      section: "Ubicación y contacto",
+      columnSpan: 6
+    },
+    {
+      field: "addressLine2",
+      label: "Direccion 2",
+      visibleInGrid: false,
+      validation: { maxLength: 250, nullable: true },
+      section: "Ubicación y contacto",
+      columnSpan: 6
+    },
+    {
+      field: "city",
+      label: "Ciudad",
+      searchable: true,
+      validation: { maxLength: 120, nullable: true },
+      width: 150,
+      section: "Ubicación y contacto",
+      columnSpan: 4
+    },
+    {
+      field: "province",
+      label: "Provincia",
+      searchable: true,
+      validation: { maxLength: 120, nullable: true },
+      width: 150,
+      section: "Ubicación y contacto",
+      columnSpan: 4
+    },
+    {
+      field: "countryCode",
+      label: "Pais",
+      visibleInGrid: false,
+      validation: { maxLength: 3, nullable: true },
+      section: "Ubicación y contacto",
+      columnSpan: 4
+    },
+    {
+      field: "responsibleUserId",
+      label: "Responsable",
+      type: "lookup",
+      visibleInGrid: false,
+      visibleInForm: false
+    },
+    {
+      field: "allowsNegativeInventory",
+      label: "Permite negativo",
+      type: "boolean",
+      defaultValue: false,
+      visibleInGrid: false,
+      section: "Configuración operativa",
+      columnSpan: 6
+    },
+    {
+      field: "isDefault",
+      label: "Predeterminado",
+      type: "boolean",
+      defaultValue: false,
+      width: 130,
+      align: "center",
+      format: "boolean",
+      section: "Configuración operativa",
+      columnSpan: 6
+    },
+    {
+      field: "isTransit",
+      label: "Transito",
+      type: "boolean",
+      defaultValue: false,
+      width: 110,
+      align: "center",
+      format: "boolean",
+      section: "Configuración operativa",
+      columnSpan: 6
+    },
+    {
+      field: "isVirtual",
+      label: "Virtual",
+      type: "boolean",
+      defaultValue: false,
+      width: 100,
+      align: "center",
+      format: "boolean",
+      section: "Configuración operativa",
+      columnSpan: 6
+    },
+    {
+      field: "isActive",
+      label: "Activo",
+      type: "boolean",
+      sortable: true,
+      defaultValue: true,
+      validation: { nullable: false },
+      width: 96,
+      align: "center",
+      format: "boolean",
+      section: "Información general",
+      columnSpan: 6
+    }
   ],
   "inventory-stocks": [
     { field: "itemCode", label: "Articulo", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, width: 130 },
@@ -666,7 +926,53 @@ const catalogFields: Record<string, FieldInput[]> = {
     { field: "sourceDocumentNumber", label: "Documento origen", searchable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 170 },
     { field: "reference", label: "Referencia", searchable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 180 }
   ],
-  currencies: technicalFields,
+  currencies: [
+    {
+      field: "code",
+      label: "Código",
+      required: true,
+      searchable: true,
+      sortable: true,
+      validation: { required: true, minLength: 1, maxLength: 80, nullable: false },
+      width: 140,
+      section: "Información de la moneda",
+      columnSpan: 6
+    },
+    {
+      field: "name",
+      label: "Nombre",
+      required: true,
+      searchable: true,
+      sortable: true,
+      validation: { required: true, minLength: 1, maxLength: 160, nullable: false },
+      width: 240,
+      section: "Información de la moneda",
+      columnSpan: 6
+    },
+    {
+      field: "description",
+      label: "Descripción",
+      type: "textarea",
+      searchable: true,
+      validation: { maxLength: 250, nullable: true },
+      width: 320,
+      section: "Información de la moneda",
+      columnSpan: 12
+    },
+    {
+      field: "isActive",
+      label: "Activo",
+      type: "boolean",
+      sortable: true,
+      defaultValue: true,
+      validation: { nullable: false },
+      width: 96,
+      align: "center",
+      format: "boolean",
+      section: "Información de la moneda",
+      columnSpan: 12
+    }
+  ],
   "units-of-measure": [
     ...technicalFields.slice(0, 3),
     { field: "symbol", label: "Simbolo", searchable: true, validation: { maxLength: 20, nullable: true }, width: 100 },

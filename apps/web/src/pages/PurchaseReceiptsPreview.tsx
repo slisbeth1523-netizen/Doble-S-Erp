@@ -1,6 +1,6 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 
-import { Alert, Badge, Button, Card, ErrorState, Input, LoadingState, PageHeader, Select, Table, Textarea } from "../components/ui/index.js";
+import { Alert, Badge, Button, Card, ErrorState, Input, LoadingState, PageHeader, Select, Table, Textarea, FormField, FormSection } from "../components/ui/index.js";
 import type { CatalogRecord } from "../modules/runtime-ui/types/runtime-ui.types.js";
 import {
   addPurchaseReceiptLine,
@@ -12,6 +12,7 @@ import {
   recordNumber,
   type PurchaseReceipt
 } from "../services/purchaseReceiptsClient.js";
+import { statusLabel } from "../utils/displayLabels.js";
 import type { PurchaseOrder, PurchaseOrderLine } from "../services/purchaseOrdersClient.js";
 
 type Feedback = {
@@ -27,7 +28,7 @@ function navigate(path: string) {
 function formatNumber(value: unknown) {
   return Number(value ?? 0).toLocaleString("es-DO", {
     maximumFractionDigits: 2,
-    minimumFractionDigits: 0
+    minimumFractionDigits: 2
   });
 }
 
@@ -131,10 +132,10 @@ export function PurchaseReceiptsPreview() {
         notes: notes || null
       });
       setCreatedReceipt(receipt);
-      setFeedback({ tone: "success", message: `Recepcion ${receipt.purchaseReceiptNumber} creada en DRAFT.` });
+      setFeedback({ tone: "success", message: `Recepción ${receipt.purchaseReceiptNumber} creada en borrador.` });
       await refreshSnapshots();
     } catch (error: unknown) {
-      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "No se pudo crear la recepcion." });
+      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "No se pudo crear la recepción." });
     } finally {
       setSaving(false);
     }
@@ -156,10 +157,10 @@ export function PurchaseReceiptsPreview() {
         notes: "Linea recibida desde UI minima"
       });
       setCreatedReceipt(receipt);
-      setFeedback({ tone: "success", message: "Linea agregada a la recepcion." });
+      setFeedback({ tone: "success", message: "Línea agregada a la recepción." });
       await refreshSnapshots();
     } catch (error: unknown) {
-      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "No se pudo agregar la linea." });
+      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "No se pudo agregar la línea." });
     } finally {
       setSaving(false);
     }
@@ -176,10 +177,10 @@ export function PurchaseReceiptsPreview() {
     try {
       const receipt = await completePurchaseReceipt(createdReceipt.id);
       setCreatedReceipt(receipt);
-      setFeedback({ tone: "success", message: `Recepcion posteada con movimiento ${receipt.movementNumber ?? ""}.` });
+      setFeedback({ tone: "success", message: `Recepción posteada con movimiento ${receipt.movementNumber ?? ""}.` });
       await refreshSnapshots();
     } catch (error: unknown) {
-      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "No se pudo postear la recepcion." });
+      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "No se pudo postear la recepción." });
     } finally {
       setSaving(false);
     }
@@ -190,9 +191,9 @@ export function PurchaseReceiptsPreview() {
       <PageHeader
         actions={
           <div className="runtime-page-actions">
-            <Badge tone={apiConnected ? "green" : "amber"}>{apiConnected ? "API conectada" : "Sin ordenes aprobadas"}</Badge>
+            <Badge tone={apiConnected ? "green" : "amber"}>{apiConnected ? "API conectada" : "Sin órdenes aprobadas"}</Badge>
             <Button onClick={() => navigate("/purchasing/purchase-orders")} type="button" variant="secondary">
-              Ordenes
+              Órdenes de compra
             </Button>
             <Button onClick={() => navigate("/master-data/purchase-receipts")} type="button" variant="secondary">
               Consulta recepciones
@@ -205,119 +206,151 @@ export function PurchaseReceiptsPreview() {
             </Button>
           </div>
         }
-        description="Recibe compras aprobadas y postea la entrada por el motor de inventario."
+        description="Registra la recepción física de artículos asociados a órdenes de compra."
         eyebrow="Compras"
-        title="Recepciones"
+        title="Recepciones de compra"
       />
 
       {loading ? <LoadingState label="Conectando con compras..." /> : null}
       {feedback ? <Alert tone={feedback.tone}>{feedback.message}</Alert> : null}
-      {!loading && !apiConnected ? <ErrorState message="No hay ordenes aprobadas disponibles para recibir." /> : null}
+      {!loading && !apiConnected ? <ErrorState message="No hay órdenes aprobadas disponibles para recibir." /> : null}
 
       <section className="inventory-operation-grid">
         <Card>
-          <div className="panel-heading">
+          <div className="panel-heading" style={{ borderBottom: "1px solid var(--border)", paddingBottom: "12px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
             <div>
-              <h2>Crear recepcion</h2>
-              <p>Selecciona una orden aprobada y prepara el documento.</p>
+              <h2 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 700 }}>Nueva recepción</h2>
+              <p style={{ margin: "4px 0 0 0", fontSize: "0.85rem", color: "var(--muted)" }}>Prepara el documento de recepción para ingresar stock.</p>
             </div>
-            <Badge tone="blue">DRAFT</Badge>
+            <Badge tone="blue">Borrador</Badge>
           </div>
           <form className="operation-form" onSubmit={handleCreate}>
-            <label>
-              <span>Orden aprobada</span>
-              <Select value={selectedOrder?.id ?? ""} onChange={(event) => void handleOrderChange(event.target.value)} required>
-                {orders.map((order) => (
-                  <option key={order.id} value={order.id}>
-                    {order.purchaseOrderNumber} - {order.supplierName}
-                  </option>
-                ))}
-              </Select>
-            </label>
-            <label>
-              <span>Fecha de recepcion</span>
-              <Input type="datetime-local" value={receiptDate} onChange={(event) => setReceiptDate(event.target.value)} />
-            </label>
-            <label>
-              <span>Referencia</span>
-              <Input value={reference} onChange={(event) => setReference(event.target.value)} placeholder="REC operativa" />
-            </label>
-            <label>
-              <span>Notas</span>
-              <Textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Detalle interno" />
-            </label>
-            <Button disabled={saving || !apiConnected || !selectedOrder} type="submit">
-              Crear recepcion
-            </Button>
+            <FormSection title="1. Seleccionar orden" description="Elige una orden de compra previamente aprobada.">
+              <FormField label="Orden aprobada" required>
+                <Select value={selectedOrder?.id ?? ""} onChange={(event) => void handleOrderChange(event.target.value)} required>
+                  {orders.map((order) => (
+                    <option key={order.id} value={order.id}>
+                      {order.purchaseOrderNumber} - {order.supplierName}
+                    </option>
+                  ))}
+                </Select>
+              </FormField>
+            </FormSection>
+
+            <FormSection title="2. Revisar proveedor y almacén" description="Información pre-cargada del proveedor y destino de la orden.">
+              {selectedOrder ? (
+                <div style={{ background: "var(--surface-muted)", borderRadius: "var(--radius-sm)", padding: "12px 16px", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: "6px", fontSize: "0.9rem" }}>
+                  <div><span style={{ color: "var(--muted)" }}>Proveedor:</span> <strong>{selectedOrder.supplierName}</strong></div>
+                  <div><span style={{ color: "var(--muted)" }}>Almacén destino principal:</span> <strong>{selectedOrder.lines?.[0]?.warehouseCode || "No especificado"}</strong></div>
+                </div>
+              ) : (
+                <Alert tone="warning">Selecciona una orden de compra para previsualizar los detalles.</Alert>
+              )}
+            </FormSection>
+
+            <FormSection title="3. Detalles de recepción" description="Establece la fecha física de llegada y la referencia.">
+              <FormField label="Fecha de recepción">
+                <Input type="datetime-local" value={receiptDate} onChange={(event) => setReceiptDate(event.target.value)} />
+              </FormField>
+              <FormField label="Referencia / Conduce">
+                <Input value={reference} onChange={(event) => setReference(event.target.value)} placeholder="REC-001 conduce" />
+              </FormField>
+              <FormField label="Notas">
+                <Textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Detalles de la entrega física o transportista..." />
+              </FormField>
+            </FormSection>
+
+            <div style={{ marginTop: "16px" }}>
+              <Button disabled={saving || !apiConnected || !selectedOrder} type="submit" variant="primary">
+                {saving ? "Creando..." : "Crear recepción borrador"}
+              </Button>
+            </div>
           </form>
         </Card>
 
-        <Card>
-          <div className="panel-heading">
-            <div>
-              <h2>Linea y posteo</h2>
-              <p>La entrada actualiza existencias y kardex al completar.</p>
+        <Card style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+          <div>
+            <div className="panel-heading" style={{ borderBottom: "1px solid var(--border)", paddingBottom: "12px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 700 }}>Líneas y Procesamiento</h2>
+                <p style={{ margin: "4px 0 0 0", fontSize: "0.85rem", color: "var(--muted)" }}>Agrega las unidades físicas que están ingresando al almacén.</p>
+              </div>
+              <Badge tone={statusTone(createdReceipt?.status)}>{createdReceipt ? statusLabel(createdReceipt.status) : "Sin recepción"}</Badge>
             </div>
-            <Badge tone={statusTone(createdReceipt?.status)}>{createdReceipt?.status ?? "Sin recepcion"}</Badge>
-          </div>
-          <div className="operation-form">
-            <label>
-              <span>Linea de orden</span>
-              <Select value={selectedLineId} onChange={(event) => setSelectedLineId(event.target.value)} required>
-                {(selectedOrder?.lines ?? []).map((line) => (
-                  <option key={line.id} value={line.id}>
-                    {line.itemCode} - {line.warehouseCode} - {formatNumber(line.quantity)}
-                  </option>
-                ))}
-              </Select>
-            </label>
-            <div className="operation-form-row">
-              <label>
-                <span>Cantidad recibida</span>
-                <Input min="0.000001" step="0.000001" type="number" value={quantityReceived} onChange={(event) => setQuantityReceived(Number(event.target.value))} />
-              </label>
-              <label>
-                <span>Costo</span>
-                <Input min="0" step="0.000001" type="number" value={unitCost} onChange={(event) => setUnitCost(Number(event.target.value))} />
-              </label>
+
+            <div className="operation-form">
+              <FormSection title="4. Confirmar artículos pendientes & cantidades" description="Elige la línea de la orden e ingresa la cantidad recibida.">
+                <FormField label="Línea de la orden" required>
+                  <Select value={selectedLineId} onChange={(event) => setSelectedLineId(event.target.value)} required>
+                    {(selectedOrder?.lines ?? []).map((line) => (
+                      <option key={line.id} value={line.id}>
+                        {line.itemCode} - {line.warehouseCode} - Ordenada: {formatNumber(line.quantity)}
+                      </option>
+                    ))}
+                  </Select>
+                </FormField>
+                <div className="grid-2">
+                  <FormField label="Cantidad recibida" required>
+                    <Input min="0.000001" step="0.000001" type="number" value={quantityReceived} onChange={(event) => setQuantityReceived(Number(event.target.value))} required />
+                  </FormField>
+                  <FormField label="Costo unitario" required>
+                    <Input min="0" step="0.000001" type="number" value={unitCost} onChange={(event) => setUnitCost(Number(event.target.value))} required />
+                  </FormField>
+                </div>
+                <div style={{ marginTop: "8px" }}>
+                  <Button disabled={saving || !canAddLine} onClick={handleAddLine} type="button" variant="secondary" style={{ width: "100%" }}>
+                    Agregar línea a recepción
+                  </Button>
+                </div>
+              </FormSection>
+
+              {createdReceipt ? (
+                <div style={{ borderTop: "1px solid var(--border)", paddingTop: "16px", marginTop: "16px" }}>
+                  <h3 style={{ fontSize: "1.05rem", fontWeight: 700, marginBottom: "12px" }}>5. Revisar diferencias / Resumen</h3>
+                  <div style={{ background: "var(--surface-muted)", borderRadius: "var(--radius-sm)", padding: "16px", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: "8px", fontSize: "0.9rem" }}>
+                    <div><span style={{ color: "var(--muted)" }}>Número de Recepción:</span> <strong>{createdReceipt.purchaseReceiptNumber}</strong></div>
+                    <div><span style={{ color: "var(--muted)" }}>Cantidad de líneas cargadas:</span> <strong>{createdReceipt.lineCount}</strong></div>
+                    <div><span style={{ color: "var(--muted)" }}>Total unidades recibidas:</span> <strong>{formatNumber(createdReceipt.totalQuantityReceived)}</strong></div>
+                  </div>
+
+                  <div style={{ marginTop: "20px" }}>
+                    <Button disabled={saving || !canPost} onClick={handlePost} type="button" variant="primary" style={{ width: "100%" }}>
+                      6. Completar y postear recepción
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <Alert tone="warning">Crea una recepción para habilitar la carga de líneas e ingreso al inventario.</Alert>
+              )}
             </div>
-            <Button disabled={saving || !canAddLine} onClick={handleAddLine} type="button">
-              Agregar linea
-            </Button>
-            <Button disabled={saving || !canPost} onClick={handlePost} type="button">
-              Completar y postear
-            </Button>
           </div>
-          {createdReceipt ? (
-            <Alert tone="info" title={createdReceipt.purchaseReceiptNumber}>
-              {createdReceipt.lineCount} linea(s), {formatNumber(createdReceipt.totalQuantityReceived)} recibidas.
-            </Alert>
-          ) : null}
         </Card>
       </section>
 
       <section className="inventory-operation-grid">
         <Card>
-          <h2>Recepciones recientes</h2>
+          <h2 style={{ fontSize: "1.2rem", fontWeight: 700, marginBottom: "16px" }}>Recepciones de compra recientes</h2>
           <Table
-            columns={["Recepcion", "Orden", "Estado", "Cantidad"]}
+            columns={["Recepción", "Orden", "Estado", "Cantidad"]}
+            emptyText="No hay recepciones de compra registradas."
             rows={receipts.map((receipt) => [
               String(receipt.purchaseReceiptNumber ?? receipt.code ?? ""),
               String(receipt.purchaseOrderNumber ?? ""),
-              <Badge tone={statusTone(String(receipt.status ?? ""))}>{String(receipt.status ?? "")}</Badge>,
-              formatNumber(recordNumber(receipt, "totalQuantityReceived"))
+              <div style={{ textAlign: "center", width: "100%" }}><Badge tone={statusTone(String(receipt.status ?? ""))}>{statusLabel(receipt.status)}</Badge></div>,
+              <div style={{ textAlign: "right", width: "100%", fontWeight: "600" }}>{formatNumber(recordNumber(receipt, "totalQuantityReceived"))}</div>
             ])}
           />
         </Card>
         <Card>
-          <h2>Lineas recientes</h2>
+          <h2 style={{ fontSize: "1.2rem", fontWeight: 700, marginBottom: "16px" }}>Líneas de la recepción recientes</h2>
           <Table
-            columns={["Recepcion", "Articulo", "Almacen", "Cantidad"]}
+            columns={["Recepción", "Artículo", "Almacén", "Cantidad"]}
+            emptyText="No existen líneas en este documento."
             rows={lines.map((line) => [
               String(line.purchaseReceiptNumber ?? line.code ?? ""),
               String(line.itemCode ?? line.name ?? ""),
-              String(line.warehouseCode ?? ""),
-              formatNumber(recordNumber(line, "quantityReceived"))
+              <div style={{ textAlign: "center", width: "100%" }}>{line.warehouseCode ?? ""}</div>,
+              <div style={{ textAlign: "right", width: "100%" }}>{formatNumber(recordNumber(line, "quantityReceived"))}</div>
             ])}
           />
         </Card>

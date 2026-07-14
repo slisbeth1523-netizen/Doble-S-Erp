@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { normalizeApiError } from "../../../services/apiErrors.js";
 import { fetchCatalogItems } from "../services/metadataClient.js";
+import { queryLocalCatalog } from "../services/localStorageDb.js";
 import type { CatalogListResult, RuntimeResourceState } from "../types/runtime-ui.types.js";
 
 export type CatalogGridQuery = {
@@ -15,7 +16,11 @@ export type CatalogGridQuery = {
   sortDirection: "asc" | "desc";
 };
 
-export function useCatalogData(catalog: string, query: CatalogGridQuery): RuntimeResourceState<CatalogListResult> {
+export function useCatalogData(
+  catalog: string,
+  query: CatalogGridQuery,
+  refreshTrigger?: number
+): RuntimeResourceState<CatalogListResult> {
   const [state, setState] = useState<RuntimeResourceState<CatalogListResult>>({
     data: null,
     loading: true,
@@ -48,20 +53,23 @@ export function useCatalogData(catalog: string, query: CatalogGridQuery): Runtim
       })
       .catch((error: unknown) => {
         const friendlyError = normalizeApiError(error);
+        const localResult = queryLocalCatalog(catalog, {
+          search: query.search,
+          isActive: activeFilter,
+          page: query.page,
+          pageSize: query.pageSize,
+          sortBy: query.sortBy,
+          sortDirection: query.sortDirection
+        });
 
         if (!cancelled) {
           setState({
-            data: {
-              items: [],
-              totalItems: 0,
-              page: query.page,
-              pageSize: query.pageSize
-            },
+            data: localResult,
             loading: false,
             error: null,
             errorKind: friendlyError.kind,
             usingFallback: true,
-            empty: true
+            empty: localResult.items.length === 0
           });
         }
       });
@@ -69,7 +77,7 @@ export function useCatalogData(catalog: string, query: CatalogGridQuery): Runtim
     return () => {
       cancelled = true;
     };
-  }, [catalog, serializedQuery]);
+  }, [catalog, serializedQuery, refreshTrigger]);
 
   return state;
 }

@@ -55,6 +55,8 @@ export type CatalogFieldDefinition = {
   displayOrder: number;
   validation: CatalogFieldValidation;
   grid?: CatalogFieldGrid;
+  section?: string;
+  columnSpan?: number;
 };
 
 export type CatalogColumnMap = {
@@ -399,7 +401,9 @@ const warehouseFields = [
     placeholder: "ALM-PRINCIPAL",
     displayOrder: 10,
     validation: { required: true, minLength: 1, maxLength: 40, unique: true, nullable: false },
-    grid: { width: 140, align: "left" }
+    grid: { width: 140, align: "left" },
+    section: "Información general",
+    columnSpan: 6
   },
   {
     field: "name",
@@ -415,7 +419,9 @@ const warehouseFields = [
     placeholder: "Almacen principal",
     displayOrder: 20,
     validation: { required: true, minLength: 1, maxLength: 160, nullable: false },
-    grid: { width: 220, align: "left" }
+    grid: { width: 220, align: "left" },
+    section: "Información general",
+    columnSpan: 6
   },
   {
     field: "description",
@@ -431,7 +437,9 @@ const warehouseFields = [
     placeholder: "Descripcion opcional",
     displayOrder: 30,
     validation: { maxLength: 250, nullable: true },
-    grid: { width: 280, align: "left" }
+    grid: { width: 280, align: "left" },
+    section: "Información general",
+    columnSpan: 12
   },
   {
     field: "warehouseType",
@@ -454,7 +462,9 @@ const warehouseFields = [
       regex: "^(NORMAL|PRODUCTION|CONSIGNMENT|TRANSIT|VIRTUAL)$",
       nullable: false
     },
-    grid: { width: 150, align: "left" }
+    grid: { width: 150, align: "left" },
+    section: "Información general",
+    columnSpan: 6
   },
   {
     field: "addressLine1",
@@ -469,7 +479,9 @@ const warehouseFields = [
     editable: true,
     readOnly: false,
     displayOrder: 50,
-    validation: { maxLength: 250, nullable: true }
+    validation: { maxLength: 250, nullable: true },
+    section: "Ubicación y contacto",
+    columnSpan: 6
   },
   {
     field: "addressLine2",
@@ -484,7 +496,9 @@ const warehouseFields = [
     editable: true,
     readOnly: false,
     displayOrder: 60,
-    validation: { maxLength: 250, nullable: true }
+    validation: { maxLength: 250, nullable: true },
+    section: "Ubicación y contacto",
+    columnSpan: 6
   },
   {
     field: "city",
@@ -500,7 +514,9 @@ const warehouseFields = [
     readOnly: false,
     displayOrder: 70,
     validation: { maxLength: 120, nullable: true },
-    grid: { width: 150, align: "left" }
+    grid: { width: 150, align: "left" },
+    section: "Ubicación y contacto",
+    columnSpan: 4
   },
   {
     field: "province",
@@ -516,7 +532,9 @@ const warehouseFields = [
     readOnly: false,
     displayOrder: 80,
     validation: { maxLength: 120, nullable: true },
-    grid: { width: 150, align: "left" }
+    grid: { width: 150, align: "left" },
+    section: "Ubicación y contacto",
+    columnSpan: 4
   },
   {
     field: "countryCode",
@@ -532,7 +550,9 @@ const warehouseFields = [
     readOnly: false,
     placeholder: "DOM",
     displayOrder: 90,
-    validation: { maxLength: 3, nullable: true }
+    validation: { maxLength: 3, nullable: true },
+    section: "Ubicación y contacto",
+    columnSpan: 4
   },
   {
     field: "responsibleUserId",
@@ -563,7 +583,9 @@ const warehouseFields = [
     readOnly: false,
     defaultValue: false,
     displayOrder: 110,
-    validation: { nullable: false }
+    validation: { nullable: false },
+    section: "Configuración operativa",
+    columnSpan: 6
   },
   {
     field: "isDefault",
@@ -580,7 +602,9 @@ const warehouseFields = [
     defaultValue: false,
     displayOrder: 120,
     validation: { nullable: false },
-    grid: { width: 130, align: "center", format: "boolean" }
+    grid: { width: 130, align: "center", format: "boolean" },
+    section: "Configuración operativa",
+    columnSpan: 6
   },
   {
     field: "isTransit",
@@ -597,7 +621,9 @@ const warehouseFields = [
     defaultValue: false,
     displayOrder: 130,
     validation: { nullable: false },
-    grid: { width: 110, align: "center", format: "boolean" }
+    grid: { width: 110, align: "center", format: "boolean" },
+    section: "Configuración operativa",
+    columnSpan: 6
   },
   {
     field: "isVirtual",
@@ -614,7 +640,9 @@ const warehouseFields = [
     defaultValue: false,
     displayOrder: 140,
     validation: { nullable: false },
-    grid: { width: 100, align: "center", format: "boolean" }
+    grid: { width: 100, align: "center", format: "boolean" },
+    section: "Configuración operativa",
+    columnSpan: 6
   },
   {
     field: "isActive",
@@ -630,7 +658,9 @@ const warehouseFields = [
     defaultValue: true,
     displayOrder: 150,
     validation: { nullable: false },
-    grid: { width: 96, align: "center", format: "boolean" }
+    grid: { width: 96, align: "center", format: "boolean" },
+    section: "Información general",
+    columnSpan: 6
   }
 ] as const satisfies readonly CatalogFieldDefinition[];
 
@@ -1643,7 +1673,9 @@ const customerFields = [
     placeholder: "CLI-0001",
     displayOrder: 10,
     validation: { required: true, minLength: 1, maxLength: 40, unique: true, nullable: false },
-    grid: { width: 120, align: "left" }
+    grid: { width: 120, align: "left" },
+    section: "Información general",
+    columnSpan: 6
   },
   {
     field: "name",
@@ -1659,7 +1691,9 @@ const customerFields = [
     placeholder: "Nombre legal del cliente",
     displayOrder: 20,
     validation: { required: true, minLength: 1, maxLength: 200, nullable: false },
-    grid: { width: 240, align: "left" }
+    grid: { width: 240, align: "left" },
+    section: "Información general",
+    columnSpan: 6
   },
   {
     field: "commercialName",
@@ -1675,7 +1709,9 @@ const customerFields = [
     readOnly: false,
     displayOrder: 30,
     validation: { maxLength: 200, nullable: true },
-    grid: { width: 220, align: "left" }
+    grid: { width: 220, align: "left" },
+    section: "Información general",
+    columnSpan: 6
   },
   {
     field: "documentType",
@@ -1691,7 +1727,9 @@ const customerFields = [
     readOnly: false,
     placeholder: "RNC, Cedula, Pasaporte",
     displayOrder: 40,
-    validation: { maxLength: 30, nullable: true }
+    validation: { maxLength: 30, nullable: true },
+    section: "Información fiscal",
+    columnSpan: 6
   },
   {
     field: "documentNumber",
@@ -1707,7 +1745,9 @@ const customerFields = [
     readOnly: false,
     displayOrder: 50,
     validation: { maxLength: 40, nullable: true },
-    grid: { width: 150, align: "left" }
+    grid: { width: 150, align: "left" },
+    section: "Información fiscal",
+    columnSpan: 6
   },
   {
     field: "email",
@@ -1723,7 +1763,9 @@ const customerFields = [
     readOnly: false,
     displayOrder: 60,
     validation: { maxLength: 200, regex: "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", nullable: true },
-    grid: { width: 220, align: "left" }
+    grid: { width: 220, align: "left" },
+    section: "Información de contacto",
+    columnSpan: 12
   },
   {
     field: "phone",
@@ -1739,7 +1781,9 @@ const customerFields = [
     readOnly: false,
     displayOrder: 70,
     validation: { maxLength: 40, nullable: true },
-    grid: { width: 140, align: "left" }
+    grid: { width: 140, align: "left" },
+    section: "Información de contacto",
+    columnSpan: 6
   },
   {
     field: "mobile",
@@ -1754,7 +1798,9 @@ const customerFields = [
     editable: true,
     readOnly: false,
     displayOrder: 80,
-    validation: { maxLength: 40, nullable: true }
+    validation: { maxLength: 40, nullable: true },
+    section: "Información de contacto",
+    columnSpan: 6
   },
   {
     field: "addressLine1",
@@ -1769,7 +1815,9 @@ const customerFields = [
     editable: true,
     readOnly: false,
     displayOrder: 90,
-    validation: { maxLength: 300, nullable: true }
+    validation: { maxLength: 300, nullable: true },
+    section: "Información de contacto",
+    columnSpan: 12
   },
   {
     field: "city",
@@ -1784,7 +1832,9 @@ const customerFields = [
     editable: true,
     readOnly: false,
     displayOrder: 100,
-    validation: { maxLength: 120, nullable: true }
+    validation: { maxLength: 120, nullable: true },
+    section: "Información de contacto",
+    columnSpan: 4
   },
   {
     field: "province",
@@ -1799,7 +1849,9 @@ const customerFields = [
     editable: true,
     readOnly: false,
     displayOrder: 110,
-    validation: { maxLength: 120, nullable: true }
+    validation: { maxLength: 120, nullable: true },
+    section: "Información de contacto",
+    columnSpan: 4
   },
   {
     field: "countryCode",
@@ -1815,7 +1867,9 @@ const customerFields = [
     readOnly: false,
     placeholder: "DOM",
     displayOrder: 120,
-    validation: { minLength: 2, maxLength: 3, nullable: true }
+    validation: { minLength: 2, maxLength: 3, nullable: true },
+    section: "Información de contacto",
+    columnSpan: 4
   },
   {
     field: "paymentTermId",
@@ -1831,7 +1885,9 @@ const customerFields = [
     editable: true,
     readOnly: false,
     displayOrder: 130,
-    validation: { nullable: true }
+    validation: { nullable: true },
+    section: "Condiciones comerciales",
+    columnSpan: 6
   },
   {
     field: "currencyId",
@@ -1847,7 +1903,9 @@ const customerFields = [
     editable: true,
     readOnly: false,
     displayOrder: 140,
-    validation: { nullable: true }
+    validation: { nullable: true },
+    section: "Condiciones comerciales",
+    columnSpan: 6
   },
   {
     field: "taxCategoryId",
@@ -1863,7 +1921,9 @@ const customerFields = [
     editable: true,
     readOnly: false,
     displayOrder: 150,
-    validation: { nullable: true }
+    validation: { nullable: true },
+    section: "Información fiscal",
+    columnSpan: 12
   },
   {
     field: "creditLimit",
@@ -1880,7 +1940,9 @@ const customerFields = [
     defaultValue: 0,
     displayOrder: 160,
     validation: { min: 0, nullable: true },
-    grid: { width: 140, align: "right", format: "currency" }
+    grid: { width: 140, align: "right", format: "currency" },
+    section: "Condiciones comerciales",
+    columnSpan: 6
   },
   {
     field: "isCreditCustomer",
@@ -1897,7 +1959,9 @@ const customerFields = [
     defaultValue: false,
     displayOrder: 170,
     validation: { nullable: false },
-    grid: { width: 120, align: "center", format: "boolean" }
+    grid: { width: 120, align: "center", format: "boolean" },
+    section: "Condiciones comerciales",
+    columnSpan: 6
   },
   {
     field: "isActive",
@@ -1913,7 +1977,9 @@ const customerFields = [
     defaultValue: true,
     displayOrder: 180,
     validation: { nullable: false },
-    grid: { width: 96, align: "center", format: "boolean" }
+    grid: { width: 96, align: "center", format: "boolean" },
+    section: "Información general",
+    columnSpan: 6
   }
 ] as const satisfies readonly CatalogFieldDefinition[];
 
@@ -5949,7 +6015,9 @@ const categoryFields = [
     placeholder: "CAT-0001",
     displayOrder: 10,
     validation: { required: true, minLength: 1, maxLength: 40, unique: true, nullable: false },
-    grid: { width: 120, align: "left" }
+    grid: { width: 120, align: "left" },
+    section: "Información de la categoría",
+    columnSpan: 6
   },
   {
     field: "name",
@@ -5965,7 +6033,9 @@ const categoryFields = [
     placeholder: "Nombre de la categoria",
     displayOrder: 20,
     validation: { required: true, minLength: 1, maxLength: 160, nullable: false },
-    grid: { width: 220, align: "left" }
+    grid: { width: 220, align: "left" },
+    section: "Información de la categoría",
+    columnSpan: 6
   },
   {
     field: "description",
@@ -5980,7 +6050,9 @@ const categoryFields = [
     readOnly: false,
     displayOrder: 30,
     validation: { maxLength: 250, nullable: true },
-    grid: { width: 280, align: "left" }
+    grid: { width: 280, align: "left" },
+    section: "Información de la categoría",
+    columnSpan: 12
   },
   {
     field: "parentCategoryId",
@@ -5996,7 +6068,9 @@ const categoryFields = [
     editable: true,
     readOnly: false,
     displayOrder: 40,
-    validation: { nullable: true }
+    validation: { nullable: true },
+    section: "Información de la categoría",
+    columnSpan: 6
   },
   {
     field: "isSalesCategory",
@@ -6013,7 +6087,9 @@ const categoryFields = [
     defaultValue: true,
     displayOrder: 50,
     validation: { nullable: false },
-    grid: { width: 130, align: "center", format: "boolean" }
+    grid: { width: 130, align: "center", format: "boolean" },
+    section: "Información de la categoría",
+    columnSpan: 4
   },
   {
     field: "isPurchaseCategory",
@@ -6030,7 +6106,9 @@ const categoryFields = [
     defaultValue: true,
     displayOrder: 60,
     validation: { nullable: false },
-    grid: { width: 140, align: "center", format: "boolean" }
+    grid: { width: 140, align: "center", format: "boolean" },
+    section: "Información de la categoría",
+    columnSpan: 4
   },
   {
     field: "isInventoryCategory",
@@ -6047,7 +6125,9 @@ const categoryFields = [
     defaultValue: true,
     displayOrder: 70,
     validation: { nullable: false },
-    grid: { width: 150, align: "center", format: "boolean" }
+    grid: { width: 150, align: "center", format: "boolean" },
+    section: "Información de la categoría",
+    columnSpan: 4
   },
   {
     field: "isActive",
@@ -6063,7 +6143,9 @@ const categoryFields = [
     defaultValue: true,
     displayOrder: 80,
     validation: { nullable: false },
-    grid: { width: 96, align: "center", format: "boolean" }
+    grid: { width: 96, align: "center", format: "boolean" },
+    section: "Información de la categoría",
+    columnSpan: 6
   }
 ] as const satisfies readonly CatalogFieldDefinition[];
 
@@ -6082,7 +6164,9 @@ const brandFields = [
     placeholder: "MAR-0001",
     displayOrder: 10,
     validation: { required: true, minLength: 1, maxLength: 40, unique: true, nullable: false },
-    grid: { width: 120, align: "left" }
+    grid: { width: 120, align: "left" },
+    section: "Información de la marca",
+    columnSpan: 6
   },
   {
     field: "name",
@@ -6098,7 +6182,9 @@ const brandFields = [
     placeholder: "Nombre de la marca",
     displayOrder: 20,
     validation: { required: true, minLength: 1, maxLength: 160, nullable: false },
-    grid: { width: 220, align: "left" }
+    grid: { width: 220, align: "left" },
+    section: "Información de la marca",
+    columnSpan: 6
   },
   {
     field: "description",
@@ -6113,7 +6199,9 @@ const brandFields = [
     readOnly: false,
     displayOrder: 30,
     validation: { maxLength: 250, nullable: true },
-    grid: { width: 280, align: "left" }
+    grid: { width: 280, align: "left" },
+    section: "Información de la marca",
+    columnSpan: 12
   },
   {
     field: "website",
@@ -6129,7 +6217,9 @@ const brandFields = [
     readOnly: false,
     displayOrder: 40,
     validation: { maxLength: 250, nullable: true },
-    grid: { width: 220, align: "left" }
+    grid: { width: 220, align: "left" },
+    section: "Información de la marca",
+    columnSpan: 6
   },
   {
     field: "countryCode",
@@ -6146,7 +6236,9 @@ const brandFields = [
     placeholder: "DOM",
     displayOrder: 50,
     validation: { maxLength: 3, nullable: true },
-    grid: { width: 90, align: "left" }
+    grid: { width: 90, align: "left" },
+    section: "Información de la marca",
+    columnSpan: 6
   },
   {
     field: "isActive",
@@ -6162,7 +6254,9 @@ const brandFields = [
     defaultValue: true,
     displayOrder: 60,
     validation: { nullable: false },
-    grid: { width: 96, align: "center", format: "boolean" }
+    grid: { width: 96, align: "center", format: "boolean" },
+    section: "Información de la marca",
+    columnSpan: 12
   }
 ] as const satisfies readonly CatalogFieldDefinition[];
 
@@ -6658,6 +6752,111 @@ const itemFields = [
   }
 ] as const satisfies readonly CatalogFieldDefinition[];
 
+const currencyFields = [
+  {
+    field: "code",
+    label: "Code",
+    type: "text",
+    required: true,
+    visibleInGrid: true,
+    visibleInForm: true,
+    searchable: true,
+    sortable: true,
+    editable: true,
+    readOnly: false,
+    placeholder: "Enter code",
+    helpText: "Unique code for this catalog and scope.",
+    displayOrder: 10,
+    validation: {
+      required: true,
+      minLength: 1,
+      maxLength: 80,
+      unique: true,
+      nullable: false
+    },
+    grid: {
+      width: 140,
+      align: "left"
+    },
+    section: "Información de la moneda",
+    columnSpan: 6
+  },
+  {
+    field: "name",
+    label: "Name",
+    type: "text",
+    required: true,
+    visibleInGrid: true,
+    visibleInForm: true,
+    searchable: true,
+    sortable: true,
+    editable: true,
+    readOnly: false,
+    placeholder: "Enter name",
+    displayOrder: 20,
+    validation: {
+      required: true,
+      minLength: 1,
+      maxLength: 160,
+      nullable: false
+    },
+    grid: {
+      width: 240,
+      align: "left"
+    },
+    section: "Información de la moneda",
+    columnSpan: 6
+  },
+  {
+    field: "description",
+    label: "Description",
+    type: "textarea",
+    required: false,
+    visibleInGrid: true,
+    visibleInForm: true,
+    searchable: true,
+    sortable: false,
+    editable: true,
+    readOnly: false,
+    placeholder: "Optional description",
+    displayOrder: 30,
+    validation: {
+      maxLength: 250,
+      nullable: true
+    },
+    grid: {
+      width: 320,
+      align: "left"
+    },
+    section: "Información de la moneda",
+    columnSpan: 12
+  },
+  {
+    field: "isActive",
+    label: "Active",
+    type: "boolean",
+    required: false,
+    visibleInGrid: true,
+    visibleInForm: true,
+    searchable: false,
+    sortable: true,
+    editable: true,
+    readOnly: false,
+    defaultValue: true,
+    displayOrder: 50,
+    validation: {
+      nullable: false
+    },
+    grid: {
+      width: 96,
+      align: "center",
+      format: "boolean"
+    },
+    section: "Información de la moneda",
+    columnSpan: 12
+  }
+] as const satisfies readonly CatalogFieldDefinition[];
+
 export const catalogDefinitions = {
   currencies: {
     catalogCode: "currencies",
@@ -6687,7 +6886,7 @@ export const catalogDefinitions = {
       createdBy: "CreatedBy",
       updatedBy: "UpdatedBy"
     },
-    fields: commonCatalogFields(false)
+    fields: currencyFields
   },
   "payment-terms": {
     catalogCode: "payment-terms",
