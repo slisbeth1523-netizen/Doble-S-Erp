@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
+import type { ButtonHTMLAttributes, HTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: "primary" | "secondary" | "ghost" | "danger";
@@ -24,43 +24,8 @@ export function Checkbox({ className = "", ...props }: InputHTMLAttributes<HTMLI
   return <input className={`ui-checkbox ${className}`.trim()} type="checkbox" {...props} />;
 }
 
-export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <section className={`ui-card ${className}`.trim()}>{children}</section>;
-}
-
-export function FormSection({
-  children,
-  title
-}: {
-  children: ReactNode;
-  title: string;
-}) {
-  return (
-    <section className="form-section">
-      <h3>{title}</h3>
-      {children}
-    </section>
-  );
-}
-
-export function FormField({
-  children,
-  label,
-  required = false
-}: {
-  children: ReactNode;
-  label: string;
-  required?: boolean;
-}) {
-  return (
-    <label className="form-field">
-      <span>
-        {label}
-        {required ? <strong aria-label="requerido"> *</strong> : null}
-      </span>
-      {children}
-    </label>
-  );
+export function Card({ children, className = "", ...props }: { children: ReactNode; className?: string } & HTMLAttributes<HTMLElement>) {
+  return <section className={`ui-card ${className}`.trim()} {...props}>{children}</section>;
 }
 
 export function Badge({
@@ -227,6 +192,72 @@ export function ErrorState({
     <div className="ui-state ui-state-error">
       <strong>{title}</strong>
       <span>{message ?? "Revisa la conexion o los permisos requeridos para esta seccion."}</span>
+    </div>
+  );
+}
+
+export function FormField({
+  label,
+  children,
+  error,
+  required,
+  className = "",
+  ...props
+}: {
+  label?: string;
+  children: ReactNode;
+  error?: string;
+  required?: boolean;
+  className?: string;
+} & HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div className={`ui-form-field ${className}`.trim()} {...props}>
+      {label && (
+        <label className="ui-form-label">
+          {label}
+          {required && <span className="ui-required-mark"> *</span>}
+        </label>
+      )}
+      <div className="ui-field-control">{children}</div>
+      {error && <span className="ui-field-error">{error}</span>}
+    </div>
+  );
+}
+
+export function FormSection({
+  title,
+  description,
+  children,
+  className = "",
+  ...props
+}: {
+  title: string;
+  description?: string;
+  children: ReactNode;
+  className?: string;
+} & HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div className={`ui-form-section ${className}`.trim()} {...props}>
+      <header className="ui-form-section-header">
+        <h4 className="ui-form-section-title">{title}</h4>
+        {description && <p className="ui-form-section-desc">{description}</p>}
+      </header>
+      <div className="ui-form-section-content">{children}</div>
+    </div>
+  );
+}
+
+export function FilterBar({
+  children,
+  className = "",
+  ...props
+}: {
+  children: ReactNode;
+  className?: string;
+} & HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div className={`ui-filter-bar ${className}`.trim()} {...props}>
+      {children}
     </div>
   );
 }

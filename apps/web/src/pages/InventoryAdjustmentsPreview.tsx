@@ -1,6 +1,6 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 
-import { Alert, Badge, Button, Card, ErrorState, Input, LoadingState, PageHeader, Select, Table, Textarea } from "../components/ui/index.js";
+import { Alert, Badge, Button, Card, ErrorState, Input, LoadingState, PageHeader, Select, Table, Textarea, FormField, FormSection, FilterBar } from "../components/ui/index.js";
 import {
   createInventoryAdjustment,
   loadInventoryOptions,
@@ -11,6 +11,7 @@ import {
   type InventoryAdjustment,
   type InventoryMovementType
 } from "../services/inventoryOperationsClient.js";
+import { sourceTypeLabel, statusLabel } from "../utils/displayLabels.js";
 import type { CatalogRecord, LookupOption } from "../modules/runtime-ui/types/runtime-ui.types.js";
 
 type Feedback = {
@@ -120,7 +121,7 @@ export function InventoryAdjustmentsPreview() {
         ]
       });
       setCreatedAdjustment(adjustment);
-      setFeedback({ tone: "success", message: `Ajuste ${adjustment.movementNumber} creado en DRAFT.` });
+      setFeedback({ tone: "success", message: `Ajuste ${adjustment.movementNumber} creado en borrador.` });
       await refreshSnapshots();
     } catch (error: unknown) {
       setFeedback({ tone: "error", message: error instanceof Error ? error.message : "No se pudo crear el ajuste." });
@@ -164,9 +165,9 @@ export function InventoryAdjustmentsPreview() {
             </Button>
           </div>
         }
-        description="Crea ajustes básicos y postealos con el motor existente de movimientos."
+        description="Registra entradas y salidas para corregir las existencias físicas de tus artículos."
         eyebrow="Inventario"
-        title="Ajustes"
+        title="Ajustes de Inventario"
       />
 
       {loading ? <LoadingState label="Conectando con inventario..." /> : null}
@@ -175,125 +176,173 @@ export function InventoryAdjustmentsPreview() {
 
       <section className="inventory-operation-grid">
         <Card>
-          <div className="panel-heading">
-            <div>
-              <h2>Crear ajuste</h2>
-              <p>Una linea por operacion para validar el flujo base.</p>
-            </div>
-            <Badge tone="blue">DRAFT</Badge>
-          </div>
-          <form className="operation-form" onSubmit={handleCreate}>
-            <label>
-              <span>Tipo</span>
-              <Select value={movementType} onChange={(event) => setMovementType(event.target.value as InventoryMovementType)}>
-                <option value="ADJUSTMENT_IN">Entrada</option>
-                <option value="ADJUSTMENT_OUT">Salida</option>
-              </Select>
-            </label>
-            <label>
-              <span>Articulo</span>
-              <Select value={itemId} onChange={(event) => setItemId(event.target.value)} required>
-                {items.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.code ? `${item.code} - ${item.label}` : item.label}
-                  </option>
-                ))}
-              </Select>
-            </label>
-            <label>
-              <span>Almacen</span>
-              <Select value={warehouseId} onChange={(event) => setWarehouseId(event.target.value)} required>
-                {warehouses.map((warehouse) => (
-                  <option key={warehouse.value} value={warehouse.value}>
-                    {warehouse.code ? `${warehouse.code} - ${warehouse.label}` : warehouse.label}
-                  </option>
-                ))}
-              </Select>
-            </label>
-            <div className="operation-form-row">
-              <label>
-                <span>Cantidad</span>
-                <Input min="0.000001" step="0.000001" type="number" value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} />
-              </label>
-              <label>
-                <span>Costo</span>
-                <Input min="0" step="0.000001" type="number" value={unitCost} onChange={(event) => setUnitCost(Number(event.target.value))} />
-              </label>
-            </div>
-            <label>
-              <span>Referencia</span>
-              <Input value={reference} onChange={(event) => setReference(event.target.value)} placeholder="Ajuste operativo" />
-            </label>
-            <label>
-              <span>Notas</span>
-              <Textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Detalle interno" />
-            </label>
-            <Button disabled={saving || !apiConnected || !itemId || !warehouseId || quantity <= 0} type="submit">
-              Crear ajuste
-            </Button>
+          <form onSubmit={handleCreate}>
+            <FormSection title="Crear Ajuste" description="Registra un ajuste de inventario (Borrador) para un artículo específico.">
+              <FormField label="Tipo de ajuste" required>
+                <Select value={movementType} onChange={(event) => setMovementType(event.target.value as InventoryMovementType)}>
+                  <option value="ADJUSTMENT_IN">Entrada (+)</option>
+                  <option value="ADJUSTMENT_OUT">Salida (-)</option>
+                </Select>
+              </FormField>
+
+              <FormField label="Artículo" required>
+                <Select value={itemId} onChange={(event) => setItemId(event.target.value)} required>
+                  {items.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.code ? `${item.code} - ${item.label}` : item.label}
+                    </option>
+                  ))}
+                </Select>
+              </FormField>
+
+              <FormField label="Almacén" required>
+                <Select value={warehouseId} onChange={(event) => setWarehouseId(event.target.value)} required>
+                  {warehouses.map((warehouse) => (
+                    <option key={warehouse.value} value={warehouse.value}>
+                      {warehouse.code ? `${warehouse.code} - ${warehouse.label}` : warehouse.label}
+                    </option>
+                  ))}
+                </Select>
+              </FormField>
+
+              <div className="grid-2">
+                <FormField label="Cantidad" required>
+                  <Input min="0.000001" step="0.000001" type="number" value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} required />
+                </FormField>
+                <FormField label="Costo unitario" required>
+                  <Input min="0" step="0.000001" type="number" value={unitCost} onChange={(event) => setUnitCost(Number(event.target.value))} required />
+                </FormField>
+              </div>
+
+              <FormField label="Referencia / NCF">
+                <Input value={reference} onChange={(event) => setReference(event.target.value)} placeholder="Ajuste operativo" />
+              </FormField>
+
+              <FormField label="Notas / Motivo">
+                <Textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Detalle interno o justificación..." />
+              </FormField>
+
+              <div style={{ marginTop: "8px" }}>
+                <Button disabled={saving || !apiConnected || !itemId || !warehouseId || quantity <= 0} type="submit" variant="primary">
+                  {saving ? "Creando..." : "Crear Ajuste Borrador"}
+                </Button>
+              </div>
+            </FormSection>
           </form>
         </Card>
 
-        <Card>
-          <div className="panel-heading">
-            <div>
-              <h2>Posteo</h2>
-              <p>El stock solo cambia al postear el movimiento.</p>
+        <Card style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+          <div>
+            <div className="panel-heading" style={{ borderBottom: "1px solid var(--border)", paddingBottom: "12px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 700 }}>Posteo Definitivo</h2>
+                <p style={{ margin: "4px 0 0 0", fontSize: "0.85rem", color: "var(--muted)" }}>El stock físico solo cambiará al postear el movimiento.</p>
+              </div>
+              <Badge tone={createdAdjustment?.status === "POSTED" ? "green" : "amber"}>
+                {createdAdjustment ? statusLabel(createdAdjustment.status) : "Sin ajuste"}
+              </Badge>
             </div>
-            <Badge tone={createdAdjustment?.status === "POSTED" ? "green" : "amber"}>
-              {createdAdjustment?.status ?? "Sin ajuste"}
-            </Badge>
+
+            {createdAdjustment ? (
+              <div style={{ background: "var(--surface-muted)", borderRadius: "var(--radius-sm)", padding: "16px", border: "1px solid var(--border)", marginBottom: "20px", display: "flex", flexDirection: "column", gap: "8px", fontSize: "0.9rem" }}>
+                <div><span style={{ color: "var(--muted)" }}>Número de Ajuste:</span> <strong>{createdAdjustment.movementNumber}</strong></div>
+                <div><span style={{ color: "var(--muted)" }}>Tipo:</span> <strong>{createdAdjustment.movementType === "ADJUSTMENT_IN" ? "Entrada (+)" : "Salida (-)"}</strong></div>
+                <div><span style={{ color: "var(--muted)" }}>Cantidad del Ajuste:</span> <strong>{formatNumber(createdAdjustment.totalQuantity)}</strong></div>
+                <div style={{ borderTop: "1px solid var(--border)", paddingTop: "8px", marginTop: "4px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span>Costo Total:</span>
+                  <strong style={{ fontSize: "1.1rem", color: "var(--primary)" }}>${formatNumber(createdAdjustment.totalCost)}</strong>
+                </div>
+              </div>
+            ) : (
+              <div style={{ marginBottom: "20px" }}>
+                <Alert tone="warning">Crea un ajuste en borrador para habilitar el posteo definitivo.</Alert>
+              </div>
+            )}
           </div>
-          {createdAdjustment ? (
-            <div className="operation-summary">
-              <strong>{createdAdjustment.movementNumber}</strong>
-              <span>{createdAdjustment.movementType}</span>
-              <span>Cantidad: {formatNumber(createdAdjustment.totalQuantity)}</span>
-              <span>Costo total: {formatNumber(createdAdjustment.totalCost)}</span>
-              <Button disabled={saving || !canPost} onClick={handlePost} type="button">
+
+          <div>
+            {createdAdjustment ? (
+              <Button disabled={saving || !canPost} onClick={handlePost} type="button" variant="primary" style={{ width: "100%" }}>
+                {saving ? "Posteando..." : "Postear y Aplicar Ajuste"}
+              </Button>
+            ) : (
+              <Button disabled onClick={handlePost} type="button" variant="secondary" style={{ width: "100%" }}>
                 Postear ajuste
               </Button>
-            </div>
-          ) : (
-            <div className="operation-summary">
-              <Alert tone="warning">Crea un ajuste para habilitar el posteo.</Alert>
-              <Button disabled onClick={handlePost} type="button">
-                Postear ajuste
-              </Button>
-            </div>
-          )}
-          {selectedStock ? (
-            <Alert tone="info" title="Existencia seleccionada">
-              {String(selectedStock.itemCode)} en {String(selectedStock.warehouseCode)}: {formatNumber(selectedStock.quantityOnHand)} unidades.
-            </Alert>
-          ) : null}
+            )}
+
+            {selectedStock ? (
+              <div style={{ marginTop: "16px" }}>
+                <Alert tone="info" title="Existencia seleccionada">
+                  {String(selectedStock.itemCode)} en {String(selectedStock.warehouseCode)}: {formatNumber(selectedStock.quantityOnHand)} unidades físicas.
+                </Alert>
+              </div>
+            ) : null}
+          </div>
         </Card>
       </section>
 
       <section className="inventory-operation-grid">
         <Card>
-          <h2>Existencias</h2>
-          <Table
-            columns={["Articulo", "Almacen", "Existencia", "Disponible"]}
-            rows={stocks.map((stock) => [
-              String(stock.itemCode ?? stock.code ?? ""),
-              String(stock.warehouseCode ?? stock.name ?? ""),
-              formatNumber(recordNumber(stock, "quantityOnHand")),
-              formatNumber(recordNumber(stock, "quantityAvailable"))
-            ])}
-          />
+          <h2 style={{ marginBottom: "16px", fontSize: "1.2rem", fontWeight: 700 }}>Existencias de Inventario</h2>
+          {stocks.length === 0 ? (
+            <p style={{ textAlign: "center", color: "var(--muted)", margin: "30px 0" }}>No hay existencias registradas.</p>
+          ) : (
+            <div className="ui-table-wrap">
+              <table className="ui-table">
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: "left" }}>Artículo</th>
+                    <th style={{ textAlign: "left" }}>Almacén</th>
+                    <th style={{ textAlign: "right" }}>Existencia Física</th>
+                    <th style={{ textAlign: "right" }}>Disponible</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stocks.map((stock, i) => (
+                    <tr key={i}>
+                      <td style={{ textAlign: "left" }}>{String(stock.itemCode ?? stock.code ?? "")}</td>
+                      <td style={{ textAlign: "left" }}>{String(stock.warehouseCode ?? stock.name ?? "")}</td>
+                      <td style={{ textAlign: "right", fontWeight: "600" }}>{formatNumber(recordNumber(stock, "quantityOnHand"))}</td>
+                      <td style={{ textAlign: "right", fontWeight: "600" }}>{formatNumber(recordNumber(stock, "quantityAvailable"))}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </Card>
+
         <Card>
-          <h2>Movimientos recientes</h2>
-          <Table
-            columns={["Movimiento", "Tipo", "Estado", "Cantidad"]}
-            rows={movements.map((movement) => [
-              String(movement.movementNumber ?? movement.code ?? ""),
-              String(movement.movementType ?? ""),
-              <Badge tone={movement.status === "POSTED" ? "green" : "amber"}>{String(movement.status ?? "")}</Badge>,
-              formatNumber(recordNumber(movement, "totalQuantity"))
-            ])}
-          />
+          <h2 style={{ marginBottom: "16px", fontSize: "1.2rem", fontWeight: 700 }}>Movimientos Recientes</h2>
+          {movements.length === 0 ? (
+            <p style={{ textAlign: "center", color: "var(--muted)", margin: "30px 0" }}>No hay movimientos registrados.</p>
+          ) : (
+            <div className="ui-table-wrap">
+              <table className="ui-table">
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: "left" }}>Movimiento</th>
+                    <th style={{ textAlign: "center" }}>Tipo</th>
+                    <th style={{ textAlign: "center" }}>Estado</th>
+                    <th style={{ textAlign: "right" }}>Cantidad</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {movements.map((movement, i) => (
+                    <tr key={i}>
+                      <td style={{ textAlign: "left" }}><strong>{String(movement.movementNumber ?? movement.code ?? "")}</strong></td>
+                        <td style={{ textAlign: "center" }}>{sourceTypeLabel(movement.movementType)}</td>
+                      <td style={{ textAlign: "center" }}>
+                          <Badge tone={movement.status === "POSTED" ? "green" : "amber"}>{statusLabel(movement.status)}</Badge>
+                      </td>
+                      <td style={{ textAlign: "right", fontWeight: "600" }}>{formatNumber(recordNumber(movement, "totalQuantity"))}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </Card>
       </section>
     </div>

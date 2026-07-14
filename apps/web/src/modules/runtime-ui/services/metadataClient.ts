@@ -8,6 +8,7 @@ import type {
   CatalogRecord,
   LookupOption
 } from "../types/runtime-ui.types.js";
+import { saveLocalCatalogRecord, deleteLocalCatalogRecord } from "./localStorageDb.js";
 
 type QueryValue = string | number | boolean | null | undefined;
 
@@ -89,5 +90,46 @@ export async function fetchCatalogItems(
     };
   } catch (error: unknown) {
     throw normalizeApiError(error);
+  }
+}
+
+export async function saveCatalogItem(catalog: string, record: CatalogRecord): Promise<CatalogRecord> {
+  try {
+    const isEdit = !!record.id;
+    const path = isEdit ? `/master-data/${encodeURIComponent(catalog)}/${encodeURIComponent(String(record.id))}` : `/master-data/${encodeURIComponent(catalog)}`;
+    const method = isEdit ? "PUT" : "POST";
+    
+    const response = await apiFetch(path, {
+      method,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(record)
+    });
+    
+    const body = (await response.json().catch(() => null)) as ApiResponse<CatalogRecord> | null;
+    if (!response.ok || !body?.success || !body.data) {
+      throw new FriendlyApiError(apiErrorKindFromStatus(response.status), response.status);
+    }
+    
+    return body.data;
+  } catch (error: unknown) {
+    // API failed, write locally as fallback
+    console.warn("API write failed, writing locally:", error);
+    return saveLocalCatalogRecord(catalog, record);
+  }
+}
+
+export async function deleteCatalogItem(catalog: string, id: string): Promise<void> {
+  try {
+    const response = await apiFetch(`/master-data/${encodeURIComponent(catalog)}/${encodeURIComponent(id)}`, {
+      method: "DELETE"
+    });
+    
+    if (!response.ok) {
+      throw new FriendlyApiError(apiErrorKindFromStatus(response.status), response.status);
+    }
+  } catch (error: unknown) {
+    // API failed, delete locally as fallback
+    console.warn("API delete failed, deleting locally:", error);
+    deleteLocalCatalogRecord(catalog, id);
   }
 }

@@ -26,9 +26,14 @@ import { SupplierPaymentsPreview } from "./pages/SupplierPaymentsPreview.js";
 import { SupplierAdjustmentsPreview } from "./pages/SupplierAdjustmentsPreview.js";
 import { SupplierAgingPreview } from "./pages/SupplierAgingPreview.js";
 import { SupplierStatementsPreview } from "./pages/SupplierStatementsPreview.js";
+import { ElectronicInvoicingPreview } from "./pages/ElectronicInvoicingPreview.js";
 import { SecurityPreview } from "./pages/SecurityPreview.js";
 import { SettingsPreview } from "./pages/SettingsPreview.js";
 import { WorkflowsPreview } from "./pages/WorkflowsPreview.js";
+
+import { ChartOfAccounts } from "./pages/accounting/ChartOfAccounts.js";
+import { DgiiReportsDashboard } from "./pages/dgii/DgiiReportsDashboard.js";
+import { CertificationWizard } from "./pages/dgii/CertificationWizard.js";
 
 function currentPath() {
   return window.location.pathname === "/" ? "/dashboard" : window.location.pathname;
@@ -145,6 +150,22 @@ export function App() {
       return <CustomerCreditNotesPreview />;
     }
 
+    if (path === "/dgii/electronic-invoices") {
+      return <ElectronicInvoicingPreview />;
+    }
+
+    if (path === "/dgii/reports") {
+      return <DgiiReportsDashboard />;
+    }
+
+    if (path === "/dgii/certification") {
+      return <CertificationWizard />;
+    }
+
+    if (path === "/accounting/chart-of-accounts") {
+      return <ChartOfAccounts />;
+    }
+
     if (path === "/security") {
       return <SecurityPreview />;
     }
@@ -153,7 +174,7 @@ export function App() {
       return <SettingsPreview />;
     }
 
-    return <DashboardPreview />;
+    return <DashboardPreview onNavigate={navigate} />;
   }, [path]);
 
   useEffect(() => {

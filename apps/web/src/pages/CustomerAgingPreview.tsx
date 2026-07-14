@@ -1,6 +1,6 @@
 import { type FormEvent, useEffect, useState } from "react";
 
-import { Alert, Button, Card, EmptyState, ErrorState, Input, LoadingState, PageHeader, Table } from "../components/ui/index.js";
+import { Alert, Button, Card, EmptyState, ErrorState, Input, LoadingState, PageHeader, Table, FormField, FilterBar } from "../components/ui/index.js";
 import { loadCustomerAging, type CustomerAgingResponse, type CustomerAgingSummary } from "../services/customerStatementsClient.js";
 
 function today() {
@@ -42,19 +42,21 @@ export function CustomerAgingPreview() {
   }
 
   const rows = (snapshot?.records ?? []).map((record: CustomerAgingSummary) => [
-    record.customerCode,
-    record.customerName,
-    money(record.currentAmount),
-    money(record.days1To30Amount),
-    money(record.days31To60Amount),
-    money(record.days61To90Amount),
-    money(record.daysOver90Amount),
-    money(record.totalOpenAmount),
-    money(record.overdueAmount),
-    record.openDocumentCount,
-    <a className="ui-button ui-button-ghost" href={`/accounts-receivable/statements?customerId=${record.customerId}`} key={record.customerId}>
-      Ver detalle
-    </a>
+    <strong style={{ textAlign: "left", display: "block" }}>{record.customerCode}</strong>,
+    <div style={{ textAlign: "left" }}>{record.customerName}</div>,
+    <div style={{ textAlign: "right" }}>{money(record.currentAmount)}</div>,
+    <div style={{ textAlign: "right" }}>{money(record.days1To30Amount)}</div>,
+    <div style={{ textAlign: "right" }}>{money(record.days31To60Amount)}</div>,
+    <div style={{ textAlign: "right" }}>{money(record.days61To90Amount)}</div>,
+    <div style={{ textAlign: "right" }}>{money(record.daysOver90Amount)}</div>,
+    <div style={{ textAlign: "right", fontWeight: "600" }}>{money(record.totalOpenAmount)}</div>,
+    <div style={{ textAlign: "right" }}>{money(record.overdueAmount)}</div>,
+    <div style={{ textAlign: "right" }}>{record.openDocumentCount}</div>,
+    <div style={{ display: "flex", justifyContent: "center" }}>
+      <a className="ui-button ui-button-ghost" href={`/accounts-receivable/statements?customerId=${record.customerId}`} key={record.customerId} style={{ padding: "4px 8px", fontSize: "0.85rem" }}>
+        Ver detalle
+      </a>
+    </div>
   ]);
 
   const bucketTotal = snapshot
@@ -69,59 +71,79 @@ export function CustomerAgingPreview() {
     <div className="page-stack">
       <PageHeader
         eyebrow="Cuentas por cobrar"
-        title="Antiguedad"
-        description="Resumen read-only de saldos abiertos por cliente y bucket de vencimiento."
+        title="Antigüedad de saldos de clientes"
+        description="Analiza los balances pendientes según su fecha de vencimiento."
         actions={
-          <>
+          <div className="runtime-page-actions">
             <a className="ui-button ui-button-secondary" href="/accounts-receivable/statements">Estado de cuenta</a>
             <a className="ui-button ui-button-secondary" href="/accounts-receivable/receipts">Recibos</a>
-            <a className="ui-button ui-button-secondary" href="/accounts-receivable/customer-credit-notes">Notas de credito</a>
-          </>
+            <a className="ui-button ui-button-secondary" href="/accounts-receivable/customer-credit-notes">Notas de crédito</a>
+          </div>
         }
       />
 
       <Card>
-        <form className="settings-form" onSubmit={handleSubmit}>
-          <div className="form-grid">
-            <label>
-              Fecha de corte
+        <form onSubmit={handleSubmit}>
+          <FilterBar>
+            <FormField label="Fecha de corte" style={{ flex: "1 1 200px" }}>
               <Input type="date" value={asOfDate} onChange={(event) => setAsOfDate(event.target.value)} />
-            </label>
-            <label>
-              Buscar cliente
-              <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Codigo o nombre" />
-            </label>
+            </FormField>
+            <FormField label="Buscar cliente" style={{ flex: "1 1 300px" }}>
+              <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Código o nombre..." />
+            </FormField>
+          </FilterBar>
+
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "12px" }}>
+            <Button disabled={loading} type="submit" variant="primary">
+              {loading ? "Consultando..." : "Consultar antigüedad"}
+            </Button>
           </div>
-          <Button disabled={loading} type="submit">
-            Consultar
-          </Button>
         </form>
       </Card>
 
       {error && <ErrorState title="API no disponible" message={error} />}
-      {loading && <LoadingState label="Cargando antiguedad..." />}
+      {loading && <LoadingState label="Cargando antigüedad de saldos..." />}
 
       {!loading && !error && snapshot && (
         <>
-          <div className="metric-grid">
-            <Card><strong>{money(snapshot.summary.totalOpenAmount)}</strong><span>Total abierto</span></Card>
-            <Card><strong>{money(snapshot.summary.overdueAmount)}</strong><span>Total vencido</span></Card>
-            <Card><strong>{money(snapshot.summary.notDueAmount)}</strong><span>Por vencer</span></Card>
-            <Card><strong>{snapshot.summary.openDocumentCount}</strong><span>Docs abiertos</span></Card>
+          <div className="metric-grid" style={{ marginBottom: "24px" }}>
+            <Card className="metric-card">
+              <span>Total abierto</span>
+              <strong>{money(snapshot.summary.totalOpenAmount)}</strong>
+              <small style={{ color: "var(--muted)" }}>Saldo pendiente total</small>
+            </Card>
+            <Card className="metric-card">
+              <span>Total vencido</span>
+              <strong style={{ color: "var(--red)" }}>{money(snapshot.summary.overdueAmount)}</strong>
+              <small style={{ color: "var(--muted)" }}>Cartera fuera de fecha</small>
+            </Card>
+            <Card className="metric-card">
+              <span>Por vencer</span>
+              <strong style={{ color: "var(--green)" }}>{money(snapshot.summary.notDueAmount)}</strong>
+              <small style={{ color: "var(--muted)" }}>Saldos al corriente</small>
+            </Card>
+            <Card className="metric-card">
+              <span>Docs abiertos</span>
+              <strong>{snapshot.summary.openDocumentCount}</strong>
+              <small style={{ color: "var(--muted)" }}>Documentos pendientes</small>
+            </Card>
           </div>
 
           <Alert tone={Math.abs(bucketTotal - snapshot.summary.totalOpenAmount) < 0.01 ? "success" : "warning"}>
             Buckets: {money(bucketTotal)} / Total abierto: {money(snapshot.summary.totalOpenAmount)}.
           </Alert>
 
-          {rows.length ? (
-            <Table
-              columns={["Codigo", "Cliente", "CURRENT", "1-30", "31-60", "61-90", "90+", "Total", "Vencido", "Docs", "Detalle"]}
-              rows={rows}
-            />
-          ) : (
-            <EmptyState title="Sin saldos abiertos" description="No hay clientes con saldo abierto para la fecha de corte." />
-          )}
+          <Card style={{ marginTop: "24px" }}>
+            <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "16px" }}>Resumen de Antigüedad por Cliente</h3>
+            {rows.length ? (
+              <Table
+                columns={["Código", "Cliente", "Corriente", "1 a 30", "31 a 60", "61 a 90", "Más de 90", "Total", "Vencido", "Docs", "Acciones"]}
+                rows={rows}
+              />
+            ) : (
+              <EmptyState title="Sin saldos abiertos" description="No existen balances pendientes para la fecha de corte seleccionada." />
+            )}
+          </Card>
         </>
       )}
     </div>
