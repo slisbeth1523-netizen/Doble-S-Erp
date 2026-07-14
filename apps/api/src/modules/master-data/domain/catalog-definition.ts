@@ -912,6 +912,41 @@ const salesInvoiceLineFields = [
   { field: "invoiceStatus", dbColumn: "InvoiceStatus", label: "Estado", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 100, validation: { nullable: false }, grid: { width: 120, align: "left" } }
 ] as const satisfies readonly CatalogFieldDefinition[];
 
+const salesReturnFields = [
+  { field: "returnNumber", dbColumn: "ReturnNumber", label: "Devolucion", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 10, validation: { nullable: false }, grid: { width: 150, align: "left" } },
+  { field: "orderNumber", dbColumn: "OrderNumber", label: "Pedido", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 20, validation: { nullable: false }, grid: { width: 150, align: "left" } },
+  { field: "shipmentNumber", dbColumn: "ShipmentNumber", label: "Despacho", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 30, validation: { nullable: false }, grid: { width: 150, align: "left" } },
+  { field: "invoiceNumber", dbColumn: "InvoiceNumber", label: "Factura", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 40, validation: { nullable: true }, grid: { width: 150, align: "left" } },
+  { field: "customerName", dbColumn: "CustomerName", label: "Cliente", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 50, validation: { nullable: false }, grid: { width: 240, align: "left" } },
+  { field: "returnDate", dbColumn: "ReturnDate", label: "Fecha", type: "datetime", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 60, validation: { nullable: false }, grid: { width: 160, align: "left" } },
+  { field: "status", dbColumn: "Status", label: "Estado", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 70, validation: { nullable: false }, grid: { width: 120, align: "left" } },
+  { field: "warehouseCode", dbColumn: "WarehouseCode", label: "Almacen", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 80, validation: { nullable: true }, grid: { width: 130, align: "left" } },
+  { field: "totalQuantity", dbColumn: "TotalQuantity", label: "Cantidad", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 90, validation: { min: 0, nullable: false }, grid: { width: 120, align: "right" } },
+  { field: "movementNumber", dbColumn: "MovementNumber", label: "Movimiento", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 100, validation: { nullable: true }, grid: { width: 150, align: "left" } }
+] as const satisfies readonly CatalogFieldDefinition[];
+
+const salesReturnLineFields = [
+  { field: "returnNumber", dbColumn: "ReturnNumber", label: "Devolucion", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 10, validation: { nullable: false }, grid: { width: 150, align: "left" } },
+  { field: "shipmentNumber", dbColumn: "ShipmentNumber", label: "Despacho", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 20, validation: { nullable: false }, grid: { width: 150, align: "left" } },
+  { field: "lineNumber", dbColumn: "LineNumber", label: "Linea", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 30, validation: { min: 1, nullable: false }, grid: { width: 80, align: "right" } },
+  { field: "itemCode", dbColumn: "ItemCode", label: "Articulo", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 40, validation: { nullable: false }, grid: { width: 130, align: "left" } },
+  { field: "itemDescription", dbColumn: "ItemDescription", label: "Descripcion", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: false, editable: false, readOnly: true, displayOrder: 50, validation: { nullable: false }, grid: { width: 240, align: "left" } },
+  { field: "warehouseCode", dbColumn: "WarehouseCode", label: "Almacen", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 60, validation: { nullable: false }, grid: { width: 130, align: "left" } },
+  { field: "quantity", dbColumn: "Quantity", label: "Cantidad", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 70, validation: { min: 0, nullable: false }, grid: { width: 120, align: "right" } },
+  { field: "returnStatus", dbColumn: "ReturnStatus", label: "Estado", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 80, validation: { nullable: false }, grid: { width: 120, align: "left" } }
+] as const satisfies readonly CatalogFieldDefinition[];
+
+const salesShipmentReturnFields = [
+  { field: "shipmentNumber", dbColumn: "ShipmentNumber", label: "Despacho", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 10, validation: { nullable: false }, grid: { width: 150, align: "left" } },
+  { field: "orderNumber", dbColumn: "OrderNumber", label: "Pedido", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 20, validation: { nullable: false }, grid: { width: 150, align: "left" } },
+  { field: "customerName", dbColumn: "CustomerName", label: "Cliente", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 30, validation: { nullable: false }, grid: { width: 220, align: "left" } },
+  { field: "lineNumber", dbColumn: "LineNumber", label: "Linea", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 40, validation: { min: 1, nullable: false }, grid: { width: 80, align: "right" } },
+  { field: "itemCode", dbColumn: "ItemCode", label: "Articulo", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 50, validation: { nullable: false }, grid: { width: 130, align: "left" } },
+  { field: "shippedQuantity", dbColumn: "ShippedQuantity", label: "Despachado", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 60, validation: { min: 0, nullable: false }, grid: { width: 120, align: "right" } },
+  { field: "previouslyReturnedQuantity", dbColumn: "PreviouslyReturnedQuantity", label: "Devuelto", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 70, validation: { min: 0, nullable: false }, grid: { width: 120, align: "right" } },
+  { field: "returnableQuantity", dbColumn: "ReturnableQuantity", label: "Pendiente devolver", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 80, validation: { nullable: false }, grid: { width: 150, align: "right" } }
+] as const satisfies readonly CatalogFieldDefinition[];
+
 const salesShipmentInvoiceFields = [
   { field: "shipmentNumber", dbColumn: "ShipmentNumber", label: "Despacho", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 10, validation: { nullable: false }, grid: { width: 150, align: "left" } },
   { field: "orderNumber", dbColumn: "OrderNumber", label: "Pedido", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 20, validation: { nullable: false }, grid: { width: 150, align: "left" } },
@@ -7494,6 +7529,130 @@ export const catalogDefinitions = {
       updatedBy: "UpdatedBy"
     },
     fields: salesInvoiceLineFields
+  },
+  "sales-returns": {
+    catalogCode: "sales-returns",
+    displayName: "Devoluciones de venta",
+    tableName: "sales.V_SalesReturnSummary",
+    idColumn: "SalesReturnId",
+    codeColumn: "ReturnNumber",
+    nameColumn: "CustomerName",
+    descriptionColumn: "Reason",
+    allowedSearchColumns: ["ReturnNumber", "OrderNumber", "ShipmentNumber", "InvoiceNumber", "CustomerCode", "CustomerName", "Status", "MovementNumber"],
+    allowedSortColumns: ["ReturnNumber", "OrderNumber", "ShipmentNumber", "InvoiceNumber", "CustomerName", "ReturnDate", "Status", "WarehouseCode", "LineCount", "TotalQuantity", "CreatedAt"],
+    defaultSortBy: "ReturnDate",
+    permissions: commonPermissions("sales.returns"),
+    moduleCode: "sales",
+    tenantScoped: true,
+    companyScoped: true,
+    readOnly: true,
+    columns: {
+      id: "SalesReturnId",
+      tenantId: "TenantId",
+      companyId: "CompanyId",
+      code: "ReturnNumber",
+      name: "CustomerName",
+      description: "Reason",
+      isActive: "IsActive",
+      createdAt: "CreatedAt",
+      updatedAt: "UpdatedAt",
+      createdBy: "CreatedBy",
+      updatedBy: "UpdatedBy"
+    },
+    fields: salesReturnFields
+  },
+  "sales-return-lines": {
+    catalogCode: "sales-return-lines",
+    displayName: "Lineas de devoluciones",
+    tableName: "sales.V_SalesReturnLineSummary",
+    idColumn: "SalesReturnLineId",
+    codeColumn: "ReturnNumber",
+    nameColumn: "ItemDescription",
+    descriptionColumn: "Reason",
+    allowedSearchColumns: ["ReturnNumber", "ShipmentNumber", "OrderNumber", "InvoiceNumber", "ItemCode", "ItemDescription", "ReturnStatus"],
+    allowedSortColumns: ["ReturnNumber", "ShipmentNumber", "OrderNumber", "LineNumber", "ItemCode", "WarehouseCode", "Quantity", "CreatedAt"],
+    defaultSortBy: "ReturnNumber",
+    permissions: commonPermissions("sales.returns"),
+    moduleCode: "sales",
+    tenantScoped: true,
+    companyScoped: true,
+    readOnly: true,
+    columns: {
+      id: "SalesReturnLineId",
+      tenantId: "TenantId",
+      companyId: "CompanyId",
+      code: "ReturnNumber",
+      name: "ItemDescription",
+      description: "Reason",
+      isActive: "IsActive",
+      createdAt: "CreatedAt",
+      updatedAt: "UpdatedAt",
+      createdBy: "CreatedBy",
+      updatedBy: "UpdatedBy"
+    },
+    fields: salesReturnLineFields
+  },
+  "sales-shipment-returns": {
+    catalogCode: "sales-shipment-returns",
+    displayName: "Devoluciones por despacho",
+    tableName: "sales.V_SalesShipmentReturnSummary",
+    idColumn: "SalesShipmentReturnId",
+    codeColumn: "ShipmentNumber",
+    nameColumn: "ItemDescription",
+    descriptionColumn: "CustomerName",
+    allowedSearchColumns: ["ShipmentNumber", "OrderNumber", "CustomerCode", "CustomerName", "ItemCode", "ItemDescription", "InvoiceNumber"],
+    allowedSortColumns: ["ShipmentNumber", "OrderNumber", "LineNumber", "ItemCode", "ShippedQuantity", "PreviouslyReturnedQuantity", "ReturnableQuantity"],
+    defaultSortBy: "ShipmentNumber",
+    permissions: commonPermissions("sales.returns"),
+    moduleCode: "sales",
+    tenantScoped: true,
+    companyScoped: true,
+    readOnly: true,
+    columns: {
+      id: "SalesShipmentReturnId",
+      tenantId: "TenantId",
+      companyId: "CompanyId",
+      code: "ShipmentNumber",
+      name: "ItemDescription",
+      description: "CustomerName",
+      isActive: "IsActive",
+      createdAt: "CreatedAt",
+      updatedAt: "UpdatedAt",
+      createdBy: "CreatedBy",
+      updatedBy: "UpdatedBy"
+    },
+    fields: salesShipmentReturnFields
+  },
+  "sales-invoice-returns": {
+    catalogCode: "sales-invoice-returns",
+    displayName: "Devoluciones por factura",
+    tableName: "sales.V_SalesInvoiceReturnSummary",
+    idColumn: "SalesShipmentReturnId",
+    codeColumn: "InvoiceNumber",
+    nameColumn: "ItemDescription",
+    descriptionColumn: "CustomerName",
+    allowedSearchColumns: ["InvoiceNumber", "ShipmentNumber", "OrderNumber", "CustomerCode", "CustomerName", "ItemCode", "ItemDescription"],
+    allowedSortColumns: ["InvoiceNumber", "ShipmentNumber", "OrderNumber", "LineNumber", "ItemCode", "ShippedQuantity", "PreviouslyReturnedQuantity", "ReturnableQuantity"],
+    defaultSortBy: "InvoiceNumber",
+    permissions: commonPermissions("sales.returns"),
+    moduleCode: "sales",
+    tenantScoped: true,
+    companyScoped: true,
+    readOnly: true,
+    columns: {
+      id: "SalesShipmentReturnId",
+      tenantId: "TenantId",
+      companyId: "CompanyId",
+      code: "InvoiceNumber",
+      name: "ItemDescription",
+      description: "CustomerName",
+      isActive: "IsActive",
+      createdAt: "CreatedAt",
+      updatedAt: "UpdatedAt",
+      createdBy: "CreatedBy",
+      updatedBy: "UpdatedBy"
+    },
+    fields: salesShipmentReturnFields
   },
   "sales-shipment-invoices": {
     catalogCode: "sales-shipment-invoices",

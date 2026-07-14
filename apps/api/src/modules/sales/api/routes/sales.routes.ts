@@ -12,6 +12,7 @@ import { inventoryReservationCreateSchema } from "../../../inventory/validators/
 import { salesInvoiceService } from "../../application/SalesInvoiceService.js";
 import { salesOrderService } from "../../application/SalesOrderService.js";
 import { salesQuotationService } from "../../application/SalesQuotationService.js";
+import { salesReturnService } from "../../application/SalesReturnService.js";
 import { salesShipmentService } from "../../application/SalesShipmentService.js";
 import {
   salesInvoiceCreateSchema,
@@ -47,6 +48,17 @@ import {
   salesQuotationUpdateSchema
 } from "../../validators/sales-quotation.validators.js";
 import {
+  salesReturnCreateSchema,
+  salesReturnIdParamsSchema,
+  salesReturnInvoiceIdParamsSchema,
+  salesReturnLineCreateSchema,
+  salesReturnLineIdParamsSchema,
+  salesReturnLineUpdateSchema,
+  salesReturnListQuerySchema,
+  salesReturnPostSchema,
+  salesReturnShipmentIdParamsSchema
+} from "../../validators/sales-return.validators.js";
+import {
   salesShipmentCreateSchema,
   salesShipmentIdParamsSchema,
   salesShipmentLineCreateSchema,
@@ -71,6 +83,110 @@ function salesContext(request: Parameters<typeof getRequestContext>[0]) {
     correlationId: context.correlationId
   };
 }
+
+salesRouter.get(
+  "/returns",
+  validateRequest({ query: salesReturnListQuerySchema }),
+  requirePermission("sales", "sales.returns.read"),
+  asyncHandler(async (request, response) => {
+    const result = await salesReturnService.listReturns(salesContext(request), request.query);
+
+    sendSuccess(response, result);
+  })
+);
+
+salesRouter.get(
+  "/returns/:id",
+  validateRequest({ params: salesReturnIdParamsSchema }),
+  requirePermission("sales", "sales.returns.read"),
+  asyncHandler(async (request, response) => {
+    const result = await salesReturnService.getReturn(salesContext(request), request.params.id!);
+
+    sendSuccess(response, result);
+  })
+);
+
+salesRouter.get(
+  "/shipments/:shipmentId/returnable-lines",
+  validateRequest({ params: salesReturnShipmentIdParamsSchema }),
+  requirePermission("sales", "sales.returns.read"),
+  asyncHandler(async (request, response) => {
+    const result = await salesReturnService.listShipmentReturnableLines(salesContext(request), request.params.shipmentId!);
+
+    sendSuccess(response, result);
+  })
+);
+
+salesRouter.get(
+  "/invoices/:invoiceId/returnable-lines",
+  validateRequest({ params: salesReturnInvoiceIdParamsSchema }),
+  requirePermission("sales", "sales.returns.read"),
+  asyncHandler(async (request, response) => {
+    const result = await salesReturnService.listInvoiceReturnableLines(salesContext(request), request.params.invoiceId!);
+
+    sendSuccess(response, result);
+  })
+);
+
+salesRouter.post(
+  "/returns",
+  validateRequest({ body: salesReturnCreateSchema }),
+  requirePermission("sales", "sales.returns.create"),
+  asyncHandler(async (request, response) => {
+    const result = await salesReturnService.createReturn(salesContext(request), request.body);
+
+    sendSuccess(response, result, 201);
+  })
+);
+
+salesRouter.post(
+  "/returns/:id/lines",
+  validateRequest({ params: salesReturnIdParamsSchema, body: salesReturnLineCreateSchema }),
+  requirePermission("sales", "sales.returns.update"),
+  asyncHandler(async (request, response) => {
+    const result = await salesReturnService.addLine(salesContext(request), request.params.id!, request.body);
+
+    sendSuccess(response, result, 201);
+  })
+);
+
+salesRouter.patch(
+  "/returns/:id/lines/:lineId",
+  validateRequest({ params: salesReturnLineIdParamsSchema, body: salesReturnLineUpdateSchema }),
+  requirePermission("sales", "sales.returns.update"),
+  asyncHandler(async (request, response) => {
+    const result = await salesReturnService.updateLine(
+      salesContext(request),
+      request.params.id!,
+      request.params.lineId!,
+      request.body
+    );
+
+    sendSuccess(response, result);
+  })
+);
+
+salesRouter.delete(
+  "/returns/:id/lines/:lineId",
+  validateRequest({ params: salesReturnLineIdParamsSchema }),
+  requirePermission("sales", "sales.returns.update"),
+  asyncHandler(async (request, response) => {
+    const result = await salesReturnService.deleteLine(salesContext(request), request.params.id!, request.params.lineId!);
+
+    sendSuccess(response, result);
+  })
+);
+
+salesRouter.post(
+  "/returns/:id/post",
+  validateRequest({ params: salesReturnIdParamsSchema, body: salesReturnPostSchema }),
+  requirePermission("sales", "sales.returns.post"),
+  asyncHandler(async (request, response) => {
+    const result = await salesReturnService.postReturn(salesContext(request), request.params.id!, request.body);
+
+    sendSuccess(response, result);
+  })
+);
 
 salesRouter.get(
   "/invoices",

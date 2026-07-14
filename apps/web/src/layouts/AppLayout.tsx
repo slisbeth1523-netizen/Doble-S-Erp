@@ -49,6 +49,7 @@ const navigation: NavigationItem[] = [
       { label: "Reservas", path: "/sales/reservations" },
       { label: "Despachos", path: "/sales/shipments" },
       { label: "Facturas", path: "/sales/invoices" },
+      { label: "Devoluciones", path: "/sales/returns" },
       { label: "Consulta cotizaciones", path: "/master-data/sales-quotations" },
       { label: "Lineas cotizadas", path: "/master-data/sales-quotation-lines" },
       { label: "Consulta pedidos", path: "/master-data/sales-orders" },
@@ -57,6 +58,8 @@ const navigation: NavigationItem[] = [
       { label: "Lineas despachos", path: "/master-data/sales-shipment-lines" },
       { label: "Consulta facturas", path: "/master-data/sales-invoices" },
       { label: "Lineas facturas", path: "/master-data/sales-invoice-lines" },
+      { label: "Consulta devoluciones", path: "/master-data/sales-returns" },
+      { label: "Lineas devoluciones", path: "/master-data/sales-return-lines" },
       { label: "Clientes", path: "/master-data/customers" }
     ]
   },
@@ -141,7 +144,11 @@ function breadcrumb(path: string) {
       segments[1] === "sales-invoices" ||
       segments[1] === "sales-invoice-lines" ||
       segments[1] === "sales-order-invoices" ||
-      segments[1] === "sales-shipment-invoices"
+      segments[1] === "sales-shipment-invoices" ||
+      segments[1] === "sales-returns" ||
+      segments[1] === "sales-return-lines" ||
+      segments[1] === "sales-shipment-returns" ||
+      segments[1] === "sales-invoice-returns"
     ) {
       return ["Doble S ERP", "Ventas", getCatalogLabel(segments[1] ?? "")];
     }
@@ -227,6 +234,10 @@ function breadcrumb(path: string) {
 
   if (segments[0] === "sales" && segments[1] === "invoices") {
     return ["Doble S ERP", "Ventas", "Facturas"];
+  }
+
+  if (segments[0] === "sales" && segments[1] === "returns") {
+    return ["Doble S ERP", "Ventas", "Devoluciones"];
   }
 
   if (segments[0] === "purchasing" && segments[1] === "purchase-receipts") {
