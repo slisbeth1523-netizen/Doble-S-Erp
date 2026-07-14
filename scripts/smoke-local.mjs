@@ -709,6 +709,53 @@ async function getSalesOrderShipmentLines(salesOrderId, session) {
   return body.data;
 }
 
+async function createSalesInvoice(payload, session) {
+  const body = await expectOk("/sales/invoices", {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function addSalesInvoiceLine(salesInvoiceId, payload, session) {
+  const body = await expectOk(`/sales/invoices/${salesInvoiceId}/lines`, {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function postSalesInvoice(salesInvoiceId, payload, session) {
+  const body = await expectOk(`/sales/invoices/${salesInvoiceId}/post`, {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function getSalesOrderInvoiceLines(salesOrderId, session) {
+  const body = await expectOk(`/sales/orders/${salesOrderId}/invoice-pending-lines`, {
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
+async function getSalesInvoices(query, session) {
+  const params = new URLSearchParams(query);
+  const body = await expectOk(`/sales/invoices?${params.toString()}`, {
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
 async function expectReservationFailure(path, payload, session) {
   const result = await request(path, {
     method: "POST",
@@ -732,6 +779,20 @@ async function expectSalesShipmentFailure(path, payload, session) {
 
   if (result.response.ok || result.body?.success !== false) {
     fail(`Sales shipment request ${path} must fail in a controlled way.`);
+  }
+
+  return result.body;
+}
+
+async function expectSalesInvoiceFailure(path, payload, session) {
+  const result = await request(path, {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  if (result.response.ok || result.body?.success !== false) {
+    fail(`Sales invoice request ${path} must fail in a controlled way.`);
   }
 
   return result.body;
@@ -1490,6 +1551,66 @@ async function countAccountsReceivableDocuments(session) {
       `);
 
     return Number(result.recordset[0]?.DocumentCount ?? 0);
+  } finally {
+    await pool.close();
+  }
+}
+
+async function countSalesInvoiceAccountsReceivableDocuments(session, salesInvoiceId) {
+  if (!session.user.companyId) {
+    fail("Cannot count sales invoice AR documents without company context.");
+  }
+
+  const pool = await sql.connect(getSqlConfig());
+
+  try {
+    const result = await pool
+      .request()
+      .input("TenantId", sql.UniqueIdentifier, session.user.tenantId)
+      .input("CompanyId", sql.UniqueIdentifier, session.user.companyId)
+      .input("SalesInvoiceId", sql.UniqueIdentifier, salesInvoiceId)
+      .query(`
+        SELECT COUNT(1) AS DocumentCount
+        FROM ar.AccountsReceivableDocuments
+        WHERE TenantId = @TenantId
+          AND CompanyId = @CompanyId
+          AND SourceType = 'SALES_INVOICE'
+          AND SourceDocumentId = @SalesInvoiceId;
+      `);
+
+    return Number(result.recordset[0]?.DocumentCount ?? 0);
+  } finally {
+    await pool.close();
+  }
+}
+
+async function countSalesInvoiceForbiddenSideEffects(session) {
+  if (!session.user.companyId) {
+    fail("Cannot count sales invoice side effects without company context.");
+  }
+
+  const pool = await sql.connect(getSqlConfig());
+
+  try {
+    const result = await pool
+      .request()
+      .input("TenantId", sql.UniqueIdentifier, session.user.tenantId)
+      .input("CompanyId", sql.UniqueIdentifier, session.user.companyId)
+      .query(`
+        SELECT
+          (SELECT COUNT(1) FROM inventory.ItemStocks WHERE TenantId = @TenantId AND CompanyId = @CompanyId) AS ItemStockCount,
+          (SELECT COUNT(1) FROM inventory.InventoryMovements WHERE TenantId = @TenantId AND CompanyId = @CompanyId) AS InventoryMovementCount,
+          (SELECT COUNT(1) FROM inventory.InventoryLedgerEntries WHERE TenantId = @TenantId AND CompanyId = @CompanyId) AS InventoryLedgerEntryCount,
+          (SELECT COUNT(1) FROM inventory.InventoryReservations WHERE TenantId = @TenantId AND CompanyId = @CompanyId) AS InventoryReservationCount;
+      `);
+
+    const row = result.recordset[0];
+    return {
+      itemStockCount: Number(row?.ItemStockCount ?? 0),
+      inventoryMovementCount: Number(row?.InventoryMovementCount ?? 0),
+      inventoryLedgerEntryCount: Number(row?.InventoryLedgerEntryCount ?? 0),
+      inventoryReservationCount: Number(row?.InventoryReservationCount ?? 0)
+    };
   } finally {
     await pool.close();
   }
@@ -3364,6 +3485,40 @@ async function validateSalesShipmentMetadata(session) {
         : catalog === "sales-shipment-lines"
           ? ["shipmentNumber", "orderNumber", "lineNumber", "itemCode", "warehouseCode", "quantity"]
           : ["orderNumber", "orderStatus", "itemCode", "orderedQuantity", "previouslyShippedQuantity", "pendingShipmentQuantity"];
+    const missingFields = expectedFields.filter((field) => !fields.includes(field));
+
+    if (missingFields.length) {
+      fail(`${catalog} metadata is missing fields: ${missingFields.join(", ")}.`);
+    }
+
+    const unavailableActions = ["create", "update", "activate", "deactivate"]
+      .map((actionName) => metadata.data.actions.find((action) => action.action === actionName))
+      .filter((action) => action?.available !== false);
+
+    if (unavailableActions.length) {
+      fail(`${catalog} write actions must be unavailable.`);
+    }
+  }
+}
+
+async function validateSalesInvoiceMetadata(session) {
+  for (const catalog of ["sales-invoices", "sales-invoice-lines", "sales-order-invoices", "sales-shipment-invoices"]) {
+    smokeStep(`metadata ${catalog}`);
+    const metadata = await expectOk(`/master-data/${catalog}/metadata`, {
+      headers: authHeaders(session)
+    });
+
+    if (metadata.data?.catalog?.readOnly !== true) {
+      fail(`${catalog} metadata must be read-only.`);
+    }
+
+    const fields = metadata.data.fields.map((field) => field.field);
+    const expectedFields =
+      catalog === "sales-invoices"
+        ? ["invoiceNumber", "orderNumber", "customerName", "status", "invoiceDate", "dueDate", "totalAmount"]
+        : catalog === "sales-invoice-lines"
+          ? ["invoiceNumber", "orderNumber", "shipmentNumber", "lineNumber", "itemCode", "quantity", "lineTotal"]
+          : ["orderNumber", "itemCode", "shippedQuantity", "previouslyInvoicedQuantity", "pendingInvoiceQuantity"];
     const missingFields = expectedFields.filter((field) => !fields.includes(field));
 
     if (missingFields.length) {
@@ -5639,6 +5794,235 @@ async function validateSalesShipmentFlow(session) {
   }
 }
 
+async function validateSalesInvoiceFlow(session) {
+  smokeStep("sales invoice foundation flow");
+  const { itemId, warehouseId } = await getDemoPurchaseReferences(session);
+  await releaseSmokeInventoryReservations(session, itemId, warehouseId);
+  await setSmokeStockQuantity(session, itemId, warehouseId, 12);
+
+  const invoiceOrder = await createApprovedReservationOrder(session, `INV-SAL-${smokeRun}`, 5, true);
+  const reservation = await reserveSalesOrderLine(
+    invoiceOrder.order.id,
+    invoiceOrder.line.id,
+    {
+      idempotencyKey: reservationIdempotencyKey("invoice-reserve"),
+      quantity: 5,
+      reference: `INV-SAL-${smokeRun}`,
+      notes: "Reserva para factura smoke"
+    },
+    session
+  );
+
+  const shipment = await createSalesShipment(
+    {
+      salesOrderId: invoiceOrder.order.id,
+      reference: `INV-SHP-${smokeRun}`,
+      notes: "Despacho para factura smoke"
+    },
+    session
+  );
+  await addSalesShipmentLine(
+    shipment.id,
+    {
+      salesOrderLineId: invoiceOrder.line.id,
+      inventoryReservationId: reservation.id,
+      quantity: 5,
+      notes: "Linea despachada para factura smoke"
+    },
+    session
+  );
+  const postedShipment = await postSalesShipment(
+    shipment.id,
+    { idempotencyKey: reservationIdempotencyKey("invoice-shipment-post") },
+    session
+  );
+
+  if (postedShipment.status !== "POSTED") {
+    fail("Sales invoice smoke setup did not post shipment.");
+  }
+
+  const sideEffectsBeforeInvoice = await countSalesInvoiceForbiddenSideEffects(session);
+  const stockBeforeInvoice = await getSmokeStockSnapshot(session, itemId, warehouseId);
+  const reservationBeforeInvoice = await getInventoryReservationSnapshot(session, reservation.id);
+
+  smokeStep("sales invoice pending lines");
+  const initialPending = await getSalesOrderInvoiceLines(invoiceOrder.order.id, session);
+  const pendingLine = initialPending.find((line) => line.salesOrderLineId === invoiceOrder.line.id);
+  if (!pendingLine || Number(pendingLine.pendingInvoiceQuantity ?? 0) !== 5) {
+    fail("Sales invoice pending summary did not show quantity 5 after posted shipment.");
+  }
+
+  smokeStep("sales invoice draft");
+  const dueDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const partialInvoice = await createSalesInvoice(
+    {
+      salesOrderId: invoiceOrder.order.id,
+      dueDate,
+      reference: `FAC-PART-${smokeRun}`,
+      notes: "Factura parcial smoke"
+    },
+    session
+  );
+
+  if (partialInvoice.status !== "DRAFT" || !String(partialInvoice.invoiceNumber ?? "").startsWith("FAC-")) {
+    fail("Sales invoice was not created as DRAFT with an internal number.");
+  }
+
+  const arCountAfterDraft = await countSalesInvoiceAccountsReceivableDocuments(session, partialInvoice.id);
+  if (arCountAfterDraft !== 0) {
+    fail("Draft sales invoice created an accounts receivable document.");
+  }
+
+  const partialWithLine = await addSalesInvoiceLine(
+    partialInvoice.id,
+    {
+      salesShipmentLineId: pendingLine.salesShipmentLineId,
+      quantity: 2,
+      notes: "Linea parcial de factura smoke"
+    },
+    session
+  );
+
+  if (partialWithLine.lineCount !== 1 || Number(partialWithLine.totalQuantity ?? 0) !== 2 || Number(partialWithLine.totalAmount ?? 0) <= 0) {
+    fail("Sales invoice line did not update draft totals.");
+  }
+
+  const pendingBeforePost = await getSalesOrderInvoiceLines(invoiceOrder.order.id, session);
+  const pendingLineBeforePost = pendingBeforePost.find((line) => line.salesOrderLineId === invoiceOrder.line.id);
+  if (!pendingLineBeforePost || Number(pendingLineBeforePost.pendingInvoiceQuantity ?? 0) !== 5) {
+    fail("Draft sales invoice changed pending invoice quantity before posting.");
+  }
+
+  smokeStep("sales invoice partial post");
+  const partialPostKey = reservationIdempotencyKey("sales-invoice-post-partial");
+  const postedPartialInvoice = await postSalesInvoice(partialInvoice.id, { idempotencyKey: partialPostKey }, session);
+  if (
+    postedPartialInvoice.status !== "POSTED" ||
+    !postedPartialInvoice.accountsReceivableDocumentId ||
+    !postedPartialInvoice.accountsReceivableDocumentNumber
+  ) {
+    fail("Posting sales invoice did not create an accounts receivable document.");
+  }
+
+  const arCountAfterPost = await countSalesInvoiceAccountsReceivableDocuments(session, partialInvoice.id);
+  if (arCountAfterPost !== 1) {
+    fail("Posting sales invoice did not create exactly one accounts receivable document.");
+  }
+
+  const pendingAfterPartial = await getSalesOrderInvoiceLines(invoiceOrder.order.id, session);
+  const partialPendingLine = pendingAfterPartial.find((line) => line.salesOrderLineId === invoiceOrder.line.id);
+  if (!partialPendingLine || Number(partialPendingLine.previouslyInvoicedQuantity ?? 0) !== 2 || Number(partialPendingLine.pendingInvoiceQuantity ?? 0) !== 3) {
+    fail("Partial sales invoice did not reduce invoice pending quantity to 3.");
+  }
+
+  const retriedPartialInvoice = await postSalesInvoice(partialInvoice.id, { idempotencyKey: partialPostKey }, session);
+  const arCountAfterRetry = await countSalesInvoiceAccountsReceivableDocuments(session, partialInvoice.id);
+  if (
+    retriedPartialInvoice.accountsReceivableDocumentId !== postedPartialInvoice.accountsReceivableDocumentId ||
+    arCountAfterRetry !== 1
+  ) {
+    fail("Retrying sales invoice post duplicated accounts receivable document.");
+  }
+
+  await expectSalesInvoiceFailure(
+    `/sales/invoices/${partialInvoice.id}/post`,
+    { idempotencyKey: reservationIdempotencyKey("sales-invoice-post-duplicate") },
+    session
+  );
+
+  smokeStep("sales invoice over invoice rejected");
+  const overInvoice = await createSalesInvoice(
+    {
+      salesOrderId: invoiceOrder.order.id,
+      dueDate,
+      reference: `FAC-OVER-${smokeRun}`,
+      notes: "Factura excedente smoke"
+    },
+    session
+  );
+  await expectSalesInvoiceFailure(
+    `/sales/invoices/${overInvoice.id}/lines`,
+    {
+      salesShipmentLineId: pendingLine.salesShipmentLineId,
+      quantity: 4,
+      notes: "Intento excedente de factura smoke"
+    },
+    session
+  );
+
+  smokeStep("sales invoice final post");
+  const finalInvoice = await createSalesInvoice(
+    {
+      salesOrderId: invoiceOrder.order.id,
+      dueDate,
+      reference: `FAC-FINAL-${smokeRun}`,
+      notes: "Factura final smoke"
+    },
+    session
+  );
+  await addSalesInvoiceLine(
+    finalInvoice.id,
+    {
+      salesShipmentLineId: pendingLine.salesShipmentLineId,
+      quantity: 3,
+      notes: "Linea final de factura smoke"
+    },
+    session
+  );
+  const postedFinalInvoice = await postSalesInvoice(
+    finalInvoice.id,
+    { idempotencyKey: reservationIdempotencyKey("sales-invoice-post-final") },
+    session
+  );
+
+  const finalPending = await getSalesOrderInvoiceLines(invoiceOrder.order.id, session);
+  const finalPendingLine = finalPending.find((line) => line.salesOrderLineId === invoiceOrder.line.id);
+  if (!finalPendingLine || Number(finalPendingLine.pendingInvoiceQuantity ?? 0) !== 0) {
+    fail("Final sales invoice did not reduce pending invoice quantity to zero.");
+  }
+
+  const stockAfterInvoice = await getSmokeStockSnapshot(session, itemId, warehouseId);
+  const reservationAfterInvoice = await getInventoryReservationSnapshot(session, reservation.id);
+  const sideEffectsAfterInvoice = await countSalesInvoiceForbiddenSideEffects(session);
+  if (
+    stockAfterInvoice.quantityOnHand !== stockBeforeInvoice.quantityOnHand ||
+    stockAfterInvoice.quantityReserved !== stockBeforeInvoice.quantityReserved ||
+    reservationAfterInvoice.consumedQuantity !== reservationBeforeInvoice.consumedQuantity ||
+    JSON.stringify(sideEffectsAfterInvoice) !== JSON.stringify(sideEffectsBeforeInvoice)
+  ) {
+    fail("Sales invoice flow changed inventory, ledger or reservations.");
+  }
+
+  const invoiceList = await getSalesInvoices({ search: postedPartialInvoice.invoiceNumber, page: "1", pageSize: "10" }, session);
+  if (!invoiceList.records?.some((record) => record.id === postedPartialInvoice.id)) {
+    fail("Sales invoice list did not return posted invoice.");
+  }
+
+  const runtimeInvoice = await findCatalogRecord("sales-invoices", postedPartialInvoice.invoiceNumber, session);
+  if (!runtimeInvoice || runtimeInvoice.status !== "POSTED") {
+    fail("/master-data/sales-invoices did not expose the posted invoice.");
+  }
+
+  const runtimeInvoiceLine = await findCatalogRecord("sales-invoice-lines", postedPartialInvoice.invoiceNumber, session);
+  if (!runtimeInvoiceLine || Number(runtimeInvoiceLine.quantity ?? 0) !== 2) {
+    fail("/master-data/sales-invoice-lines did not expose the posted invoice line.");
+  }
+
+  const runtimeOrderInvoice = await findCatalogRecord("sales-order-invoices", invoiceOrder.order.orderNumber, session);
+  if (!runtimeOrderInvoice || Number(runtimeOrderInvoice.pendingInvoiceQuantity ?? -1) !== 0) {
+    fail("/master-data/sales-order-invoices did not expose final pending quantity zero.");
+  }
+
+  const runtimeShipmentInvoice = await findCatalogRecord("sales-shipment-invoices", postedShipment.shipmentNumber, session);
+  if (!runtimeShipmentInvoice || Number(runtimeShipmentInvoice.pendingInvoiceQuantity ?? -1) !== 0) {
+    fail("/master-data/sales-shipment-invoices did not expose final pending quantity zero.");
+  }
+
+  if (postedFinalInvoice.status !== "POSTED") {
+    fail("Final sales invoice did not post.");
+  }
+}
+
 async function validateCrud(session) {
   const suffix = smokeRun;
   const customerCode = `QA-CUST-${suffix}`;
@@ -5858,6 +6242,7 @@ async function main() {
   await validateSalesOrderMetadata(session);
   await validateInventoryReservationMetadata(session);
   await validateSalesShipmentMetadata(session);
+  await validateSalesInvoiceMetadata(session);
   await validatePurchaseOrderMetadata(session);
   await validatePurchaseReceiptMetadata(session);
   await validateSupplierPaymentMetadata(session);
@@ -5878,6 +6263,7 @@ async function main() {
   await validateSalesOrderFlow(session);
   await validateInventoryReservationFlow(session);
   await validateSalesShipmentFlow(session);
+  await validateSalesInvoiceFlow(session);
   await validateCrud(session);
   console.log("smoke: local runtime validation OK");
 }

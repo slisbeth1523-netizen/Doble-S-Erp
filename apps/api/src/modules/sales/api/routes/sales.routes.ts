@@ -9,9 +9,21 @@ import { sendSuccess } from "../../../../utils/responseBuilder.js";
 import { validateRequest } from "../../../../utils/validateRequest.js";
 import { inventoryReservationService } from "../../../inventory/application/InventoryReservationService.js";
 import { inventoryReservationCreateSchema } from "../../../inventory/validators/inventory-reservation.validators.js";
+import { salesInvoiceService } from "../../application/SalesInvoiceService.js";
 import { salesOrderService } from "../../application/SalesOrderService.js";
 import { salesQuotationService } from "../../application/SalesQuotationService.js";
 import { salesShipmentService } from "../../application/SalesShipmentService.js";
+import {
+  salesInvoiceCreateSchema,
+  salesInvoiceIdParamsSchema,
+  salesInvoiceLineCreateSchema,
+  salesInvoiceLineIdParamsSchema,
+  salesInvoiceLineUpdateSchema,
+  salesInvoiceListQuerySchema,
+  salesInvoiceOrderIdParamsSchema,
+  salesInvoicePostSchema,
+  salesInvoiceShipmentIdParamsSchema
+} from "../../validators/sales-invoice.validators.js";
 import {
   salesOrderCancelSchema,
   salesOrderCreateSchema,
@@ -59,6 +71,110 @@ function salesContext(request: Parameters<typeof getRequestContext>[0]) {
     correlationId: context.correlationId
   };
 }
+
+salesRouter.get(
+  "/invoices",
+  validateRequest({ query: salesInvoiceListQuerySchema }),
+  requirePermission("sales", "sales.invoices.read"),
+  asyncHandler(async (request, response) => {
+    const result = await salesInvoiceService.listInvoices(salesContext(request), request.query);
+
+    sendSuccess(response, result);
+  })
+);
+
+salesRouter.get(
+  "/invoices/:id",
+  validateRequest({ params: salesInvoiceIdParamsSchema }),
+  requirePermission("sales", "sales.invoices.read"),
+  asyncHandler(async (request, response) => {
+    const result = await salesInvoiceService.getInvoice(salesContext(request), request.params.id!);
+
+    sendSuccess(response, result);
+  })
+);
+
+salesRouter.get(
+  "/orders/:orderId/invoice-pending-lines",
+  validateRequest({ params: salesInvoiceOrderIdParamsSchema }),
+  requirePermission("sales", "sales.invoices.read"),
+  asyncHandler(async (request, response) => {
+    const result = await salesInvoiceService.getOrderPendingLines(salesContext(request), request.params.orderId!);
+
+    sendSuccess(response, result);
+  })
+);
+
+salesRouter.get(
+  "/shipments/:shipmentId/invoice-pending-lines",
+  validateRequest({ params: salesInvoiceShipmentIdParamsSchema }),
+  requirePermission("sales", "sales.invoices.read"),
+  asyncHandler(async (request, response) => {
+    const result = await salesInvoiceService.getShipmentPendingLines(salesContext(request), request.params.shipmentId!);
+
+    sendSuccess(response, result);
+  })
+);
+
+salesRouter.post(
+  "/invoices",
+  validateRequest({ body: salesInvoiceCreateSchema }),
+  requirePermission("sales", "sales.invoices.create"),
+  asyncHandler(async (request, response) => {
+    const result = await salesInvoiceService.createInvoice(salesContext(request), request.body);
+
+    sendSuccess(response, result, 201);
+  })
+);
+
+salesRouter.post(
+  "/invoices/:id/lines",
+  validateRequest({ params: salesInvoiceIdParamsSchema, body: salesInvoiceLineCreateSchema }),
+  requirePermission("sales", "sales.invoices.update"),
+  asyncHandler(async (request, response) => {
+    const result = await salesInvoiceService.addLine(salesContext(request), request.params.id!, request.body);
+
+    sendSuccess(response, result, 201);
+  })
+);
+
+salesRouter.patch(
+  "/invoices/:id/lines/:lineId",
+  validateRequest({ params: salesInvoiceLineIdParamsSchema, body: salesInvoiceLineUpdateSchema }),
+  requirePermission("sales", "sales.invoices.update"),
+  asyncHandler(async (request, response) => {
+    const result = await salesInvoiceService.updateLine(
+      salesContext(request),
+      request.params.id!,
+      request.params.lineId!,
+      request.body
+    );
+
+    sendSuccess(response, result);
+  })
+);
+
+salesRouter.delete(
+  "/invoices/:id/lines/:lineId",
+  validateRequest({ params: salesInvoiceLineIdParamsSchema }),
+  requirePermission("sales", "sales.invoices.update"),
+  asyncHandler(async (request, response) => {
+    const result = await salesInvoiceService.deleteLine(salesContext(request), request.params.id!, request.params.lineId!);
+
+    sendSuccess(response, result);
+  })
+);
+
+salesRouter.post(
+  "/invoices/:id/post",
+  validateRequest({ params: salesInvoiceIdParamsSchema, body: salesInvoicePostSchema }),
+  requirePermission("sales", "sales.invoices.post"),
+  asyncHandler(async (request, response) => {
+    const result = await salesInvoiceService.postInvoice(salesContext(request), request.params.id!, request.body);
+
+    sendSuccess(response, result);
+  })
+);
 
 salesRouter.get(
   "/orders/:orderId/reservations",
