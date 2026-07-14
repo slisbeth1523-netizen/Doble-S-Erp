@@ -886,6 +886,54 @@ const salesShipmentLineFields = [
   { field: "quantity", dbColumn: "Quantity", label: "Cantidad", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 60, validation: { min: 0, nullable: false }, grid: { width: 120, align: "right" } }
 ] as const satisfies readonly CatalogFieldDefinition[];
 
+const salesInvoiceFields = [
+  { field: "invoiceNumber", dbColumn: "InvoiceNumber", label: "Factura", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 10, validation: { nullable: false }, grid: { width: 150, align: "left" } },
+  { field: "orderNumber", dbColumn: "OrderNumber", label: "Pedido", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 20, validation: { nullable: false }, grid: { width: 150, align: "left" } },
+  { field: "customerName", dbColumn: "CustomerName", label: "Cliente", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 30, validation: { nullable: false }, grid: { width: 240, align: "left" } },
+  { field: "invoiceDate", dbColumn: "InvoiceDate", label: "Fecha factura", type: "datetime", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 40, validation: { nullable: false }, grid: { width: 160, align: "left" } },
+  { field: "dueDate", dbColumn: "DueDate", label: "Vencimiento", type: "datetime", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 50, validation: { nullable: false }, grid: { width: 160, align: "left" } },
+  { field: "status", dbColumn: "Status", label: "Estado", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 60, validation: { nullable: false }, grid: { width: 120, align: "left" } },
+  { field: "lineCount", dbColumn: "LineCount", label: "Lineas", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 70, validation: { min: 0, nullable: false }, grid: { width: 90, align: "right" } },
+  { field: "totalQuantity", dbColumn: "TotalQuantity", label: "Cantidad", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 80, validation: { min: 0, nullable: false }, grid: { width: 120, align: "right" } },
+  { field: "totalAmount", dbColumn: "TotalAmount", label: "Total", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 90, validation: { min: 0, nullable: false }, grid: { width: 130, align: "right", format: "currency" } },
+  { field: "accountsReceivableDocumentNumber", dbColumn: "AccountsReceivableDocumentNumber", label: "Documento CxC", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 100, validation: { nullable: true }, grid: { width: 160, align: "left" } }
+] as const satisfies readonly CatalogFieldDefinition[];
+
+const salesInvoiceLineFields = [
+  { field: "invoiceNumber", dbColumn: "InvoiceNumber", label: "Factura", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 10, validation: { nullable: false }, grid: { width: 150, align: "left" } },
+  { field: "orderNumber", dbColumn: "OrderNumber", label: "Pedido", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 20, validation: { nullable: false }, grid: { width: 150, align: "left" } },
+  { field: "shipmentNumber", dbColumn: "ShipmentNumber", label: "Despacho", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 30, validation: { nullable: false }, grid: { width: 150, align: "left" } },
+  { field: "lineNumber", dbColumn: "LineNumber", label: "Linea", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 40, validation: { min: 1, nullable: false }, grid: { width: 80, align: "right" } },
+  { field: "itemCode", dbColumn: "ItemCode", label: "Articulo", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 50, validation: { nullable: false }, grid: { width: 130, align: "left" } },
+  { field: "itemDescription", dbColumn: "ItemDescription", label: "Descripcion", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: false, editable: false, readOnly: true, displayOrder: 60, validation: { nullable: false }, grid: { width: 240, align: "left" } },
+  { field: "quantity", dbColumn: "Quantity", label: "Cantidad", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 70, validation: { min: 0, nullable: false }, grid: { width: 120, align: "right" } },
+  { field: "unitPrice", dbColumn: "UnitPrice", label: "Precio", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 80, validation: { min: 0, nullable: false }, grid: { width: 120, align: "right", format: "currency" } },
+  { field: "lineTotal", dbColumn: "LineTotal", label: "Total linea", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 90, validation: { min: 0, nullable: false }, grid: { width: 130, align: "right", format: "currency" } },
+  { field: "invoiceStatus", dbColumn: "InvoiceStatus", label: "Estado", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 100, validation: { nullable: false }, grid: { width: 120, align: "left" } }
+] as const satisfies readonly CatalogFieldDefinition[];
+
+const salesShipmentInvoiceFields = [
+  { field: "shipmentNumber", dbColumn: "ShipmentNumber", label: "Despacho", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 10, validation: { nullable: false }, grid: { width: 150, align: "left" } },
+  { field: "orderNumber", dbColumn: "OrderNumber", label: "Pedido", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 20, validation: { nullable: false }, grid: { width: 150, align: "left" } },
+  { field: "customerName", dbColumn: "CustomerName", label: "Cliente", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 30, validation: { nullable: false }, grid: { width: 240, align: "left" } },
+  { field: "lineNumber", dbColumn: "LineNumber", label: "Linea", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 40, validation: { min: 1, nullable: false }, grid: { width: 80, align: "right" } },
+  { field: "itemCode", dbColumn: "ItemCode", label: "Articulo", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 50, validation: { nullable: false }, grid: { width: 130, align: "left" } },
+  { field: "shippedQuantity", dbColumn: "ShippedQuantity", label: "Despachado", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 60, validation: { min: 0, nullable: false }, grid: { width: 120, align: "right" } },
+  { field: "previouslyInvoicedQuantity", dbColumn: "PreviouslyInvoicedQuantity", label: "Facturado", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 70, validation: { min: 0, nullable: false }, grid: { width: 120, align: "right" } },
+  { field: "pendingInvoiceQuantity", dbColumn: "PendingInvoiceQuantity", label: "Pendiente factura", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 80, validation: { nullable: false }, grid: { width: 150, align: "right" } }
+] as const satisfies readonly CatalogFieldDefinition[];
+
+const salesOrderInvoiceFields = [
+  { field: "orderNumber", dbColumn: "OrderNumber", label: "Pedido", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 10, validation: { nullable: false }, grid: { width: 150, align: "left" } },
+  { field: "customerName", dbColumn: "CustomerName", label: "Cliente", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 20, validation: { nullable: false }, grid: { width: 240, align: "left" } },
+  { field: "lineNumber", dbColumn: "LineNumber", label: "Linea", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 30, validation: { min: 1, nullable: false }, grid: { width: 80, align: "right" } },
+  { field: "itemCode", dbColumn: "ItemCode", label: "Articulo", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 40, validation: { nullable: false }, grid: { width: 130, align: "left" } },
+  { field: "itemDescription", dbColumn: "ItemDescription", label: "Descripcion", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: false, editable: false, readOnly: true, displayOrder: 50, validation: { nullable: false }, grid: { width: 240, align: "left" } },
+  { field: "shippedQuantity", dbColumn: "ShippedQuantity", label: "Despachado", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 60, validation: { min: 0, nullable: false }, grid: { width: 120, align: "right" } },
+  { field: "previouslyInvoicedQuantity", dbColumn: "PreviouslyInvoicedQuantity", label: "Facturado", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 70, validation: { min: 0, nullable: false }, grid: { width: 120, align: "right" } },
+  { field: "pendingInvoiceQuantity", dbColumn: "PendingInvoiceQuantity", label: "Pendiente factura", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 80, validation: { nullable: false }, grid: { width: 150, align: "right" } }
+] as const satisfies readonly CatalogFieldDefinition[];
+
 const salesOrderShipmentFields = [
   { field: "orderNumber", dbColumn: "OrderNumber", label: "Pedido", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 10, validation: { nullable: false }, grid: { width: 150, align: "left" } },
   { field: "orderStatus", dbColumn: "OrderStatus", label: "Estado pedido", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 20, validation: { nullable: false }, grid: { width: 130, align: "left" } },
@@ -7384,6 +7432,130 @@ export const catalogDefinitions = {
       updatedBy: "UpdatedBy"
     },
     fields: salesShipmentLineFields
+  },
+  "sales-invoices": {
+    catalogCode: "sales-invoices",
+    displayName: "Facturas de venta",
+    tableName: "sales.V_SalesInvoiceSummary",
+    idColumn: "SalesInvoiceId",
+    codeColumn: "InvoiceNumber",
+    nameColumn: "CustomerName",
+    descriptionColumn: "Reference",
+    allowedSearchColumns: ["InvoiceNumber", "OrderNumber", "CustomerCode", "CustomerName", "Status", "Reference", "AccountsReceivableDocumentNumber"],
+    allowedSortColumns: ["InvoiceNumber", "OrderNumber", "CustomerName", "InvoiceDate", "DueDate", "Status", "LineCount", "TotalQuantity", "TotalAmount", "CreatedAt"],
+    defaultSortBy: "InvoiceDate",
+    permissions: commonPermissions("sales.invoices"),
+    moduleCode: "sales",
+    tenantScoped: true,
+    companyScoped: true,
+    readOnly: true,
+    columns: {
+      id: "SalesInvoiceId",
+      tenantId: "TenantId",
+      companyId: "CompanyId",
+      code: "InvoiceNumber",
+      name: "CustomerName",
+      description: "Reference",
+      isActive: "IsActive",
+      createdAt: "CreatedAt",
+      updatedAt: "UpdatedAt",
+      createdBy: "CreatedBy",
+      updatedBy: "UpdatedBy"
+    },
+    fields: salesInvoiceFields
+  },
+  "sales-invoice-lines": {
+    catalogCode: "sales-invoice-lines",
+    displayName: "Lineas de facturas de venta",
+    tableName: "sales.V_SalesInvoiceLineSummary",
+    idColumn: "SalesInvoiceLineId",
+    codeColumn: "InvoiceNumber",
+    nameColumn: "ItemDescription",
+    descriptionColumn: "Description",
+    allowedSearchColumns: ["InvoiceNumber", "OrderNumber", "ShipmentNumber", "ItemCode", "ItemDescription", "Description", "InvoiceStatus"],
+    allowedSortColumns: ["InvoiceNumber", "OrderNumber", "ShipmentNumber", "LineNumber", "ItemCode", "Quantity", "UnitPrice", "LineTotal", "CreatedAt"],
+    defaultSortBy: "InvoiceNumber",
+    permissions: commonPermissions("sales.invoices"),
+    moduleCode: "sales",
+    tenantScoped: true,
+    companyScoped: true,
+    readOnly: true,
+    columns: {
+      id: "SalesInvoiceLineId",
+      tenantId: "TenantId",
+      companyId: "CompanyId",
+      code: "InvoiceNumber",
+      name: "ItemDescription",
+      description: "Description",
+      isActive: "IsActive",
+      createdAt: "CreatedAt",
+      updatedAt: "UpdatedAt",
+      createdBy: "CreatedBy",
+      updatedBy: "UpdatedBy"
+    },
+    fields: salesInvoiceLineFields
+  },
+  "sales-shipment-invoices": {
+    catalogCode: "sales-shipment-invoices",
+    displayName: "Facturacion por despacho",
+    tableName: "sales.V_SalesShipmentInvoiceSummary",
+    idColumn: "SalesShipmentInvoiceId",
+    codeColumn: "ShipmentNumber",
+    nameColumn: "ItemDescription",
+    descriptionColumn: "CustomerName",
+    allowedSearchColumns: ["ShipmentNumber", "OrderNumber", "CustomerCode", "CustomerName", "ItemCode", "ItemDescription"],
+    allowedSortColumns: ["ShipmentNumber", "OrderNumber", "LineNumber", "ItemCode", "ShippedQuantity", "PreviouslyInvoicedQuantity", "PendingInvoiceQuantity"],
+    defaultSortBy: "ShipmentNumber",
+    permissions: commonPermissions("sales.invoices"),
+    moduleCode: "sales",
+    tenantScoped: true,
+    companyScoped: true,
+    readOnly: true,
+    columns: {
+      id: "SalesShipmentInvoiceId",
+      tenantId: "TenantId",
+      companyId: "CompanyId",
+      code: "ShipmentNumber",
+      name: "ItemDescription",
+      description: "CustomerName",
+      isActive: "IsActive",
+      createdAt: "CreatedAt",
+      updatedAt: "UpdatedAt",
+      createdBy: "CreatedBy",
+      updatedBy: "UpdatedBy"
+    },
+    fields: salesShipmentInvoiceFields
+  },
+  "sales-order-invoices": {
+    catalogCode: "sales-order-invoices",
+    displayName: "Facturacion por pedido",
+    tableName: "sales.V_SalesOrderInvoiceSummary",
+    idColumn: "SalesOrderInvoiceId",
+    codeColumn: "OrderNumber",
+    nameColumn: "ItemDescription",
+    descriptionColumn: "CustomerName",
+    allowedSearchColumns: ["OrderNumber", "CustomerCode", "CustomerName", "ItemCode", "ItemDescription"],
+    allowedSortColumns: ["OrderNumber", "LineNumber", "ItemCode", "ShippedQuantity", "PreviouslyInvoicedQuantity", "PendingInvoiceQuantity"],
+    defaultSortBy: "OrderNumber",
+    permissions: commonPermissions("sales.invoices"),
+    moduleCode: "sales",
+    tenantScoped: true,
+    companyScoped: true,
+    readOnly: true,
+    columns: {
+      id: "SalesOrderInvoiceId",
+      tenantId: "TenantId",
+      companyId: "CompanyId",
+      code: "OrderNumber",
+      name: "ItemDescription",
+      description: "CustomerName",
+      isActive: "IsActive",
+      createdAt: "CreatedAt",
+      updatedAt: "UpdatedAt",
+      createdBy: "CreatedBy",
+      updatedBy: "UpdatedBy"
+    },
+    fields: salesOrderInvoiceFields
   },
   "sales-order-shipments": {
     catalogCode: "sales-order-shipments",
