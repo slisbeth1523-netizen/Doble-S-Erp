@@ -756,6 +756,67 @@ async function getSalesInvoices(query, session) {
   return body.data;
 }
 
+async function createSalesReturn(payload, session) {
+  const body = await expectOk("/sales/returns", {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function addSalesReturnLine(salesReturnId, payload, session) {
+  const body = await expectOk(`/sales/returns/${salesReturnId}/lines`, {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function postSalesReturn(salesReturnId, payload, session) {
+  const body = await expectOk(`/sales/returns/${salesReturnId}/post`, {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function getSalesShipmentReturnableLines(salesShipmentId, session) {
+  const body = await expectOk(`/sales/shipments/${salesShipmentId}/returnable-lines`, {
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
+async function getSalesReturns(query, session) {
+  const params = new URLSearchParams(query);
+  const body = await expectOk(`/sales/returns?${params.toString()}`, {
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
+async function expectSalesReturnFailure(path, payload, session) {
+  const result = await request(path, {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  if (result.response.ok || result.body?.success !== false) {
+    fail(`${path} must fail in a controlled way.`);
+  }
+
+  return result.body;
+}
+
 async function expectReservationFailure(path, payload, session) {
   const result = await request(path, {
     method: "POST",
@@ -3535,6 +3596,40 @@ async function validateSalesInvoiceMetadata(session) {
   }
 }
 
+async function validateSalesReturnMetadata(session) {
+  for (const catalog of ["sales-returns", "sales-return-lines", "sales-shipment-returns", "sales-invoice-returns"]) {
+    smokeStep(`metadata ${catalog}`);
+    const metadata = await expectOk(`/master-data/${catalog}/metadata`, {
+      headers: authHeaders(session)
+    });
+
+    if (metadata.data?.catalog?.readOnly !== true) {
+      fail(`${catalog} metadata must be read-only.`);
+    }
+
+    const fields = metadata.data.fields.map((field) => field.field);
+    const expectedFields =
+      catalog === "sales-returns"
+        ? ["returnNumber", "orderNumber", "shipmentNumber", "customerName", "status", "returnDate", "totalQuantity"]
+        : catalog === "sales-return-lines"
+          ? ["returnNumber", "shipmentNumber", "lineNumber", "itemCode", "warehouseCode", "quantity"]
+          : ["shipmentNumber", "orderNumber", "itemCode", "shippedQuantity", "previouslyReturnedQuantity", "returnableQuantity"];
+    const missingFields = expectedFields.filter((field) => !fields.includes(field));
+
+    if (missingFields.length) {
+      fail(`${catalog} metadata is missing fields: ${missingFields.join(", ")}.`);
+    }
+
+    const unavailableActions = ["create", "update", "activate", "deactivate"]
+      .map((actionName) => metadata.data.actions.find((action) => action.action === actionName))
+      .filter((action) => action?.available !== false);
+
+    if (unavailableActions.length) {
+      fail(`${catalog} write actions must be unavailable.`);
+    }
+  }
+}
+
 async function validatePurchaseReceiptMetadata(session) {
   for (const catalog of ["purchase-receipts", "purchase-receipt-lines"]) {
     smokeStep(`metadata ${catalog}`);
@@ -6023,6 +6118,189 @@ async function validateSalesInvoiceFlow(session) {
   }
 }
 
+async function validateSalesReturnFlow(session) {
+  smokeStep("sales return foundation flow");
+  const { itemId, warehouseId } = await getDemoPurchaseReferences(session);
+  await releaseSmokeInventoryReservations(session, itemId, warehouseId);
+  await setSmokeStockQuantity(session, itemId, warehouseId, 10);
+
+  const order = await createApprovedReservationOrder(session, `RET-SAL-${smokeRun}`, 10, true);
+  const reservation = await reserveSalesOrderLine(
+    order.order.id,
+    order.line.id,
+    {
+      idempotencyKey: reservationIdempotencyKey("return-reserve"),
+      quantity: 10,
+      reference: `RET-SAL-${smokeRun}`
+    },
+    session
+  );
+  const shipment = await createSalesShipment(
+    {
+      salesOrderId: order.order.id,
+      reference: `RET-SHP-${smokeRun}`,
+      notes: "Despacho para devolucion smoke"
+    },
+    session
+  );
+  await addSalesShipmentLine(
+    shipment.id,
+    {
+      salesOrderLineId: order.line.id,
+      inventoryReservationId: reservation.id,
+      quantity: 10,
+      notes: "Linea despachada para devolucion smoke"
+    },
+    session
+  );
+  const postedShipment = await postSalesShipment(
+    shipment.id,
+    { idempotencyKey: reservationIdempotencyKey("return-shipment-post") },
+    session
+  );
+  const stockAfterShipment = await getSmokeStockSnapshot(session, itemId, warehouseId);
+  const arBeforeReturns = await countAccountsReceivableDocuments(session);
+
+  if (stockAfterShipment.quantityOnHand !== 0) {
+    fail("Sales return setup did not leave controlled stock at zero after shipment.");
+  }
+
+  smokeStep("sales return partial draft");
+  const returnable = await getSalesShipmentReturnableLines(postedShipment.id, session);
+  const returnableLine = returnable.find((line) => line.salesShipmentLineId);
+  if (!returnableLine || Number(returnableLine.returnableQuantity) !== 10) {
+    fail("Sales returnable summary did not expose quantity 10.");
+  }
+  const partialReturn = await createSalesReturn(
+    {
+      salesShipmentId: postedShipment.id,
+      reason: "Devolucion parcial smoke",
+      reference: `RET-PART-${smokeRun}`
+    },
+    session
+  );
+  await addSalesReturnLine(
+    partialReturn.id,
+    {
+      salesShipmentLineId: returnableLine.salesShipmentLineId,
+      salesInvoiceLineId: returnableLine.salesInvoiceLineId ?? null,
+      quantity: 4,
+      reason: "Parcial smoke"
+    },
+    session
+  );
+  const stockAfterDraft = await getSmokeStockSnapshot(session, itemId, warehouseId);
+  const arAfterDraft = await countAccountsReceivableDocuments(session);
+  const draftReturnRecord = await findCatalogRecord("sales-returns", partialReturn.returnNumber, session);
+  if (stockAfterDraft.quantityOnHand !== stockAfterShipment.quantityOnHand || arAfterDraft !== arBeforeReturns || draftReturnRecord?.movementNumber) {
+    fail("Draft sales return changed stock, CxC or created movement.");
+  }
+
+  smokeStep("sales return partial post");
+  const partialPostKey = reservationIdempotencyKey("return-post-partial");
+  const postedPartialReturn = await postSalesReturn(partialReturn.id, { idempotencyKey: partialPostKey }, session);
+  const stockAfterPartial = await getSmokeStockSnapshot(session, itemId, warehouseId);
+  if (postedPartialReturn.status !== "POSTED" || !postedPartialReturn.movementNumber || stockAfterPartial.quantityOnHand !== 4) {
+    fail("Posting partial sales return did not increase stock by 4.");
+  }
+  await assertInventoryLedgerEntries(session, postedPartialReturn.movementNumber, [
+    {
+      movementType: "SALES_RETURN",
+      ledgerDirection: "IN",
+      warehouseCode: "ALM-PRINCIPAL",
+      quantityIn: 4,
+      quantityOut: 0,
+      quantityBalanceImpact: 4
+    }
+  ]);
+  const returnableAfterPartial = await getSalesShipmentReturnableLines(postedShipment.id, session);
+  if (Number(returnableAfterPartial[0]?.returnableQuantity ?? 0) !== 6) {
+    fail("Returnable quantity after partial return was not 6.");
+  }
+
+  smokeStep("sales return repost idempotent");
+  const retriedPartial = await postSalesReturn(partialReturn.id, { idempotencyKey: partialPostKey }, session);
+  const stockAfterRetry = await getSmokeStockSnapshot(session, itemId, warehouseId);
+  if (retriedPartial.inventoryMovementId !== postedPartialReturn.inventoryMovementId || stockAfterRetry.quantityOnHand !== stockAfterPartial.quantityOnHand) {
+    fail("Retrying sales return post duplicated movement or stock.");
+  }
+  await expectSalesReturnFailure(
+    `/sales/returns/${partialReturn.id}/post`,
+    { idempotencyKey: reservationIdempotencyKey("return-post-second-key") },
+    session
+  );
+
+  smokeStep("sales return excess rejected");
+  const excessReturn = await createSalesReturn(
+    {
+      salesShipmentId: postedShipment.id,
+      reason: "Exceso smoke",
+      reference: `RET-OVER-${smokeRun}`
+    },
+    session
+  );
+  await expectSalesReturnFailure(
+    `/sales/returns/${excessReturn.id}/lines`,
+    { salesShipmentLineId: returnableLine.salesShipmentLineId, quantity: 7, reason: "Exceso smoke" },
+    session
+  );
+
+  smokeStep("sales return final post");
+  const finalReturn = await createSalesReturn(
+    {
+      salesShipmentId: postedShipment.id,
+      reason: "Devolucion final smoke",
+      reference: `RET-FINAL-${smokeRun}`
+    },
+    session
+  );
+  await addSalesReturnLine(
+    finalReturn.id,
+    {
+      salesShipmentLineId: returnableLine.salesShipmentLineId,
+      quantity: 6,
+      reason: "Final smoke"
+    },
+    session
+  );
+  const postedFinalReturn = await postSalesReturn(
+    finalReturn.id,
+    { idempotencyKey: reservationIdempotencyKey("return-post-final") },
+    session
+  );
+  const stockAfterFinal = await getSmokeStockSnapshot(session, itemId, warehouseId);
+  const arAfterFinal = await countAccountsReceivableDocuments(session);
+  if (postedFinalReturn.status !== "POSTED" || stockAfterFinal.quantityOnHand !== 10 || arAfterFinal !== arBeforeReturns) {
+    fail("Final sales return did not restore stock to 10 or changed CxC.");
+  }
+  const returnableAfterFinal = await getSalesShipmentReturnableLines(postedShipment.id, session);
+  if (Number(returnableAfterFinal[0]?.returnableQuantity ?? 0) !== 0) {
+    fail("Returnable quantity after final return was not zero.");
+  }
+
+  smokeStep("sales return final draft has no side effects");
+  const blockedDraft = await createSalesReturn(
+    {
+      salesShipmentId: postedShipment.id,
+      reason: "Borrador sin efecto smoke",
+      reference: `RET-DRAFT-${smokeRun}`
+    },
+    session
+  ).catch(() => null);
+  const stockAfterBlockedDraft = await getSmokeStockSnapshot(session, itemId, warehouseId);
+  const arAfterBlockedDraft = await countAccountsReceivableDocuments(session);
+  if (blockedDraft || stockAfterBlockedDraft.quantityOnHand !== stockAfterFinal.quantityOnHand || arAfterBlockedDraft !== arBeforeReturns) {
+    fail("Fully returned shipment allowed another draft or created forbidden side effects.");
+  }
+
+  const runtimeReturn = await findCatalogRecord("sales-returns", postedPartialReturn.returnNumber, session);
+  const runtimeReturnLine = await findCatalogRecord("sales-return-lines", postedPartialReturn.returnNumber, session);
+  const runtimeReturnable = await findCatalogRecord("sales-shipment-returns", postedShipment.shipmentNumber, session);
+  if (!runtimeReturn || runtimeReturn.status !== "POSTED" || !runtimeReturnLine || !runtimeReturnable) {
+    fail("Sales return runtime metadata did not expose return summaries.");
+  }
+}
+
 async function validateCrud(session) {
   const suffix = smokeRun;
   const customerCode = `QA-CUST-${suffix}`;
@@ -6243,6 +6521,7 @@ async function main() {
   await validateInventoryReservationMetadata(session);
   await validateSalesShipmentMetadata(session);
   await validateSalesInvoiceMetadata(session);
+  await validateSalesReturnMetadata(session);
   await validatePurchaseOrderMetadata(session);
   await validatePurchaseReceiptMetadata(session);
   await validateSupplierPaymentMetadata(session);
@@ -6264,6 +6543,7 @@ async function main() {
   await validateInventoryReservationFlow(session);
   await validateSalesShipmentFlow(session);
   await validateSalesInvoiceFlow(session);
+  await validateSalesReturnFlow(session);
   await validateCrud(session);
   console.log("smoke: local runtime validation OK");
 }

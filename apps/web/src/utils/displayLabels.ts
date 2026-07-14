@@ -21,6 +21,7 @@ const labels: Record<string, string> = {
   REJECTED: "Rechazado",
   PURCHASE_RECEIPT: "Recepcion de compra",
   SALES_INVOICE: "Factura de venta",
+  SALES_RETURN: "Devolucion de venta",
   SUPPLIER_CREDIT_NOTE: "Nota de credito proveedor",
   SUPPLIER_DEBIT_NOTE: "Nota de debito proveedor",
   SUPPLIER_INVOICE: "Factura proveedor",

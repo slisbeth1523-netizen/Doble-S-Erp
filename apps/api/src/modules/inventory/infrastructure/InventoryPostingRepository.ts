@@ -10,6 +10,7 @@ export type InventoryMovementType =
   | "TRANSFER"
   | "PURCHASE_RECEIPT_PLACEHOLDER"
   | "SALES_SHIPMENT"
+  | "SALES_RETURN"
   | "SALES_ISSUE_PLACEHOLDER"
   | "RETURN_IN_PLACEHOLDER"
   | "RETURN_OUT_PLACEHOLDER";
@@ -81,7 +82,7 @@ export type InventoryPostingResult = {
   totalQuantity: number;
 };
 
-const inboundMovementTypes: InventoryMovementType[] = ["OPENING", "ADJUSTMENT_IN", "PURCHASE_RECEIPT_PLACEHOLDER"];
+const inboundMovementTypes: InventoryMovementType[] = ["OPENING", "ADJUSTMENT_IN", "PURCHASE_RECEIPT_PLACEHOLDER", "SALES_RETURN"];
 const placeholderMovementTypes: InventoryMovementType[] = [
   "SALES_ISSUE_PLACEHOLDER",
   "RETURN_IN_PLACEHOLDER",
