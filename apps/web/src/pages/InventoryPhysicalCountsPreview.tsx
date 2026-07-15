@@ -15,6 +15,7 @@ import {
   type PhysicalCount,
   type PhysicalCountLine
 } from "../services/inventoryOperationsClient.js";
+import { sourceTypeLabel, statusLabel } from "../utils/displayLabels.js";
 
 type Feedback = {
   tone: "success" | "warning" | "error";
@@ -124,7 +125,7 @@ export function InventoryPhysicalCountsPreview() {
         notes: notes || null
       });
       setPhysicalCount(count);
-      setFeedback({ tone: "success", message: `Conteo ${count.countNumber} creado en DRAFT.` });
+      setFeedback({ tone: "success", message: `Conteo ${count.countNumber} creado en borrador.` });
     } catch (error: unknown) {
       setFeedback({ tone: "error", message: error instanceof Error ? error.message : "No se pudo crear el conteo." });
     } finally {
@@ -191,7 +192,7 @@ export function InventoryPhysicalCountsPreview() {
       setGeneratedAdjustment(result.adjustment);
       setFeedback({
         tone: "success",
-        message: `Ajuste ${result.adjustment.movementNumber} generado en DRAFT desde conteo.`
+        message: `Ajuste ${result.adjustment.movementNumber} generado en borrador desde conteo.`
       });
       await refreshSnapshots();
     } catch (error: unknown) {
@@ -229,9 +230,9 @@ export function InventoryPhysicalCountsPreview() {
           <div className="panel-heading">
             <div>
               <h2>Crear conteo</h2>
-              <p>Selecciona almacen y abre un conteo fisico en DRAFT.</p>
+                <p>Selecciona almacen y abre un conteo fisico en borrador.</p>
             </div>
-            <Badge tone={physicalCount ? "green" : "blue"}>{physicalCount?.status ?? "Nuevo"}</Badge>
+            <Badge tone={physicalCount ? "green" : "blue"}>{physicalCount ? statusLabel(physicalCount.status) : "Nuevo"}</Badge>
           </div>
           <form className="operation-form" onSubmit={handleCreateCount}>
             <label>
@@ -311,7 +312,7 @@ export function InventoryPhysicalCountsPreview() {
               <p>Completa el conteo antes de generar el ajuste.</p>
             </div>
             <Badge tone={physicalCount?.status === "ADJUSTMENT_CREATED" ? "green" : "amber"}>
-              {physicalCount?.status ?? "Sin conteo"}
+                {physicalCount ? statusLabel(physicalCount.status) : "Sin conteo"}
             </Badge>
           </div>
           {physicalCount ? (
@@ -325,7 +326,7 @@ export function InventoryPhysicalCountsPreview() {
                   Completar conteo
                 </Button>
                 <Button disabled={saving || physicalCount.status !== "COMPLETED"} onClick={handleCreateAdjustment} type="button">
-                  Generar ajuste DRAFT
+                  Generar ajuste borrador
                 </Button>
               </div>
             </div>
@@ -337,7 +338,7 @@ export function InventoryPhysicalCountsPreview() {
                   Completar conteo
                 </Button>
                 <Button disabled onClick={handleCreateAdjustment} type="button">
-                  Generar ajuste DRAFT
+                  Generar ajuste borrador
                 </Button>
               </div>
             </div>
@@ -383,8 +384,8 @@ export function InventoryPhysicalCountsPreview() {
             columns={["Movimiento", "Tipo", "Estado", "Cantidad"]}
             rows={movements.map((movement) => [
               String(movement.movementNumber ?? movement.code ?? ""),
-              String(movement.movementType ?? ""),
-              <Badge tone={movement.status === "POSTED" ? "green" : "amber"}>{String(movement.status ?? "")}</Badge>,
+                sourceTypeLabel(movement.movementType),
+                <Badge tone={movement.status === "POSTED" ? "green" : "amber"}>{statusLabel(movement.status)}</Badge>,
               formatNumber(recordNumber(movement, "totalQuantity"))
             ])}
           />

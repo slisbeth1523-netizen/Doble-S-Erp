@@ -11,6 +11,7 @@ import {
   type SupplierAdjustment,
   type SupplierAdjustmentType
 } from "../services/supplierAdjustmentsClient.js";
+import { sourceTypeLabel, statusLabel } from "../utils/displayLabels.js";
 
 type Feedback = {
   tone: "success" | "warning" | "error";
@@ -279,7 +280,7 @@ export function SupplierAdjustmentsPreview() {
               </div>
 
               <div className="form-actions">
-                <Button disabled={!canCreate || saving} type="submit">Crear nota DRAFT</Button>
+                <Button disabled={!canCreate || saving} type="submit">Crear nota borrador</Button>
                 <Button disabled={saving} onClick={handleReset} type="button" variant="secondary">Nueva</Button>
               </div>
             </form>
@@ -291,7 +292,7 @@ export function SupplierAdjustmentsPreview() {
                   <Card className="metric-card">
                     <span>Nota</span>
                     <strong>{createdAdjustment.adjustmentNumber}</strong>
-                    <small><Badge tone={statusTone(createdAdjustment.status)}>{createdAdjustment.status}</Badge></small>
+                    <small><Badge tone={statusTone(createdAdjustment.status)}>{statusLabel(createdAdjustment.status)}</Badge></small>
                   </Card>
                   <Card className="metric-card">
                     <span>Monto</span>
@@ -356,7 +357,7 @@ export function SupplierAdjustmentsPreview() {
                             <td>{application.documentNumber}</td>
                             <td>${formatNumber(application.appliedAmount)}</td>
                             <td>${formatNumber(application.documentRemainingAmount)}</td>
-                            <td><Badge tone={statusTone(application.documentStatus)}>{application.documentStatus}</Badge></td>
+                            <td><Badge tone={statusTone(application.documentStatus)}>{statusLabel(application.documentStatus)}</Badge></td>
                           </tr>
                         ))}
                       </tbody>
@@ -378,7 +379,7 @@ export function SupplierAdjustmentsPreview() {
                       <tr key={String(document.id)}>
                         <td>{String(document.code)}</td>
                         <td>${formatNumber(document.remainingAmount)}</td>
-                        <td><Badge tone={statusTone(document.status as string)}>{String(document.status)}</Badge></td>
+                        <td><Badge tone={statusTone(document.status as string)}>{statusLabel(document.status)}</Badge></td>
                       </tr>
                     ))}
                   </tbody>
@@ -395,9 +396,9 @@ export function SupplierAdjustmentsPreview() {
                     {adjustmentsList.map((adjustment) => (
                       <tr key={String(adjustment.id)}>
                         <td>{String(adjustment.code)}</td>
-                        <td>{String(adjustment.adjustmentType)}</td>
+                          <td>{sourceTypeLabel(adjustment.adjustmentType)}</td>
                         <td>${formatNumber(adjustment.amount)}</td>
-                        <td><Badge tone={statusTone(adjustment.status as string)}>{String(adjustment.status)}</Badge></td>
+                          <td><Badge tone={statusTone(adjustment.status as string)}>{statusLabel(adjustment.status)}</Badge></td>
                       </tr>
                     ))}
                   </tbody>

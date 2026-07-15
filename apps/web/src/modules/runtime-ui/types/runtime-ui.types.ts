@@ -37,6 +37,8 @@ export type RuntimeField = {
   helpText?: string;
   displayOrder: number;
   validation: RuntimeValidation;
+  section?: string;
+  columnSpan?: number;
 };
 
 export type RuntimeGridColumn = {
@@ -64,6 +66,8 @@ export type RuntimeFormField = {
   helpText?: string;
   lookupCatalog?: string;
   validation: RuntimeValidation;
+  section?: string;
+  columnSpan?: number;
 };
 
 export type RuntimeAction = {

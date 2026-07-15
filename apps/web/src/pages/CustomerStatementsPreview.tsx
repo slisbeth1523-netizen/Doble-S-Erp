@@ -1,6 +1,6 @@
 import { type FormEvent, useEffect, useState } from "react";
 
-import { Alert, Button, Card, EmptyState, ErrorState, Input, LoadingState, PageHeader, Select, Table } from "../components/ui/index.js";
+import { Alert, Button, Card, EmptyState, ErrorState, Input, LoadingState, PageHeader, Select, Table, FormField, FilterBar } from "../components/ui/index.js";
 import { loadCustomerStatements, type CustomerStatementDetail, type CustomerStatementResponse } from "../services/customerStatementsClient.js";
 
 function today() {
@@ -62,56 +62,52 @@ export function CustomerStatementsPreview() {
   }
 
   const rows = (snapshot?.records ?? []).map((record: CustomerStatementDetail) => [
-    record.documentNumber,
-    record.customerName,
-    record.sourceType,
-    shortDate(record.documentDate),
-    shortDate(record.dueDate),
-    record.status,
-    record.agingBucket,
-    record.daysPastDue,
-    money(record.totalAmount),
-    money(record.paidAmount),
-    money(record.remainingAmount)
+    <strong style={{ textAlign: "left", display: "block" }}>{record.documentNumber}</strong>,
+    <div style={{ textAlign: "left" }}>{record.customerName}</div>,
+    <div style={{ textAlign: "center" }}>{record.sourceType}</div>,
+    <div style={{ textAlign: "center" }}>{shortDate(record.documentDate)}</div>,
+    <div style={{ textAlign: "center" }}>{shortDate(record.dueDate)}</div>,
+    <div style={{ textAlign: "center" }}>{record.status}</div>,
+    <div style={{ textAlign: "center" }}>{record.agingBucket}</div>,
+    <div style={{ textAlign: "right" }}>{record.daysPastDue}</div>,
+    <div style={{ textAlign: "right" }}>{money(record.totalAmount)}</div>,
+    <div style={{ textAlign: "right" }}>{money(record.paidAmount)}</div>,
+    <div style={{ textAlign: "right", fontWeight: "600" }}>{money(record.remainingAmount)}</div>
   ]);
 
   return (
     <div className="page-stack">
       <PageHeader
         eyebrow="Cuentas por cobrar"
-        title="Estado de cuenta"
-        description="Consulta read-only de documentos CxC por cliente, con saldo, vencimiento y bucket a fecha de corte."
+        title="Estado de cuenta de clientes"
+        description="Consulta cronológicamente los documentos, cobros y balances de cada cliente."
         actions={
-          <>
+          <div className="runtime-page-actions">
             <a className="ui-button ui-button-secondary" href="/accounts-receivable/documents">Documentos CxC</a>
             <a className="ui-button ui-button-secondary" href="/accounts-receivable/receipts">Recibos</a>
-            <a className="ui-button ui-button-secondary" href="/accounts-receivable/customer-credit-notes">Notas de credito</a>
-          </>
+            <a className="ui-button ui-button-secondary" href="/accounts-receivable/customer-credit-notes">Notas de crédito</a>
+          </div>
         }
       />
 
       <Card>
-        <form className="settings-form" onSubmit={handleSubmit}>
-          <div className="form-grid">
-            <label>
-              Fecha de corte
+        <form onSubmit={handleSubmit}>
+          <FilterBar>
+            <FormField label="Fecha de corte" style={{ flex: "1 1 200px" }}>
               <Input type="date" value={asOfDate} onChange={(event) => setAsOfDate(event.target.value)} />
-            </label>
-            <label>
-              Buscar cliente o documento
-              <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Cliente, documento o estado" />
-            </label>
-            <label>
-              Estado
+            </FormField>
+            <FormField label="Buscar cliente o documento" style={{ flex: "1 1 250px" }}>
+              <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Cliente, documento o estado..." />
+            </FormField>
+            <FormField label="Estado" style={{ flex: "1 1 180px" }}>
               <Select value={status} onChange={(event) => setStatus(event.target.value)}>
                 <option value="">Todos</option>
                 <option value="OPEN">OPEN</option>
                 <option value="PARTIALLY_PAID">PARTIALLY_PAID</option>
                 <option value="PAID">PAID</option>
               </Select>
-            </label>
-            <label>
-              Bucket
+            </FormField>
+            <FormField label="Bucket de antigüedad" style={{ flex: "1 1 180px" }}>
               <Select value={agingBucket} onChange={(event) => setAgingBucket(event.target.value)}>
                 <option value="">Todos</option>
                 <option value="CURRENT">CURRENT</option>
@@ -120,15 +116,18 @@ export function CustomerStatementsPreview() {
                 <option value="61-90">61-90</option>
                 <option value="90+">90+</option>
               </Select>
+            </FormField>
+          </FilterBar>
+
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "16px", marginTop: "12px" }}>
+            <label className="inline-check" style={{ display: "inline-flex", alignItems: "center", gap: "8px", margin: 0 }}>
+              <input checked={overdueOnly} type="checkbox" onChange={(event) => setOverdueOnly(event.target.checked)} className="ui-checkbox" />
+              <span>Solo vencidos</span>
             </label>
+            <Button disabled={loading} type="submit" variant="primary">
+              {loading ? "Consultando..." : "Consultar estado de cuenta"}
+            </Button>
           </div>
-          <label className="inline-check">
-            <input checked={overdueOnly} type="checkbox" onChange={(event) => setOverdueOnly(event.target.checked)} />
-            Solo vencidos
-          </label>
-          <Button disabled={loading} type="submit">
-            Consultar
-          </Button>
         </form>
       </Card>
 
@@ -137,24 +136,43 @@ export function CustomerStatementsPreview() {
 
       {!loading && !error && snapshot && (
         <>
-          <div className="metric-grid">
-            <Card><strong>{money(snapshot.summary.remainingAmount)}</strong><span>Balance total</span></Card>
-            <Card><strong>{money(snapshot.summary.overdueAmount)}</strong><span>Vencido</span></Card>
-            <Card><strong>{money(snapshot.summary.notDueAmount)}</strong><span>Por vencer</span></Card>
-            <Card><strong>{snapshot.summary.openDocumentCount}</strong><span>Docs abiertos</span></Card>
+          <div className="metric-grid" style={{ marginBottom: "24px" }}>
+            <Card className="metric-card">
+              <span>Balance total</span>
+              <strong>{money(snapshot.summary.remainingAmount)}</strong>
+              <small style={{ color: "var(--muted)" }}>Saldo pendiente total</small>
+            </Card>
+            <Card className="metric-card">
+              <span>Vencido</span>
+              <strong style={{ color: "var(--red)" }}>{money(snapshot.summary.overdueAmount)}</strong>
+              <small style={{ color: "var(--muted)" }}>Total saldo vencido</small>
+            </Card>
+            <Card className="metric-card">
+              <span>Por vencer</span>
+              <strong style={{ color: "var(--green)" }}>{money(snapshot.summary.notDueAmount)}</strong>
+              <small style={{ color: "var(--muted)" }}>Dentro de fecha límite</small>
+            </Card>
+            <Card className="metric-card">
+              <span>Docs abiertos</span>
+              <strong>{snapshot.summary.openDocumentCount}</strong>
+              <small style={{ color: "var(--muted)" }}>Comprobantes vigentes</small>
+            </Card>
           </div>
 
-          <Alert tone="success">Consulta conectada a API. Fecha de corte: {snapshot.asOfDate}.</Alert>
-          {customerId && <Alert tone="info">Detalle filtrado por cliente seleccionado desde antiguedad.</Alert>}
+          <Alert tone="success">Consulta conectada a la API. Fecha de corte: {snapshot.asOfDate}.</Alert>
+          {customerId && <Alert tone="info">Detalle filtrado por cliente seleccionado desde antigüedad.</Alert>}
 
-          {rows.length ? (
-            <Table
-              columns={["Documento", "Cliente", "Origen", "Fecha", "Vence", "Estado", "Bucket", "Dias", "Total", "Pagado", "Saldo"]}
-              rows={rows}
-            />
-          ) : (
-            <EmptyState title="Sin documentos" description="No hay documentos para los filtros seleccionados." />
-          )}
+          <Card style={{ marginTop: "24px" }}>
+            <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "16px" }}>Detalle de Movimientos</h3>
+            {rows.length ? (
+              <Table
+                columns={["Documento", "Cliente", "Origen", "Fecha", "Vence", "Estado", "Bucket", "Días", "Total", "Pagado", "Saldo"]}
+                rows={rows}
+              />
+            ) : (
+              <EmptyState title="Sin movimientos" description="No existen movimientos para el cliente y período seleccionados." />
+            )}
+          </Card>
         </>
       )}
     </div>

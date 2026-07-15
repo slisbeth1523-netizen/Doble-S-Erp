@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Alert, Badge, Card, LoadingState, PageHeader } from "../components/ui/index.js";
 import type { CatalogRecord } from "../modules/runtime-ui/types/runtime-ui.types.js";
 import { loadAccountsPayableSnapshots } from "../services/supplierInvoicesClient.js";
+import { statusLabel } from "../utils/displayLabels.js";
 
 type Feedback = {
   tone: "success" | "warning" | "error";
@@ -64,8 +65,8 @@ export function AccountsPayablePreview() {
     <div className="page-stack">
       <PageHeader
         eyebrow="Cuentas por pagar"
-        title="Consulta de Documentos de CxP"
-        description="Monitorea balances pendientes, montos pagados y vencimientos de facturas de proveedores registradas."
+        title="Documentos de cuentas por pagar"
+        description="Consulta las facturas, notas y documentos pendientes asociados a tus proveedores."
       />
 
       {feedback && (
@@ -78,7 +79,7 @@ export function AccountsPayablePreview() {
         <div className="metric-grid">
           <Card className="metric-card">
             <span>Balance total pendiente</span>
-            <strong>${formatNumber(totalBalance)}</strong>
+            <strong>{formatNumber(totalBalance)}</strong>
             <small style={{ color: "var(--muted)" }}>Suma de saldos por pagar</small>
           </Card>
           <Card className="metric-card">
@@ -89,41 +90,45 @@ export function AccountsPayablePreview() {
         </div>
       )}
 
-      <div className="ui-card">
-        <h2>Documentos Cuentas por Pagar (CxP)</h2>
+      <Card>
+        <h2 style={{ fontSize: "1.2rem", fontWeight: 700, marginBottom: "16px" }}>Documentos de cuentas por pagar</h2>
         {documents.length === 0 ? (
-          <p style={{ textAlign: "center", color: "var(--muted)", margin: "40px 0" }}>
-            No hay documentos pendientes de Cuentas por Pagar. Registra y aprueba facturas de proveedores para generar su saldo aquí.
-          </p>
+          <div style={{ padding: "40px 0", textAlign: "center" }}>
+            <p style={{ color: "var(--muted)", margin: 0 }}>
+              No hay documentos de cuentas por pagar para mostrar.
+            </p>
+          </div>
         ) : (
           <div className="ui-table-wrap">
             <table className="ui-table">
               <thead>
                 <tr>
-                  <th>Documento CxP</th>
-                  <th>Proveedor</th>
-                  <th>Factura Origen</th>
-                  <th>Fecha Doc.</th>
-                  <th>Vencimiento</th>
-                  <th>Monto Total</th>
-                  <th>Pagado</th>
-                  <th>Balance</th>
-                  <th>Estado</th>
+                  <th style={{ textAlign: "left" }}>Documento CxP</th>
+                  <th style={{ textAlign: "left" }}>Proveedor</th>
+                  <th style={{ textAlign: "left" }}>Factura Origen</th>
+                  <th style={{ textAlign: "center" }}>Fecha Doc.</th>
+                  <th style={{ textAlign: "center" }}>Vencimiento</th>
+                  <th style={{ textAlign: "right" }}>Monto Total</th>
+                  <th style={{ textAlign: "right" }}>Pagado</th>
+                  <th style={{ textAlign: "right" }}>Balance</th>
+                  <th style={{ textAlign: "center" }}>Estado</th>
                 </tr>
               </thead>
               <tbody>
                 {documents.map((doc) => (
                   <tr key={String(doc.id)}>
-                    <td><strong>{String(doc.code)}</strong></td>
-                    <td>{String(doc.name)}</td>
-                    <td>{String(doc.sourceDocumentNumber)}</td>
-                    <td>{doc.documentDate ? new Date(doc.documentDate as string).toLocaleDateString() : ""}</td>
-                    <td>{doc.dueDate ? new Date(doc.dueDate as string).toLocaleDateString() : ""}</td>
-                    <td>${formatNumber(doc.totalAmount)}</td>
-                    <td>${formatNumber(doc.paidAmount)}</td>
-                    <td><strong>${formatNumber(doc.remainingAmount)}</strong></td>
-                    <td>
-                      <Badge tone={statusTone(doc.status as string)}>{String(doc.status)}</Badge>
+                    <td style={{ textAlign: "left" }}><strong>{String(doc.code)}</strong></td>
+                    <td style={{ textAlign: "left" }}>{String(doc.name)}</td>
+                    <td style={{ textAlign: "left" }}>{String(doc.sourceDocumentNumber)}</td>
+                    <td style={{ textAlign: "center" }}>{doc.documentDate ? new Date(doc.documentDate as string).toLocaleDateString("es-DO") : ""}</td>
+                    <td style={{ textAlign: "center" }}>{doc.dueDate ? new Date(doc.dueDate as string).toLocaleDateString("es-DO") : ""}</td>
+                    <td style={{ textAlign: "right" }}>{formatNumber(doc.totalAmount)}</td>
+                    <td style={{ textAlign: "right" }}>{formatNumber(doc.paidAmount)}</td>
+                    <td style={{ textAlign: "right" }}><strong>{formatNumber(doc.remainingAmount)}</strong></td>
+                    <td style={{ textAlign: "center" }}>
+                      <div style={{ display: "inline-flex", justifyContent: "center", width: "100%" }}>
+                        <Badge tone={statusTone(doc.status as string)}>{statusLabel(doc.status)}</Badge>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -131,7 +136,7 @@ export function AccountsPayablePreview() {
             </table>
           </div>
         )}
-      </div>
+      </Card>
     </div>
   );
 }
