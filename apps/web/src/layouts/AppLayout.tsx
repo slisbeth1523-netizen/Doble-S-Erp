@@ -50,6 +50,7 @@ const navigation: NavigationItem[] = [
       { label: "Despachos", path: "/sales/shipments" },
       { label: "Facturas", path: "/sales/invoices" },
       { label: "Devoluciones", path: "/sales/returns" },
+      { label: "Notas de credito", path: "/sales/credit-notes" },
       { label: "Consulta cotizaciones", path: "/master-data/sales-quotations" },
       { label: "Lineas cotizadas", path: "/master-data/sales-quotation-lines" },
       { label: "Consulta pedidos", path: "/master-data/sales-orders" },
@@ -60,6 +61,8 @@ const navigation: NavigationItem[] = [
       { label: "Lineas facturas", path: "/master-data/sales-invoice-lines" },
       { label: "Consulta devoluciones", path: "/master-data/sales-returns" },
       { label: "Lineas devoluciones", path: "/master-data/sales-return-lines" },
+      { label: "Consulta notas credito", path: "/master-data/sales-credit-notes" },
+      { label: "Pendientes nota credito", path: "/master-data/sales-credit-note-pending" },
       { label: "Clientes", path: "/master-data/customers" }
     ]
   },
@@ -164,7 +167,9 @@ function breadcrumb(path: string) {
       segments[1] === "sales-returns" ||
       segments[1] === "sales-return-lines" ||
       segments[1] === "sales-shipment-returns" ||
-      segments[1] === "sales-invoice-returns"
+      segments[1] === "sales-invoice-returns" ||
+      segments[1] === "sales-credit-notes" ||
+      segments[1] === "sales-credit-note-pending"
     ) {
       return ["Doble S ERP", "Ventas", getCatalogLabel(segments[1] ?? "")];
     }
@@ -254,6 +259,10 @@ function breadcrumb(path: string) {
 
   if (segments[0] === "sales" && segments[1] === "returns") {
     return ["Doble S ERP", "Ventas", "Devoluciones"];
+  }
+
+  if (segments[0] === "sales" && segments[1] === "credit-notes") {
+    return ["Doble S ERP", "Ventas", "Notas de credito"];
   }
 
   if (segments[0] === "purchasing" && segments[1] === "purchase-receipts") {
@@ -467,6 +476,7 @@ export function AppLayout({ children, currentPath, onNavigate }: AppLayoutProps)
     { label: "Recepciones de Compra", category: "Compras", path: "/purchasing/purchase-receipts" },
     { label: "Facturas de Proveedor", category: "Compras / CxP", path: "/purchasing/supplier-invoices" },
     { label: "Devoluciones de Venta", category: "Ventas / Inventario", path: "/sales/returns" },
+    { label: "Notas de credito de venta", category: "Ventas / CxC", path: "/sales/credit-notes" },
     { label: "Documentos de CxP (Cuentas por pagar)", category: "Cuentas por pagar", path: "/accounts-payable/documents" },
     { label: "Pagos a Proveedores", category: "Cuentas por pagar", path: "/accounts-payable/payments" },
     { label: "Comprobantes Fiscales e-CF", category: "Facturación Fiscal / DGII", path: "/dgii/electronic-invoices" },

@@ -310,6 +310,33 @@ const catalogFields: Record<string, FieldInput[]> = {
     { field: "previouslyReturnedQuantity", label: "Devuelto", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 120, align: "right" },
     { field: "returnableQuantity", label: "Pendiente devolver", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 150, align: "right" }
   ],
+  "sales-credit-note-pending": [
+    { field: "returnNumber", label: "Devolucion", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 150 },
+    { field: "invoiceNumber", label: "Factura", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 150 },
+    { field: "accountsReceivableDocumentNumber", label: "Documento CxC", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 160 },
+    { field: "customerCode", label: "Cliente", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 130 },
+    { field: "customerName", label: "Nombre cliente", searchable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 220 },
+    { field: "returnedQuantity", label: "Cantidad devuelta", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 150, align: "right" },
+    { field: "returnedAmount", label: "Importe devuelto", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 150, align: "right", format: "currency" },
+    { field: "reservedCreditAmount", label: "Reservado en notas", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 150, align: "right", format: "currency" },
+    { field: "pendingCreditAmount", label: "Pendiente acreditar", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 160, align: "right", format: "currency" },
+    { field: "accountsReceivableRemainingAmount", label: "Saldo CxC", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 130, align: "right", format: "currency" }
+  ],
+  "sales-credit-notes": [
+    { field: "creditNoteNumber", label: "Nota credito", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 160 },
+    { field: "returnNumber", label: "Devolucion", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 150 },
+    { field: "invoiceNumber", label: "Factura", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 150 },
+    { field: "accountsReceivableDocumentNumber", label: "Documento CxC", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 160 },
+    { field: "customerCode", label: "Cliente", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 130 },
+    { field: "customerName", label: "Nombre cliente", searchable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 220 },
+    { field: "status", label: "Estado", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 110 },
+    { field: "amount", label: "Monto", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 130, align: "right", format: "currency" },
+    { field: "appliedAmount", label: "Aplicado", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 120, align: "right", format: "currency" },
+    { field: "unappliedAmount", label: "Sin aplicar", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 120, align: "right", format: "currency" },
+    { field: "accountsReceivableRemainingAmount", label: "Saldo CxC", type: "number", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { min: 0, nullable: false }, width: 130, align: "right", format: "currency" },
+    { field: "reference", label: "Referencia", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 170 },
+    { field: "postedAt", label: "Posteado", type: "datetime", sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: true }, width: 150 }
+  ],
   "sales-order-invoices": [
     { field: "orderNumber", label: "Pedido", searchable: true, sortable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 150 },
     { field: "customerName", label: "Cliente", searchable: true, editable: false, readOnly: true, visibleInForm: false, validation: { nullable: false }, width: 220 },
@@ -1106,6 +1133,8 @@ export function getFallbackCatalogMetadata(catalog: string): CatalogMetadata | n
     "sales-return-lines",
     "sales-shipment-returns",
     "sales-invoice-returns",
+    "sales-credit-notes",
+    "sales-credit-note-pending",
     "sales-order-invoices",
     "sales-shipment-invoices",
     "purchase-orders",

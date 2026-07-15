@@ -936,6 +936,32 @@ const salesReturnLineFields = [
   { field: "returnStatus", dbColumn: "ReturnStatus", label: "Estado", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 80, validation: { nullable: false }, grid: { width: 120, align: "left" } }
 ] as const satisfies readonly CatalogFieldDefinition[];
 
+const salesCreditNotePendingFields = [
+  { field: "returnNumber", dbColumn: "ReturnNumber", label: "Devolucion", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 10, validation: { nullable: false }, grid: { width: 150, align: "left" } },
+  { field: "invoiceNumber", dbColumn: "InvoiceNumber", label: "Factura", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 20, validation: { nullable: false }, grid: { width: 150, align: "left" } },
+  { field: "accountsReceivableDocumentNumber", dbColumn: "AccountsReceivableDocumentNumber", label: "Documento CxC", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 30, validation: { nullable: false }, grid: { width: 160, align: "left" } },
+  { field: "customerName", dbColumn: "CustomerName", label: "Cliente", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 40, validation: { nullable: false }, grid: { width: 240, align: "left" } },
+  { field: "returnedQuantity", dbColumn: "ReturnedQuantity", label: "Cantidad devuelta", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 50, validation: { min: 0, nullable: false }, grid: { width: 150, align: "right" } },
+  { field: "returnedAmount", dbColumn: "ReturnedAmount", label: "Monto devuelto", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 60, validation: { min: 0, nullable: false }, grid: { width: 150, align: "right", format: "currency" } },
+  { field: "reservedCreditAmount", dbColumn: "ReservedCreditAmount", label: "Reservado NC", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 70, validation: { min: 0, nullable: false }, grid: { width: 140, align: "right", format: "currency" } },
+  { field: "pendingCreditAmount", dbColumn: "PendingCreditAmount", label: "Pendiente NC", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 80, validation: { nullable: false }, grid: { width: 140, align: "right", format: "currency" } },
+  { field: "accountsReceivableRemainingAmount", dbColumn: "AccountsReceivableRemainingAmount", label: "Saldo CxC", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 90, validation: { min: 0, nullable: false }, grid: { width: 130, align: "right", format: "currency" } }
+] as const satisfies readonly CatalogFieldDefinition[];
+
+const salesCreditNoteIntegrationFields = [
+  { field: "creditNoteNumber", dbColumn: "CreditNoteNumber", label: "Nota credito", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 10, validation: { nullable: false }, grid: { width: 160, align: "left" } },
+  { field: "returnNumber", dbColumn: "ReturnNumber", label: "Devolucion", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 20, validation: { nullable: false }, grid: { width: 150, align: "left" } },
+  { field: "invoiceNumber", dbColumn: "InvoiceNumber", label: "Factura", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 30, validation: { nullable: false }, grid: { width: 150, align: "left" } },
+  { field: "accountsReceivableDocumentNumber", dbColumn: "AccountsReceivableDocumentNumber", label: "Documento CxC", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 40, validation: { nullable: false }, grid: { width: 160, align: "left" } },
+  { field: "customerName", dbColumn: "CustomerName", label: "Cliente", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 50, validation: { nullable: false }, grid: { width: 240, align: "left" } },
+  { field: "creditNoteDate", dbColumn: "CreditNoteDate", label: "Fecha", type: "datetime", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 60, validation: { nullable: false }, grid: { width: 150, align: "left" } },
+  { field: "status", dbColumn: "Status", label: "Estado", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 70, validation: { nullable: false }, grid: { width: 120, align: "left" } },
+  { field: "amount", dbColumn: "Amount", label: "Monto", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 80, validation: { min: 0, nullable: false }, grid: { width: 130, align: "right", format: "currency" } },
+  { field: "appliedAmount", dbColumn: "AppliedAmount", label: "Aplicado", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 90, validation: { min: 0, nullable: false }, grid: { width: 130, align: "right", format: "currency" } },
+  { field: "accountsReceivableRemainingAmount", dbColumn: "AccountsReceivableRemainingAmount", label: "Saldo CxC", type: "number", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 100, validation: { min: 0, nullable: false }, grid: { width: 130, align: "right", format: "currency" } },
+  { field: "postedAt", dbColumn: "PostedAt", label: "Posteada", type: "datetime", required: false, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 110, validation: { nullable: true }, grid: { width: 160, align: "left" } }
+] as const satisfies readonly CatalogFieldDefinition[];
+
 const salesShipmentReturnFields = [
   { field: "shipmentNumber", dbColumn: "ShipmentNumber", label: "Despacho", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 10, validation: { nullable: false }, grid: { width: 150, align: "left" } },
   { field: "orderNumber", dbColumn: "OrderNumber", label: "Pedido", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 20, validation: { nullable: false }, grid: { width: 150, align: "left" } },
@@ -7591,6 +7617,68 @@ export const catalogDefinitions = {
       updatedBy: "UpdatedBy"
     },
     fields: salesReturnLineFields
+  },
+  "sales-credit-note-pending": {
+    catalogCode: "sales-credit-note-pending",
+    displayName: "Devoluciones pendientes de nota credito",
+    tableName: "sales.V_SalesReturnCreditNotePending",
+    idColumn: "SalesReturnCreditNotePendingId",
+    codeColumn: "ReturnNumber",
+    nameColumn: "CustomerName",
+    descriptionColumn: "InvoiceNumber",
+    allowedSearchColumns: ["ReturnNumber", "InvoiceNumber", "AccountsReceivableDocumentNumber", "CustomerCode", "CustomerName"],
+    allowedSortColumns: ["ReturnNumber", "InvoiceNumber", "CustomerName", "ReturnedAmount", "ReservedCreditAmount", "PendingCreditAmount", "AccountsReceivableRemainingAmount"],
+    defaultSortBy: "ReturnNumber",
+    permissions: commonPermissions("sales.credit-notes"),
+    moduleCode: "sales",
+    tenantScoped: true,
+    companyScoped: true,
+    readOnly: true,
+    columns: {
+      id: "SalesReturnCreditNotePendingId",
+      tenantId: "TenantId",
+      companyId: "CompanyId",
+      code: "ReturnNumber",
+      name: "CustomerName",
+      description: "InvoiceNumber",
+      isActive: "IsActive",
+      createdAt: "CreatedAt",
+      updatedAt: "UpdatedAt",
+      createdBy: "CreatedBy",
+      updatedBy: "UpdatedBy"
+    },
+    fields: salesCreditNotePendingFields
+  },
+  "sales-credit-notes": {
+    catalogCode: "sales-credit-notes",
+    displayName: "Notas credito de ventas",
+    tableName: "sales.V_SalesCreditNoteIntegrationSummary",
+    idColumn: "SalesCreditNoteIntegrationId",
+    codeColumn: "CreditNoteNumber",
+    nameColumn: "CustomerName",
+    descriptionColumn: "ReturnNumber",
+    allowedSearchColumns: ["CreditNoteNumber", "ReturnNumber", "InvoiceNumber", "AccountsReceivableDocumentNumber", "CustomerCode", "CustomerName", "Status"],
+    allowedSortColumns: ["CreditNoteNumber", "ReturnNumber", "InvoiceNumber", "CustomerName", "CreditNoteDate", "Status", "Amount", "AppliedAmount", "AccountsReceivableRemainingAmount", "PostedAt"],
+    defaultSortBy: "CreditNoteDate",
+    permissions: commonPermissions("sales.credit-notes"),
+    moduleCode: "sales",
+    tenantScoped: true,
+    companyScoped: true,
+    readOnly: true,
+    columns: {
+      id: "SalesCreditNoteIntegrationId",
+      tenantId: "TenantId",
+      companyId: "CompanyId",
+      code: "CreditNoteNumber",
+      name: "CustomerName",
+      description: "ReturnNumber",
+      isActive: "IsActive",
+      createdAt: "CreatedAt",
+      updatedAt: "UpdatedAt",
+      createdBy: "CreatedBy",
+      updatedBy: "UpdatedBy"
+    },
+    fields: salesCreditNoteIntegrationFields
   },
   "sales-shipment-returns": {
     catalogCode: "sales-shipment-returns",
