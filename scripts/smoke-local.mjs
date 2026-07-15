@@ -14,6 +14,7 @@ const requiredCatalogs = [
   { code: "brands", seedCode: "DOBLES" },
   { code: "units-of-measure", seedCode: "UND" },
   { code: "warehouses", seedCode: "ALM-PRINCIPAL" },
+  { code: "cost-centers", seedCode: "ADMIN" },
   { code: "inventory-stocks", seedCode: "ART-DEMO" },
   { code: "inventory-movements", seedCode: "MOV-DEMO-001" },
   { code: "inventory-movement-lines", seedCode: "MOV-DEMO-001" }
@@ -112,6 +113,20 @@ async function setCatalogRecordActive(catalog, id, active, session) {
   });
 
   return body.data;
+}
+
+async function expectCatalogFailure(catalog, method, pathSuffix, payload, session) {
+  const result = await request(`/master-data/${catalog}${pathSuffix}`, {
+    method,
+    headers: authHeaders(session),
+    body: payload === undefined ? undefined : JSON.stringify(payload)
+  });
+
+  if (result.response.ok || result.body?.success !== false) {
+    fail(`Catalog ${catalog}${pathSuffix} must fail in a controlled way.`);
+  }
+
+  return result.body;
 }
 
 async function postInventoryMovement(movementId, session) {
@@ -3256,6 +3271,22 @@ async function validateCatalogs(session) {
       }
     }
 
+    if (catalog.code === "cost-centers") {
+      const fields = metadata.data.fields.map((field) => field.field);
+      const missingFields = ["code", "name", "parentId", "level", "allowsPosting", "validFrom", "validTo"].filter(
+        (field) => !fields.includes(field)
+      );
+
+      if (missingFields.length) {
+        fail(`cost-centers metadata is missing fields: ${missingFields.join(", ")}.`);
+      }
+
+      const parentField = metadata.data.fields.find((field) => field.field === "parentId");
+      if (parentField?.lookupCatalog !== "cost-centers") {
+        fail("cost-centers metadata did not expose parentId lookupCatalog=cost-centers.");
+      }
+    }
+
     if (catalog.code === "inventory-stocks") {
       const fields = metadata.data.fields.map((field) => field.field);
       const missingFields = [
@@ -6301,6 +6332,154 @@ async function validateSalesReturnFlow(session) {
   }
 }
 
+async function validateCostCenterFlow(session) {
+  const suffix = smokeRun;
+  const rootCode = `CC-ROOT-${suffix}`;
+  const childCode = `CC-CHILD-${suffix}`;
+
+  smokeStep("cost center root create");
+  const root = await createCatalogRecord(
+    "cost-centers",
+    {
+      code: rootCode,
+      name: "Centro raiz QA",
+      description: "Centro de costo raiz smoke",
+      parentId: null,
+      allowsPosting: false,
+      validFrom: "2026-01-01",
+      validTo: "2026-12-31",
+      isActive: true
+    },
+    session
+  );
+
+  if (Number(root.level ?? 0) !== 1 || root.allowsPosting !== false) {
+    fail("Root cost center did not calculate level 1 or preserve allowsPosting=false.");
+  }
+
+  smokeStep("cost center child create");
+  const child = await createCatalogRecord(
+    "cost-centers",
+    {
+      code: childCode,
+      name: "Centro hijo QA",
+      description: "Centro de costo hijo smoke",
+      parentId: root.id,
+      allowsPosting: true,
+      validFrom: "2026-01-01",
+      validTo: "2026-12-31",
+      isActive: true
+    },
+    session
+  );
+
+  if (Number(child.level ?? 0) !== 2 || child.parentId?.toLowerCase() !== root.id.toLowerCase()) {
+    fail("Child cost center did not calculate level 2 under the selected parent.");
+  }
+
+  smokeStep("cost center update and search");
+  const updatedChild = await updateCatalogRecord(
+    "cost-centers",
+    child.id,
+    {
+      code: childCode,
+      name: "Centro hijo QA editado",
+      description: "Centro de costo hijo editado",
+      parentId: root.id,
+      allowsPosting: true,
+      validFrom: "2026-01-01",
+      validTo: "2026-12-31",
+      isActive: true
+    },
+    session
+  );
+  if (updatedChild.name !== "Centro hijo QA editado" || Number(updatedChild.level ?? 0) !== 2) {
+    fail("Updating cost center did not preserve calculated level or changed values.");
+  }
+
+  const foundChild = await findCatalogRecord("cost-centers", childCode, session);
+  if (!foundChild || foundChild.id !== child.id) {
+    fail("Created cost center was not found by runtime search.");
+  }
+
+  smokeStep("cost center deactivate/reactivate");
+  const deactivated = await setCatalogRecordActive("cost-centers", child.id, false, session);
+  if (deactivated.isActive !== false) {
+    fail("Cost center deactivate did not set isActive=false.");
+  }
+  const reactivated = await setCatalogRecordActive("cost-centers", child.id, true, session);
+  if (reactivated.isActive !== true) {
+    fail("Cost center reactivate did not set isActive=true.");
+  }
+
+  smokeStep("cost center validation failures");
+  await expectCatalogFailure(
+    "cost-centers",
+    "POST",
+    "",
+    {
+      code: rootCode,
+      name: "Duplicado QA",
+      parentId: null,
+      allowsPosting: true,
+      validFrom: "2026-01-01",
+      validTo: "2026-12-31",
+      isActive: true
+    },
+    session
+  );
+
+  await expectCatalogFailure(
+    "cost-centers",
+    "POST",
+    "",
+    {
+      code: `CC-DATE-${suffix}`,
+      name: "Fechas invalidas QA",
+      parentId: null,
+      allowsPosting: true,
+      validFrom: "2026-12-31",
+      validTo: "2026-01-01",
+      isActive: true
+    },
+    session
+  );
+
+  await expectCatalogFailure(
+    "cost-centers",
+    "PUT",
+    `/${child.id}`,
+    {
+      code: childCode,
+      name: "Padre propio QA",
+      description: "Intento invalido",
+      parentId: child.id,
+      allowsPosting: true,
+      validFrom: "2026-01-01",
+      validTo: "2026-12-31",
+      isActive: true
+    },
+    session
+  );
+
+  await expectCatalogFailure(
+    "cost-centers",
+    "PUT",
+    `/${root.id}`,
+    {
+      code: rootCode,
+      name: "Ciclo QA",
+      description: "Intento de ciclo",
+      parentId: child.id,
+      allowsPosting: false,
+      validFrom: "2026-01-01",
+      validTo: "2026-12-31",
+      isActive: true
+    },
+    session
+  );
+}
+
 async function validateCrud(session) {
   const suffix = smokeRun;
   const customerCode = `QA-CUST-${suffix}`;
@@ -6544,6 +6723,7 @@ async function main() {
   await validateSalesShipmentFlow(session);
   await validateSalesInvoiceFlow(session);
   await validateSalesReturnFlow(session);
+  await validateCostCenterFlow(session);
   await validateCrud(session);
   console.log("smoke: local runtime validation OK");
 }
