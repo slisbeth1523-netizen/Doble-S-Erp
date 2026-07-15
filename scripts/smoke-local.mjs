@@ -16,6 +16,7 @@ const requiredCatalogs = [
   { code: "units-of-measure", seedCode: "UND" },
   { code: "warehouses", seedCode: "ALM-PRINCIPAL" },
   { code: "cost-centers", seedCode: "ADMIN" },
+  { code: "accounting-periods", seedCode: "2025-01" },
   { code: "inventory-stocks", seedCode: "ART-DEMO" },
   { code: "inventory-movements", seedCode: "MOV-DEMO-001" },
   { code: "inventory-movement-lines", seedCode: "MOV-DEMO-001" }
@@ -130,6 +131,79 @@ async function expectCatalogFailure(catalog, method, pathSuffix, payload, sessio
   return result.body;
 }
 
+async function createAccountingPeriod(payload, session) {
+  const body = await expectOk("/accounting/periods", {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function updateAccountingPeriod(periodId, payload, session) {
+  const body = await expectOk(`/accounting/periods/${periodId}`, {
+    method: "PATCH",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function closeAccountingPeriod(periodId, session) {
+  const body = await expectOk(`/accounting/periods/${periodId}/close`, {
+    method: "POST",
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
+async function reopenAccountingPeriod(periodId, payload, session) {
+  const body = await expectOk(`/accounting/periods/${periodId}/reopen`, {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function getAccountingPeriod(periodId, session) {
+  const body = await expectOk(`/accounting/periods/${periodId}`, {
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
+async function listAccountingPeriods(query, session) {
+  const params = new URLSearchParams(query);
+  const body = await expectOk(`/accounting/periods?${params.toString()}`, {
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
+async function expectAccountingPeriodFailure(path, method, payload, session, extraHeaders = {}) {
+  const result = await request(path, {
+    method,
+    headers: {
+      ...authHeaders(session),
+      ...extraHeaders
+    },
+    body: payload === undefined ? undefined : JSON.stringify(payload)
+  });
+
+  if (result.response.ok || result.body?.success !== false) {
+    fail(`Expected accounting period request ${method} ${path} to fail.`);
+  }
+
+  return result.body;
+}
+
 async function ensureOtherCompanyCostCenter(session, code) {
   const companyId = "99999999-9999-9999-9999-999999999998";
   const costCenterId = randomUUID();
@@ -192,6 +266,25 @@ async function ensureOtherCompanyCostCenter(session, code) {
   }
 
   return { companyId, costCenterId };
+}
+
+async function cleanupAccountingPeriodSmokeData(session) {
+  const pool = await sql.connect(getSqlConfig());
+
+  try {
+    await pool
+      .request()
+      .input("TenantId", sql.UniqueIdentifier, session.user.tenantId)
+      .input("CompanyId", sql.UniqueIdentifier, session.user.companyId)
+      .query(`
+        DELETE FROM accounting.AccountingPeriods
+        WHERE TenantId = @TenantId
+          AND CompanyId = @CompanyId
+          AND Name LIKE N'Smoke Fase 21.2%';
+      `);
+  } finally {
+    await pool.close();
+  }
 }
 
 async function postInventoryMovement(movementId, session) {
@@ -6629,6 +6722,169 @@ async function validateCostCenterFlow(session) {
   );
 }
 
+async function validateAccountingPeriodFlow(session) {
+  await cleanupAccountingPeriodSmokeData(session);
+
+  const basePayload = {
+    fiscalYear: 2026,
+    periodNumber: 1,
+    name: "Smoke Fase 21.2 Enero",
+    startDate: "2026-01-01",
+    endDate: "2026-01-31",
+    isAdjustmentPeriod: false
+  };
+
+  smokeStep("accounting period create");
+  const created = await createAccountingPeriod(basePayload, session);
+  if (created.status !== "OPEN" || !created.openedAt || !created.openedBy) {
+    fail("Accounting period creation did not set OPEN, OpenedAt and OpenedBy.");
+  }
+
+  smokeStep("accounting period overlap rejected");
+  await expectAccountingPeriodFailure(
+    "/accounting/periods",
+    "POST",
+    {
+      fiscalYear: 2026,
+      periodNumber: 2,
+      name: "Smoke Fase 21.2 Solapado",
+      startDate: "2026-01-15",
+      endDate: "2026-02-15",
+      isAdjustmentPeriod: false
+    },
+    session
+  );
+  const overlappedSearch = await listAccountingPeriods({ search: "Smoke Fase 21.2 Solapado", pageSize: "10" }, session);
+  if ((overlappedSearch.records ?? []).length !== 0) {
+    fail("Rejected overlapping accounting period was persisted.");
+  }
+
+  smokeStep("accounting period edit open");
+  const edited = await updateAccountingPeriod(
+    created.accountingPeriodId,
+    {
+      ...basePayload,
+      name: "Smoke Fase 21.2 Enero Editado",
+      isAdjustmentPeriod: true
+    },
+    session
+  );
+  if (edited.name !== "Smoke Fase 21.2 Enero Editado" || edited.isAdjustmentPeriod !== true) {
+    fail("OPEN accounting period edit did not persist expected values.");
+  }
+
+  smokeStep("accounting period close");
+  const closed = await closeAccountingPeriod(created.accountingPeriodId, session);
+  if (closed.status !== "CLOSED" || !closed.closedAt || !closed.closedBy) {
+    fail("Closing accounting period did not set CLOSED, ClosedAt and ClosedBy.");
+  }
+
+  await expectAccountingPeriodFailure(
+    `/accounting/periods/${created.accountingPeriodId}`,
+    "PATCH",
+    {
+      ...basePayload,
+      name: "Smoke Fase 21.2 Edit Cerrado",
+      startDate: "2026-01-02",
+      isAdjustmentPeriod: false
+    },
+    session
+  );
+
+  smokeStep("accounting period reopen");
+  await expectAccountingPeriodFailure(
+    `/accounting/periods/${created.accountingPeriodId}/reopen`,
+    "POST",
+    {},
+    session
+  );
+  const reopened = await reopenAccountingPeriod(
+    created.accountingPeriodId,
+    { reason: "Correccion smoke Fase 21.2" },
+    session
+  );
+  if (
+    reopened.status !== "OPEN" ||
+    !reopened.reopenedAt ||
+    !reopened.reopenedBy ||
+    reopened.reopenReason !== "Correccion smoke Fase 21.2" ||
+    !reopened.closedAt ||
+    !reopened.closedBy
+  ) {
+    fail("Reopening accounting period did not preserve close trace and store reopen trace.");
+  }
+
+  smokeStep("accounting period concurrent overlap");
+  const concurrentPayloadA = {
+    fiscalYear: 2026,
+    periodNumber: 20,
+    name: "Smoke Fase 21.2 Concurrente A",
+    startDate: "2026-03-01",
+    endDate: "2026-03-31",
+    isAdjustmentPeriod: false
+  };
+  const concurrentPayloadB = {
+    fiscalYear: 2026,
+    periodNumber: 21,
+    name: "Smoke Fase 21.2 Concurrente B",
+    startDate: "2026-03-15",
+    endDate: "2026-04-15",
+    isAdjustmentPeriod: false
+  };
+  const concurrentResults = await Promise.allSettled([
+    createAccountingPeriod(concurrentPayloadA, session),
+    createAccountingPeriod(concurrentPayloadB, session)
+  ]);
+  const concurrentSuccesses = concurrentResults.filter((result) => result.status === "fulfilled");
+  if (concurrentSuccesses.length !== 1) {
+    fail("Concurrent overlapping accounting periods did not persist exactly one valid record.");
+  }
+
+  smokeStep("accounting period company isolation");
+  const isolatedHeaders = { "x-company-id": "99999999-9999-9999-9999-999999999999" };
+  await expectAccountingPeriodFailure(
+    `/accounting/periods/${created.accountingPeriodId}`,
+    "GET",
+    undefined,
+    session,
+    isolatedHeaders
+  );
+  await expectAccountingPeriodFailure(
+    `/accounting/periods/${created.accountingPeriodId}`,
+    "PATCH",
+    basePayload,
+    session,
+    isolatedHeaders
+  );
+  await expectAccountingPeriodFailure(
+    `/accounting/periods/${created.accountingPeriodId}/close`,
+    "POST",
+    undefined,
+    session,
+    isolatedHeaders
+  );
+  await expectAccountingPeriodFailure(
+    `/accounting/periods/${created.accountingPeriodId}/reopen`,
+    "POST",
+    { reason: "Aislamiento" },
+    session,
+    isolatedHeaders
+  );
+
+  const runtimeRows = await expectOk(
+    `/master-data/accounting-periods?search=${encodeURIComponent("2026-01")}&page=1&pageSize=10`,
+    { headers: authHeaders(session) }
+  );
+  if (!runtimeRows.data?.some((record) => record.code === "2026-01")) {
+    fail("/master-data/accounting-periods did not expose the created accounting period.");
+  }
+
+  const periodDetail = await getAccountingPeriod(created.accountingPeriodId, session);
+  if (periodDetail.accountingPeriodId !== created.accountingPeriodId) {
+    fail("Accounting period detail did not return the expected period.");
+  }
+}
+
 async function validateCrud(session) {
   const suffix = smokeRun;
   const customerCode = `QA-CUST-${suffix}`;
@@ -6873,6 +7129,7 @@ async function main() {
   await validateSalesInvoiceFlow(session);
   await validateSalesReturnFlow(session);
   await validateCostCenterFlow(session);
+  await validateAccountingPeriodFlow(session);
   await validateCrud(session);
   console.log("smoke: local runtime validation OK");
 }

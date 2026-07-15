@@ -32,6 +32,7 @@ import { SettingsPreview } from "./pages/SettingsPreview.js";
 import { WorkflowsPreview } from "./pages/WorkflowsPreview.js";
 
 import { ChartOfAccounts } from "./pages/accounting/ChartOfAccounts.js";
+import { AccountingPeriodsPage } from "./pages/accounting/AccountingPeriodsPage.js";
 import { DgiiReportsDashboard } from "./pages/dgii/DgiiReportsDashboard.js";
 import { CertificationWizard } from "./pages/dgii/CertificationWizard.js";
 
@@ -164,6 +165,10 @@ export function App() {
 
     if (path === "/accounting/chart-of-accounts") {
       return <ChartOfAccounts />;
+    }
+
+    if (path === "/accounting/periods") {
+      return <AccountingPeriodsPage />;
     }
 
     if (path === "/security") {

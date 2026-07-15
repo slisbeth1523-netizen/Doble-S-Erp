@@ -2,6 +2,7 @@ import { Router } from "express";
 
 import { accountsReceivableRouter } from "../modules/accounts-receivable/api/routes/accounts-receivable.routes.js";
 import { accountsPayableRouter } from "../modules/accounts-payable/api/routes/accounts-payable.routes.js";
+import { accountingRouter } from "../modules/accounting/api/routes/accounting.routes.js";
 import { eventsRouter } from "../modules/events/api/routes/events.routes.js";
 import { inventoryRouter } from "../modules/inventory/api/routes/inventory.routes.js";
 import { masterDataRouter } from "../modules/master-data/api/routes/master-data.routes.js";
@@ -26,4 +27,5 @@ apiRouter.use("/purchasing", purchasingRouter);
 apiRouter.use("/sales", salesRouter);
 apiRouter.use("/accounts-payable", accountsPayableRouter);
 apiRouter.use("/accounts-receivable", accountsReceivableRouter);
+apiRouter.use("/accounting", accountingRouter);
 apiRouter.use("/workflows", workflowRouter);

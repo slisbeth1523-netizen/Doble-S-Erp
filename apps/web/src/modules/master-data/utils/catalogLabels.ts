@@ -52,7 +52,8 @@ export const catalogLabels: Record<string, string> = {
   "customer-statements": "Estado de cuenta clientes",
   "customer-aging": "Antiguedad de clientes",
   "customer-receivable-balances": "Saldos por cliente",
-  "cost-centers": "Centros de costo"
+  "cost-centers": "Centros de costo",
+  "accounting-periods": "Periodos contables"
 };
 
 export function getCatalogLabel(catalog: string) {

@@ -153,6 +153,11 @@ VALUES
   ('accounting', 'accounting.cost-centers.update', 'Local update cost centers'),
   ('accounting', 'accounting.cost-centers.activate', 'Local activate cost centers'),
   ('accounting', 'accounting.cost-centers.deactivate', 'Local deactivate cost centers'),
+  ('accounting', 'accounting.periods.read', 'Local read accounting periods'),
+  ('accounting', 'accounting.periods.create', 'Local create accounting periods'),
+  ('accounting', 'accounting.periods.update', 'Local update accounting periods'),
+  ('accounting', 'accounting.periods.close', 'Local close accounting periods'),
+  ('accounting', 'accounting.periods.reopen', 'Local reopen accounting periods'),
   ('inventory', 'inventory.items.read', 'Local read items'),
   ('inventory', 'inventory.items.create', 'Local create items'),
   ('inventory', 'inventory.items.update', 'Local update items'),
@@ -222,6 +227,8 @@ DECLARE @CategoryId UNIQUEIDENTIFIER = '99999999-9999-9999-9999-999999999999';
 DECLARE @BrandId UNIQUEIDENTIFIER = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 DECLARE @CostCenterAdminId UNIQUEIDENTIFIER = 'acacacac-acac-acac-acac-acacacacac01';
 DECLARE @CostCenterAccountingId UNIQUEIDENTIFIER = 'acacacac-acac-acac-acac-acacacacac02';
+DECLARE @AccountingPeriodJanId UNIQUEIDENTIFIER = 'b1b1b1b1-b1b1-b1b1-b1b1-b1b1b1b1b101';
+DECLARE @AccountingPeriodFebId UNIQUEIDENTIFIER = 'b1b1b1b1-b1b1-b1b1-b1b1-b1b1b1b1b102';
 DECLARE @WarehouseId UNIQUEIDENTIFIER = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee';
 DECLARE @TransitWarehouseId UNIQUEIDENTIFIER = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeef';
 DECLARE @InventoryMovementId UNIQUEIDENTIFIER = 'abababab-abab-abab-abab-abababababab';
@@ -347,6 +354,32 @@ BEGIN
   VALUES (
     @CostCenterAccountingId, @TenantId, @CompanyId, 'CONTAB', 'Contabilidad',
     'Centro de costo contable demo', @CostCenterAdminId, 2, 1, '2026-01-01', NULL, 1, @UserId
+  );
+END;
+
+IF OBJECT_ID('accounting.AccountingPeriods', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM accounting.AccountingPeriods WHERE AccountingPeriodId = @AccountingPeriodJanId)
+BEGIN
+  INSERT INTO accounting.AccountingPeriods (
+    AccountingPeriodId, TenantId, CompanyId, FiscalYear, PeriodNumber, Name,
+    StartDate, EndDate, Status, IsAdjustmentPeriod, OpenedAt, OpenedBy, ClosedAt, ClosedBy, IsActive, CreatedBy
+  )
+  VALUES (
+    @AccountingPeriodJanId, @TenantId, @CompanyId, 2025, 1, 'Enero 2025',
+    '2025-01-01', '2025-01-31', 'CLOSED', 0, '2025-01-01T00:00:00', @UserId, '2025-02-01T00:00:00', @UserId, 1, @UserId
+  );
+END;
+
+IF OBJECT_ID('accounting.AccountingPeriods', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM accounting.AccountingPeriods WHERE AccountingPeriodId = @AccountingPeriodFebId)
+BEGIN
+  INSERT INTO accounting.AccountingPeriods (
+    AccountingPeriodId, TenantId, CompanyId, FiscalYear, PeriodNumber, Name,
+    StartDate, EndDate, Status, IsAdjustmentPeriod, OpenedAt, OpenedBy, IsActive, CreatedBy
+  )
+  VALUES (
+    @AccountingPeriodFebId, @TenantId, @CompanyId, 2025, 2, 'Febrero 2025',
+    '2025-02-01', '2025-02-28', 'OPEN', 0, '2025-02-01T00:00:00', @UserId, 1, @UserId
   );
 END;
 
