@@ -92,6 +92,18 @@ const technicalFields: FieldInput[] = [
 ];
 
 const catalogFields: Record<string, FieldInput[]> = {
+  "accounting-periods": [
+    { field: "code", label: "Codigo", searchable: true, sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 110 },
+    { field: "name", label: "Nombre", searchable: true, sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 220 },
+    { field: "fiscalYear", label: "Ano fiscal", type: "number", sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 110, align: "right" },
+    { field: "periodNumber", label: "Periodo", type: "number", sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 100, align: "right" },
+    { field: "startDate", label: "Fecha inicial", type: "date", sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 130 },
+    { field: "endDate", label: "Fecha final", type: "date", sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 130 },
+    { field: "status", label: "Estado", type: "select", sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 110, align: "center" },
+    { field: "isAdjustmentPeriod", label: "Periodo ajuste", type: "boolean", sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 130, align: "center", format: "boolean" },
+    { field: "durationDays", label: "Dias", type: "number", sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 90, align: "right" },
+    { field: "isActive", label: "Activo", type: "boolean", sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 96, align: "center", format: "boolean" }
+  ],
   "cost-centers": [
     { field: "code", label: "Codigo", searchable: true, sortable: true, validation: { required: true, minLength: 1, maxLength: 30, nullable: false }, width: 130 },
     { field: "name", label: "Nombre", searchable: true, sortable: true, validation: { required: true, minLength: 1, maxLength: 150, nullable: false }, width: 220 },
@@ -1097,6 +1109,7 @@ function buildFormField(field: RuntimeField, input: FieldInput): RuntimeFormFiel
 export function getFallbackCatalogMetadata(catalog: string): CatalogMetadata | null {
   const inputs = catalogFields[catalog];
   const catalogReadOnly = [
+    "accounting-periods",
     "inventory-stocks",
     "item-availability",
     "inventory-reservations",

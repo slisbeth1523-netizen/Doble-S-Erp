@@ -119,7 +119,8 @@ const navigation: NavigationItem[] = [
     path: "/accounting/chart-of-accounts",
     children: [
       { label: "Catálogo de Cuentas", path: "/accounting/chart-of-accounts" },
-      { label: "Centros de costo", path: "/master-data/cost-centers" }
+      { label: "Centros de costo", path: "/master-data/cost-centers" },
+      { label: "Periodos contables", path: "/accounting/periods" }
     ]
   },
   { label: "Workflows", path: "/workflows" },
@@ -313,6 +314,10 @@ function breadcrumb(path: string) {
     return ["Doble S ERP", "Cuentas por cobrar", "Notas de credito"];
   }
 
+  if (segments[0] === "accounting" && segments[1] === "periods") {
+    return ["Doble S ERP", "Contabilidad", "Periodos contables"];
+  }
+
   const labels: Record<string, string> = {
     dashboard: "Dashboard",
     workflows: "Workflows",
@@ -479,6 +484,7 @@ export function AppLayout({ children, currentPath, onNavigate }: AppLayoutProps)
     { label: "Certificación e-CF (Emisor Electrónico)", category: "Facturación Fiscal / DGII", path: "/dgii/certification" },
     { label: "Catálogo de Cuentas Contables", category: "Contabilidad", path: "/accounting/chart-of-accounts" },
     { label: "Centros de costo", category: "Contabilidad", path: "/master-data/cost-centers" },
+    { label: "Periodos contables", category: "Contabilidad", path: "/accounting/periods" },
     { label: "Seguridad y Accesos", category: "Configuración", path: "/security" },
     { label: "Configuración General", category: "Configuración", path: "/settings" }
   ];
