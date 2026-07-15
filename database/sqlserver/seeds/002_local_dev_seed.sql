@@ -148,6 +148,11 @@ VALUES
   ('receivables', 'ar.customer-credit-notes.create', 'Local create customer credit notes'),
   ('receivables', 'ar.customer-credit-notes.update', 'Local update customer credit note applications'),
   ('receivables', 'ar.customer-credit-notes.post', 'Local post customer credit notes'),
+  ('accounting', 'accounting.cost-centers.read', 'Local read cost centers'),
+  ('accounting', 'accounting.cost-centers.create', 'Local create cost centers'),
+  ('accounting', 'accounting.cost-centers.update', 'Local update cost centers'),
+  ('accounting', 'accounting.cost-centers.activate', 'Local activate cost centers'),
+  ('accounting', 'accounting.cost-centers.deactivate', 'Local deactivate cost centers'),
   ('inventory', 'inventory.items.read', 'Local read items'),
   ('inventory', 'inventory.items.create', 'Local create items'),
   ('inventory', 'inventory.items.update', 'Local update items'),
@@ -215,6 +220,8 @@ DECLARE @PaymentTermId UNIQUEIDENTIFIER = '77777777-7777-7777-7777-777777777777'
 DECLARE @TaxCategoryId UNIQUEIDENTIFIER = '88888888-8888-8888-8888-888888888888';
 DECLARE @CategoryId UNIQUEIDENTIFIER = '99999999-9999-9999-9999-999999999999';
 DECLARE @BrandId UNIQUEIDENTIFIER = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+DECLARE @CostCenterAdminId UNIQUEIDENTIFIER = 'acacacac-acac-acac-acac-acacacacac01';
+DECLARE @CostCenterAccountingId UNIQUEIDENTIFIER = 'acacacac-acac-acac-acac-acacacacac02';
 DECLARE @WarehouseId UNIQUEIDENTIFIER = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee';
 DECLARE @TransitWarehouseId UNIQUEIDENTIFIER = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeef';
 DECLARE @InventoryMovementId UNIQUEIDENTIFIER = 'abababab-abab-abab-abab-abababababab';
@@ -314,6 +321,32 @@ BEGIN
   VALUES (
     @BrandId, @TenantId, @CompanyId, 'DOBLES', 'Doble S', 'Marca local de prueba',
     'https://local.dobles.example', 'DOM', 1, @UserId
+  );
+END;
+
+IF OBJECT_ID('accounting.CostCenters', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM accounting.CostCenters WHERE CostCenterId = @CostCenterAdminId)
+BEGIN
+  INSERT INTO accounting.CostCenters (
+    CostCenterId, TenantId, CompanyId, Code, Name, Description,
+    ParentCostCenterId, Level, AllowsPosting, ValidFrom, ValidTo, IsActive, CreatedBy
+  )
+  VALUES (
+    @CostCenterAdminId, @TenantId, @CompanyId, 'ADMIN', 'Administracion',
+    'Centro de costo administrativo demo', NULL, 1, 0, '2026-01-01', NULL, 1, @UserId
+  );
+END;
+
+IF OBJECT_ID('accounting.CostCenters', 'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM accounting.CostCenters WHERE CostCenterId = @CostCenterAccountingId)
+BEGIN
+  INSERT INTO accounting.CostCenters (
+    CostCenterId, TenantId, CompanyId, Code, Name, Description,
+    ParentCostCenterId, Level, AllowsPosting, ValidFrom, ValidTo, IsActive, CreatedBy
+  )
+  VALUES (
+    @CostCenterAccountingId, @TenantId, @CompanyId, 'CONTAB', 'Contabilidad',
+    'Centro de costo contable demo', @CostCenterAdminId, 2, 1, '2026-01-01', NULL, 1, @UserId
   );
 END;
 

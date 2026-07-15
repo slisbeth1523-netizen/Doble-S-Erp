@@ -1,4 +1,5 @@
 import sql from "mssql";
+import { randomUUID } from "node:crypto";
 
 import { getSqlConfig } from "./local-env.mjs";
 
@@ -14,6 +15,7 @@ const requiredCatalogs = [
   { code: "brands", seedCode: "DOBLES" },
   { code: "units-of-measure", seedCode: "UND" },
   { code: "warehouses", seedCode: "ALM-PRINCIPAL" },
+  { code: "cost-centers", seedCode: "ADMIN" },
   { code: "inventory-stocks", seedCode: "ART-DEMO" },
   { code: "inventory-movements", seedCode: "MOV-DEMO-001" },
   { code: "inventory-movement-lines", seedCode: "MOV-DEMO-001" }
@@ -112,6 +114,84 @@ async function setCatalogRecordActive(catalog, id, active, session) {
   });
 
   return body.data;
+}
+
+async function expectCatalogFailure(catalog, method, pathSuffix, payload, session) {
+  const result = await request(`/master-data/${catalog}${pathSuffix}`, {
+    method,
+    headers: authHeaders(session),
+    body: payload === undefined ? undefined : JSON.stringify(payload)
+  });
+
+  if (result.response.ok || result.body?.success !== false) {
+    fail(`Catalog ${catalog}${pathSuffix} must fail in a controlled way.`);
+  }
+
+  return result.body;
+}
+
+async function ensureOtherCompanyCostCenter(session, code) {
+  const companyId = "99999999-9999-9999-9999-999999999998";
+  const costCenterId = randomUUID();
+  const pool = await sql.connect(getSqlConfig());
+
+  try {
+    await pool
+      .request()
+      .input("TenantId", sql.UniqueIdentifier, session.user.tenantId)
+      .input("CompanyId", sql.UniqueIdentifier, companyId)
+      .input("CostCenterId", sql.UniqueIdentifier, costCenterId)
+      .input("Code", sql.NVarChar(30), code)
+      .query(`
+        IF NOT EXISTS (SELECT 1 FROM core.Companies WHERE CompanyId = @CompanyId)
+        BEGIN
+          INSERT INTO core.Companies (CompanyId, TenantId, LegalName, TradeName, TaxId, FiscalCountryCode, IsActive)
+          VALUES (@CompanyId, @TenantId, N'Compania aislamiento smoke', N'Aislamiento smoke', N'999999998', N'DO', 1);
+        END;
+
+        IF NOT EXISTS (
+          SELECT 1
+          FROM accounting.CostCenters
+          WHERE TenantId = @TenantId
+            AND CompanyId = @CompanyId
+            AND Code = @Code
+        )
+        BEGIN
+          INSERT INTO accounting.CostCenters (
+            CostCenterId,
+            TenantId,
+            CompanyId,
+            Code,
+            Name,
+            Description,
+            ParentCostCenterId,
+            Level,
+            AllowsPosting,
+            ValidFrom,
+            ValidTo,
+            IsActive
+          )
+          VALUES (
+            @CostCenterId,
+            @TenantId,
+            @CompanyId,
+            @Code,
+            N'Centro otra compania smoke',
+            N'Centro para validar aislamiento por compania',
+            NULL,
+            1,
+            1,
+            '2026-01-01',
+            '2026-12-31',
+            1
+          );
+        END;
+      `);
+  } finally {
+    await pool.close();
+  }
+
+  return { companyId, costCenterId };
 }
 
 async function postInventoryMovement(movementId, session) {
@@ -3256,6 +3336,22 @@ async function validateCatalogs(session) {
       }
     }
 
+    if (catalog.code === "cost-centers") {
+      const fields = metadata.data.fields.map((field) => field.field);
+      const missingFields = ["code", "name", "parentId", "level", "allowsPosting", "validFrom", "validTo"].filter(
+        (field) => !fields.includes(field)
+      );
+
+      if (missingFields.length) {
+        fail(`cost-centers metadata is missing fields: ${missingFields.join(", ")}.`);
+      }
+
+      const parentField = metadata.data.fields.find((field) => field.field === "parentId");
+      if (parentField?.lookupCatalog !== "cost-centers") {
+        fail("cost-centers metadata did not expose parentId lookupCatalog=cost-centers.");
+      }
+    }
+
     if (catalog.code === "inventory-stocks") {
       const fields = metadata.data.fields.map((field) => field.field);
       const missingFields = [
@@ -6301,6 +6397,238 @@ async function validateSalesReturnFlow(session) {
   }
 }
 
+async function validateCostCenterFlow(session) {
+  const suffix = smokeRun;
+  const rootCode = `CC-ROOT-${suffix}`;
+  const childCode = `CC-CHILD-${suffix}`;
+
+  smokeStep("cost center root create");
+  const root = await createCatalogRecord(
+    "cost-centers",
+    {
+      code: rootCode,
+      name: "Centro raiz QA",
+      description: "Centro de costo raiz smoke",
+      parentId: null,
+      allowsPosting: false,
+      validFrom: "2026-01-01",
+      validTo: "2026-12-31",
+      isActive: true
+    },
+    session
+  );
+
+  if (Number(root.level ?? 0) !== 1 || root.allowsPosting !== false) {
+    fail("Root cost center did not calculate level 1 or preserve allowsPosting=false.");
+  }
+
+  smokeStep("cost center child create");
+  const child = await createCatalogRecord(
+    "cost-centers",
+    {
+      code: childCode,
+      name: "Centro hijo QA",
+      description: "Centro de costo hijo smoke",
+      parentId: root.id,
+      allowsPosting: true,
+      validFrom: "2026-01-01",
+      validTo: "2026-12-31",
+      isActive: true
+    },
+    session
+  );
+
+  if (Number(child.level ?? 0) !== 2 || child.parentId?.toLowerCase() !== root.id.toLowerCase()) {
+    fail("Child cost center did not calculate level 2 under the selected parent.");
+  }
+
+  smokeStep("cost center update and search");
+  const updatedChild = await updateCatalogRecord(
+    "cost-centers",
+    child.id,
+    {
+      code: childCode,
+      name: "Centro hijo QA editado",
+      description: "Centro de costo hijo editado",
+      parentId: root.id,
+      allowsPosting: true,
+      validFrom: "2026-01-01",
+      validTo: "2026-12-31",
+      isActive: true
+    },
+    session
+  );
+  if (updatedChild.name !== "Centro hijo QA editado" || Number(updatedChild.level ?? 0) !== 2) {
+    fail("Updating cost center did not preserve calculated level or changed values.");
+  }
+
+  const foundChild = await findCatalogRecord("cost-centers", childCode, session);
+  if (!foundChild || foundChild.id !== child.id) {
+    fail("Created cost center was not found by runtime search.");
+  }
+
+  smokeStep("cost center deactivate/reactivate");
+  const deactivated = await setCatalogRecordActive("cost-centers", child.id, false, session);
+  if (deactivated.isActive !== false) {
+    fail("Cost center deactivate did not set isActive=false.");
+  }
+  const reactivated = await setCatalogRecordActive("cost-centers", child.id, true, session);
+  if (reactivated.isActive !== true) {
+    fail("Cost center reactivate did not set isActive=true.");
+  }
+
+  smokeStep("cost center subtree level recalculation");
+  const hierarchyCodes = {
+    a: `CC-A-${suffix}`,
+    b: `CC-B-${suffix}`,
+    c: `CC-C-${suffix}`,
+    d: `CC-D-${suffix}`,
+    e: `CC-E-${suffix}`,
+    f: `CC-F-${suffix}`
+  };
+  const payloadForCostCenter = (code, name, parentId = null) => ({
+    code,
+    name,
+    description: `${name} smoke`,
+    parentId,
+    allowsPosting: true,
+    validFrom: "2026-01-01",
+    validTo: "2026-12-31",
+    isActive: true
+  });
+  const a = await createCatalogRecord("cost-centers", payloadForCostCenter(hierarchyCodes.a, "Centro A"), session);
+  const b = await createCatalogRecord("cost-centers", payloadForCostCenter(hierarchyCodes.b, "Centro B", a.id), session);
+  const c = await createCatalogRecord("cost-centers", payloadForCostCenter(hierarchyCodes.c, "Centro C", b.id), session);
+  const d = await createCatalogRecord("cost-centers", payloadForCostCenter(hierarchyCodes.d, "Centro D"), session);
+  const e = await createCatalogRecord("cost-centers", payloadForCostCenter(hierarchyCodes.e, "Centro E", d.id), session);
+  const f = await createCatalogRecord("cost-centers", payloadForCostCenter(hierarchyCodes.f, "Centro F", e.id), session);
+
+  if (
+    Number(a.level ?? 0) !== 1 ||
+    Number(b.level ?? 0) !== 2 ||
+    Number(c.level ?? 0) !== 3 ||
+    Number(d.level ?? 0) !== 1 ||
+    Number(e.level ?? 0) !== 2 ||
+    Number(f.level ?? 0) !== 3
+  ) {
+    fail("Initial cost center hierarchy did not calculate expected levels.");
+  }
+
+  const movedB = await updateCatalogRecord(
+    "cost-centers",
+    b.id,
+    payloadForCostCenter(hierarchyCodes.b, "Centro B movido", f.id),
+    session
+  );
+  const movedC = await findCatalogRecord("cost-centers", hierarchyCodes.c, session);
+  const unchangedA = await findCatalogRecord("cost-centers", hierarchyCodes.a, session);
+  const unchangedD = await findCatalogRecord("cost-centers", hierarchyCodes.d, session);
+  const unchangedE = await findCatalogRecord("cost-centers", hierarchyCodes.e, session);
+  const unchangedF = await findCatalogRecord("cost-centers", hierarchyCodes.f, session);
+
+  if (movedB.parentId?.toLowerCase() !== f.id.toLowerCase() || Number(movedB.level ?? 0) !== 4) {
+    fail("Moving cost center B under F did not update parent relation or level 4.");
+  }
+
+  if (!movedC || movedC.parentId?.toLowerCase() !== b.id.toLowerCase() || Number(movedC.level ?? 0) !== 5) {
+    fail("Moving cost center B did not recalculate descendant C to level 5.");
+  }
+
+  if (
+    Number(unchangedA?.level ?? 0) !== 1 ||
+    Number(unchangedD?.level ?? 0) !== 1 ||
+    Number(unchangedE?.level ?? 0) !== 2 ||
+    Number(unchangedF?.level ?? 0) !== 3
+  ) {
+    fail("Moving cost center subtree changed unrelated hierarchy levels.");
+  }
+
+  smokeStep("cost center validation failures");
+  await expectCatalogFailure(
+    "cost-centers",
+    "POST",
+    "",
+    {
+      code: rootCode,
+      name: "Duplicado QA",
+      parentId: null,
+      allowsPosting: true,
+      validFrom: "2026-01-01",
+      validTo: "2026-12-31",
+      isActive: true
+    },
+    session
+  );
+
+  await expectCatalogFailure(
+    "cost-centers",
+    "POST",
+    "",
+    {
+      code: `CC-DATE-${suffix}`,
+      name: "Fechas invalidas QA",
+      parentId: null,
+      allowsPosting: true,
+      validFrom: "2026-12-31",
+      validTo: "2026-01-01",
+      isActive: true
+    },
+    session
+  );
+
+  await expectCatalogFailure(
+    "cost-centers",
+    "PUT",
+    `/${child.id}`,
+    {
+      code: childCode,
+      name: "Padre propio QA",
+      description: "Intento invalido",
+      parentId: child.id,
+      allowsPosting: true,
+      validFrom: "2026-01-01",
+      validTo: "2026-12-31",
+      isActive: true
+    },
+    session
+  );
+
+  await expectCatalogFailure(
+    "cost-centers",
+    "PUT",
+    `/${f.id}`,
+    {
+      code: hierarchyCodes.f,
+      name: "Ciclo QA",
+      description: "Intento de ciclo",
+      parentId: movedC.id,
+      allowsPosting: false,
+      validFrom: "2026-01-01",
+      validTo: "2026-12-31",
+      isActive: true
+    },
+    session
+  );
+
+  const otherCompanyParent = await ensureOtherCompanyCostCenter(session, `CC-OTHER-${suffix}`);
+  await expectCatalogFailure(
+    "cost-centers",
+    "PUT",
+    `/${d.id}`,
+    {
+      code: hierarchyCodes.d,
+      name: "Padre otra compania QA",
+      description: "Intento de padre de otra compania",
+      parentId: otherCompanyParent.costCenterId,
+      allowsPosting: true,
+      validFrom: "2026-01-01",
+      validTo: "2026-12-31",
+      isActive: true
+    },
+    session
+  );
+}
+
 async function validateCrud(session) {
   const suffix = smokeRun;
   const customerCode = `QA-CUST-${suffix}`;
@@ -6544,6 +6872,7 @@ async function main() {
   await validateSalesShipmentFlow(session);
   await validateSalesInvoiceFlow(session);
   await validateSalesReturnFlow(session);
+  await validateCostCenterFlow(session);
   await validateCrud(session);
   console.log("smoke: local runtime validation OK");
 }

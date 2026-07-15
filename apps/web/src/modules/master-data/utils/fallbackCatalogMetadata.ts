@@ -92,6 +92,17 @@ const technicalFields: FieldInput[] = [
 ];
 
 const catalogFields: Record<string, FieldInput[]> = {
+  "cost-centers": [
+    { field: "code", label: "Codigo", searchable: true, sortable: true, validation: { required: true, minLength: 1, maxLength: 30, nullable: false }, width: 130 },
+    { field: "name", label: "Nombre", searchable: true, sortable: true, validation: { required: true, minLength: 1, maxLength: 150, nullable: false }, width: 220 },
+    { field: "description", label: "Descripcion", type: "textarea", searchable: true, validation: { maxLength: 500, nullable: true }, width: 280 },
+    { field: "parentId", label: "Centro padre", type: "lookup", lookupCatalog: "cost-centers", visibleInGrid: false, validation: { nullable: true } },
+    { field: "level", label: "Nivel", type: "number", sortable: true, editable: false, readOnly: true, defaultValue: 1, validation: { min: 1, nullable: false }, width: 90, align: "right" },
+    { field: "allowsPosting", label: "Acepta movimientos", type: "boolean", sortable: true, defaultValue: true, validation: { nullable: false }, width: 140, align: "center", format: "boolean" },
+    { field: "validFrom", label: "Valido desde", type: "date", sortable: true, validation: { nullable: true }, width: 130 },
+    { field: "validTo", label: "Valido hasta", type: "date", sortable: true, validation: { nullable: true }, width: 130 },
+    technicalFields[3]!
+  ],
   customers: [
     ...technicalFields.slice(0, 2),
     { field: "commercialName", label: "Nombre comercial", searchable: true, sortable: true, width: 220 },

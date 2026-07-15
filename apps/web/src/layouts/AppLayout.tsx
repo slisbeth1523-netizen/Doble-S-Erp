@@ -118,7 +118,8 @@ const navigation: NavigationItem[] = [
     label: "Contabilidad",
     path: "/accounting/chart-of-accounts",
     children: [
-      { label: "Catálogo de Cuentas", path: "/accounting/chart-of-accounts" }
+      { label: "Catálogo de Cuentas", path: "/accounting/chart-of-accounts" },
+      { label: "Centros de costo", path: "/master-data/cost-centers" }
     ]
   },
   { label: "Workflows", path: "/workflows" },
@@ -191,6 +192,10 @@ function breadcrumb(path: string) {
       segments[1] === "supplier-adjustment-applications"
     ) {
       return ["Doble S ERP", "Cuentas por pagar", getCatalogLabel(segments[1] ?? "")];
+    }
+
+    if (segments[1] === "cost-centers") {
+      return ["Doble S ERP", "Contabilidad", getCatalogLabel(segments[1] ?? "")];
     }
 
     if (
@@ -473,6 +478,7 @@ export function AppLayout({ children, currentPath, onNavigate }: AppLayoutProps)
     { label: "Reportes DGII (606, 607, 608, 609)", category: "Facturación Fiscal / DGII", path: "/dgii/reports" },
     { label: "Certificación e-CF (Emisor Electrónico)", category: "Facturación Fiscal / DGII", path: "/dgii/certification" },
     { label: "Catálogo de Cuentas Contables", category: "Contabilidad", path: "/accounting/chart-of-accounts" },
+    { label: "Centros de costo", category: "Contabilidad", path: "/master-data/cost-centers" },
     { label: "Seguridad y Accesos", category: "Configuración", path: "/security" },
     { label: "Configuración General", category: "Configuración", path: "/settings" }
   ];

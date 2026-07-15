@@ -51,7 +51,8 @@ export const catalogLabels: Record<string, string> = {
   "customer-credit-note-applications": "Aplicaciones de notas de credito",
   "customer-statements": "Estado de cuenta clientes",
   "customer-aging": "Antiguedad de clientes",
-  "customer-receivable-balances": "Saldos por cliente"
+  "customer-receivable-balances": "Saldos por cliente",
+  "cost-centers": "Centros de costo"
 };
 
 export function getCatalogLabel(catalog: string) {

@@ -160,6 +160,7 @@ export class BaseCatalogService extends BaseService {
       userId: context.userId
     };
     this.validatePayload(definition, normalizedInput);
+    await this.prepareSpecialCatalogPayload(definition, context, normalizedInput);
     await this.ensureUniqueCode(definition, context, normalizedInput.code, normalizedInput.companyId);
     const item = await this.repository.create(definition, normalizedInput);
 
@@ -186,8 +187,11 @@ export class BaseCatalogService extends BaseService {
       userId: context.userId
     };
     this.validatePayload(definition, normalizedInput);
+    await this.prepareSpecialCatalogPayload(definition, context, normalizedInput, id);
     await this.ensureUniqueCode(definition, context, normalizedInput.code, normalizedInput.companyId, id);
-    const item = await this.repository.update(definition, id, normalizedInput);
+    const item = definition.catalogCode === "cost-centers"
+      ? await this.repository.updateCostCenterHierarchy(definition, id, normalizedInput)
+      : await this.repository.update(definition, id, normalizedInput);
 
     const found = this.ensureFound(item, `${definition.displayName} item not found`);
     logger.info("Master data item updated", {
@@ -266,6 +270,121 @@ export class BaseCatalogService extends BaseService {
 
     if (errors.length > 0) {
       throw new ValidationError("Catalog payload validation failed", errors, "CATALOG_VALIDATION_ERROR");
+    }
+  }
+
+  private async prepareSpecialCatalogPayload(
+    definition: CatalogDefinition,
+    context: CatalogContext,
+    input: CatalogWriteInput,
+    currentId?: string
+  ) {
+    if (definition.catalogCode !== "cost-centers") {
+      return;
+    }
+
+    if (!input.companyId && !context.companyId) {
+      throw new ValidationError(
+        "Cost center requires company context",
+        [{ field: "companyId", message: "Company context is required" }],
+        "COST_CENTER_COMPANY_REQUIRED"
+      );
+    }
+
+    this.validateCostCenterDates(input);
+    const parentId = typeof input.parentId === "string" && input.parentId.trim() ? input.parentId : null;
+
+    if (currentId && parentId?.toLowerCase() === currentId.toLowerCase()) {
+      throw new ConflictError(
+        "Cost center cannot be its own parent",
+        { costCenterId: currentId },
+        "COST_CENTER_SELF_PARENT"
+      );
+    }
+
+    if (!parentId) {
+      input.parentId = null;
+      input.level = 1;
+      return;
+    }
+
+    const parent = await this.repository.findById(definition, context.tenantId, parentId, input.companyId ?? context.companyId);
+    if (!parent || parent.companyId !== (input.companyId ?? context.companyId)) {
+      throw new ValidationError(
+        "Parent cost center was not found in the active company",
+        [{ field: "parentId", message: "Parent cost center must belong to the same company" }],
+        "COST_CENTER_PARENT_NOT_FOUND"
+      );
+    }
+
+    if (currentId) {
+      await this.ensureCostCenterHasNoCycle(definition, context, currentId, parentId, input.companyId ?? context.companyId);
+    }
+
+    input.parentId = parentId;
+    input.level = Number(parent.level ?? 0) + 1;
+  }
+
+  private validateCostCenterDates(input: CatalogWriteInput) {
+    const validFrom = typeof input.validFrom === "string" && input.validFrom ? new Date(input.validFrom) : null;
+    const validTo = typeof input.validTo === "string" && input.validTo ? new Date(input.validTo) : null;
+
+    if (validFrom && Number.isNaN(validFrom.getTime())) {
+      throw new ValidationError(
+        "Cost center valid from date is invalid",
+        [{ field: "validFrom", message: "Valid from must be a valid date" }],
+        "COST_CENTER_INVALID_DATE"
+      );
+    }
+
+    if (validTo && Number.isNaN(validTo.getTime())) {
+      throw new ValidationError(
+        "Cost center valid to date is invalid",
+        [{ field: "validTo", message: "Valid to must be a valid date" }],
+        "COST_CENTER_INVALID_DATE"
+      );
+    }
+
+    if (validFrom && validTo && validTo < validFrom) {
+      throw new ValidationError(
+        "Cost center valid to date cannot be before valid from date",
+        [{ field: "validTo", message: "Valid to cannot be before valid from" }],
+        "COST_CENTER_INVALID_DATE_RANGE"
+      );
+    }
+  }
+
+  private async ensureCostCenterHasNoCycle(
+    definition: CatalogDefinition,
+    context: CatalogContext,
+    currentId: string,
+    parentId: string,
+    companyId?: string | null
+  ) {
+    const visited = new Set<string>();
+    let nextParentId: string | null = parentId;
+
+    while (nextParentId) {
+      const normalized = nextParentId.toLowerCase();
+      if (normalized === currentId.toLowerCase()) {
+        throw new ConflictError(
+          "Cost center hierarchy cannot contain cycles",
+          { costCenterId: currentId, parentId },
+          "COST_CENTER_HIERARCHY_CYCLE"
+        );
+      }
+
+      if (visited.has(normalized)) {
+        throw new ConflictError(
+          "Cost center hierarchy contains a cycle",
+          { costCenterId: currentId, parentId },
+          "COST_CENTER_HIERARCHY_CYCLE"
+        );
+      }
+
+      visited.add(normalized);
+      const parent = await this.repository.findById(definition, context.tenantId, nextParentId, companyId ?? context.companyId);
+      nextParentId = typeof parent?.parentId === "string" ? parent.parentId : null;
     }
   }
 
