@@ -9,11 +9,19 @@ import { sendSuccess } from "../../../../utils/responseBuilder.js";
 import { validateRequest } from "../../../../utils/validateRequest.js";
 import { inventoryReservationService } from "../../../inventory/application/InventoryReservationService.js";
 import { inventoryReservationCreateSchema } from "../../../inventory/validators/inventory-reservation.validators.js";
+import { salesCreditNoteService } from "../../application/SalesCreditNoteService.js";
 import { salesInvoiceService } from "../../application/SalesInvoiceService.js";
 import { salesOrderService } from "../../application/SalesOrderService.js";
 import { salesQuotationService } from "../../application/SalesQuotationService.js";
 import { salesReturnService } from "../../application/SalesReturnService.js";
 import { salesShipmentService } from "../../application/SalesShipmentService.js";
+import {
+  salesCreditNoteCreateFromReturnSchema,
+  salesCreditNoteCreditableReturnListQuerySchema,
+  salesCreditNoteIdParamsSchema,
+  salesCreditNoteListQuerySchema,
+  salesCreditNotePostSchema
+} from "../../validators/sales-credit-note.validators.js";
 import {
   salesInvoiceCreateSchema,
   salesInvoiceIdParamsSchema,
@@ -83,6 +91,61 @@ function salesContext(request: Parameters<typeof getRequestContext>[0]) {
     correlationId: context.correlationId
   };
 }
+
+salesRouter.get(
+  "/credit-notes/creditable-returns",
+  validateRequest({ query: salesCreditNoteCreditableReturnListQuerySchema }),
+  requirePermission("sales", "sales.credit-notes.read"),
+  asyncHandler(async (request, response) => {
+    const result = await salesCreditNoteService.listCreditableReturns(salesContext(request), request.query);
+
+    sendSuccess(response, result);
+  })
+);
+
+salesRouter.get(
+  "/credit-notes",
+  validateRequest({ query: salesCreditNoteListQuerySchema }),
+  requirePermission("sales", "sales.credit-notes.read"),
+  asyncHandler(async (request, response) => {
+    const result = await salesCreditNoteService.listSalesCreditNotes(salesContext(request), request.query);
+
+    sendSuccess(response, result);
+  })
+);
+
+salesRouter.get(
+  "/credit-notes/:id",
+  validateRequest({ params: salesCreditNoteIdParamsSchema }),
+  requirePermission("sales", "sales.credit-notes.read"),
+  asyncHandler(async (request, response) => {
+    const result = await salesCreditNoteService.getSalesCreditNote(salesContext(request), request.params.id!);
+
+    sendSuccess(response, result);
+  })
+);
+
+salesRouter.post(
+  "/credit-notes/from-return",
+  validateRequest({ body: salesCreditNoteCreateFromReturnSchema }),
+  requirePermission("sales", "sales.credit-notes.create"),
+  asyncHandler(async (request, response) => {
+    const result = await salesCreditNoteService.createFromReturn(salesContext(request), request.body);
+
+    sendSuccess(response, result, 201);
+  })
+);
+
+salesRouter.post(
+  "/credit-notes/:id/post",
+  validateRequest({ params: salesCreditNoteIdParamsSchema, body: salesCreditNotePostSchema }),
+  requirePermission("sales", "sales.credit-notes.post"),
+  asyncHandler(async (request, response) => {
+    const result = await salesCreditNoteService.postSalesCreditNote(salesContext(request), request.params.id!, request.body);
+
+    sendSuccess(response, result);
+  })
+);
 
 salesRouter.get(
   "/returns",

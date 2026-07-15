@@ -16,6 +16,8 @@ export const catalogLabels: Record<string, string> = {
   "sales-return-lines": "Lineas de devoluciones",
   "sales-shipment-returns": "Devoluciones por despacho",
   "sales-invoice-returns": "Devoluciones por factura",
+  "sales-credit-notes": "Notas de credito de ventas",
+  "sales-credit-note-pending": "Devoluciones pendientes de nota credito",
   "purchase-orders": "Ordenes de compra",
   "purchase-order-lines": "Lineas de ordenes de compra",
   "purchase-receipts": "Recepciones de compra",

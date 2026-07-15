@@ -803,6 +803,44 @@ async function getSalesReturns(query, session) {
   return body.data;
 }
 
+async function getSalesCreditNoteCreditableReturns(query, session) {
+  const params = new URLSearchParams(query);
+  const body = await expectOk(`/sales/credit-notes/creditable-returns?${params.toString()}`, {
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
+async function getSalesCreditNotes(query, session) {
+  const params = new URLSearchParams(query);
+  const body = await expectOk(`/sales/credit-notes?${params.toString()}`, {
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
+async function createSalesCreditNoteFromReturn(payload, session) {
+  const body = await expectOk("/sales/credit-notes/from-return", {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function postSalesCreditNote(customerCreditNoteId, payload, session) {
+  const body = await expectOk(`/sales/credit-notes/${customerCreditNoteId}/post`, {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
 async function expectSalesReturnFailure(path, payload, session) {
   const result = await request(path, {
     method: "POST",
@@ -854,6 +892,20 @@ async function expectSalesInvoiceFailure(path, payload, session) {
 
   if (result.response.ok || result.body?.success !== false) {
     fail(`Sales invoice request ${path} must fail in a controlled way.`);
+  }
+
+  return result.body;
+}
+
+async function expectSalesCreditNoteFailure(path, payload, session) {
+  const result = await request(path, {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  if (result.response.ok || result.body?.success !== false) {
+    fail(`Sales credit note request ${path} must fail in a controlled way.`);
   }
 
   return result.body;
@@ -2514,6 +2566,31 @@ async function countInventoryMovements(session) {
   }
 }
 
+async function countInventoryLedgerEntries(session) {
+  if (!session.user.companyId) {
+    fail("Cannot count inventory ledger entries without company context.");
+  }
+
+  const pool = await sql.connect(getSqlConfig());
+
+  try {
+    const result = await pool
+      .request()
+      .input("TenantId", sql.UniqueIdentifier, session.user.tenantId)
+      .input("CompanyId", sql.UniqueIdentifier, session.user.companyId)
+      .query(`
+        SELECT COUNT(1) AS LedgerEntryCount
+        FROM inventory.InventoryLedgerEntries
+        WHERE TenantId = @TenantId
+          AND CompanyId = @CompanyId;
+      `);
+
+    return Number(result.recordset[0]?.LedgerEntryCount ?? 0);
+  } finally {
+    await pool.close();
+  }
+}
+
 async function countPhysicalCountAdjustments(session, countNumber) {
   if (!session.user.companyId) {
     fail("Cannot count physical count adjustments without company context.");
@@ -3597,7 +3674,14 @@ async function validateSalesInvoiceMetadata(session) {
 }
 
 async function validateSalesReturnMetadata(session) {
-  for (const catalog of ["sales-returns", "sales-return-lines", "sales-shipment-returns", "sales-invoice-returns"]) {
+  for (const catalog of [
+    "sales-returns",
+    "sales-return-lines",
+    "sales-shipment-returns",
+    "sales-invoice-returns",
+    "sales-credit-note-pending",
+    "sales-credit-notes"
+  ]) {
     smokeStep(`metadata ${catalog}`);
     const metadata = await expectOk(`/master-data/${catalog}/metadata`, {
       headers: authHeaders(session)
@@ -3613,7 +3697,11 @@ async function validateSalesReturnMetadata(session) {
         ? ["returnNumber", "orderNumber", "shipmentNumber", "customerName", "status", "returnDate", "totalQuantity"]
         : catalog === "sales-return-lines"
           ? ["returnNumber", "shipmentNumber", "lineNumber", "itemCode", "warehouseCode", "quantity"]
-          : ["shipmentNumber", "orderNumber", "itemCode", "shippedQuantity", "previouslyReturnedQuantity", "returnableQuantity"];
+          : catalog === "sales-credit-note-pending"
+            ? ["returnNumber", "invoiceNumber", "accountsReceivableDocumentNumber", "customerName", "returnedAmount", "pendingCreditAmount"]
+            : catalog === "sales-credit-notes"
+              ? ["creditNoteNumber", "returnNumber", "invoiceNumber", "customerName", "status", "amount", "appliedAmount"]
+              : ["shipmentNumber", "orderNumber", "itemCode", "shippedQuantity", "previouslyReturnedQuantity", "returnableQuantity"];
     const missingFields = expectedFields.filter((field) => !fields.includes(field));
 
     if (missingFields.length) {
@@ -6301,6 +6389,279 @@ async function validateSalesReturnFlow(session) {
   }
 }
 
+async function validateSalesCreditNoteFlow(session) {
+  smokeStep("sales credit note integration setup");
+  const { itemId, warehouseId } = await getDemoPurchaseReferences(session);
+  await releaseSmokeInventoryReservations(session, itemId, warehouseId);
+  await setSmokeStockQuantity(session, itemId, warehouseId, 10);
+
+  const order = await createApprovedReservationOrder(session, `CRN-SAL-${smokeRun}`, 10, true);
+  const reservation = await reserveSalesOrderLine(
+    order.order.id,
+    order.line.id,
+    {
+      idempotencyKey: reservationIdempotencyKey("credit-note-reserve"),
+      quantity: 10,
+      reference: `CRN-SAL-${smokeRun}`
+    },
+    session
+  );
+  const shipment = await createSalesShipment(
+    {
+      salesOrderId: order.order.id,
+      reference: `CRN-SHP-${smokeRun}`,
+      notes: "Despacho para nota credito smoke"
+    },
+    session
+  );
+  await addSalesShipmentLine(
+    shipment.id,
+    {
+      salesOrderLineId: order.line.id,
+      inventoryReservationId: reservation.id,
+      quantity: 10,
+      notes: "Linea despachada para nota credito smoke"
+    },
+    session
+  );
+  const postedShipment = await postSalesShipment(
+    shipment.id,
+    { idempotencyKey: reservationIdempotencyKey("credit-note-shipment-post") },
+    session
+  );
+  const invoice = await createSalesInvoice(
+    {
+      salesOrderId: order.order.id,
+      dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+      reference: `CRN-FAC-${smokeRun}`,
+      notes: "Factura para nota credito smoke"
+    },
+    session
+  );
+  const pendingInvoiceLines = await getSalesOrderInvoiceLines(order.order.id, session);
+  const pendingInvoiceLine = pendingInvoiceLines.find((line) => line.salesShipmentLineId);
+  if (!pendingInvoiceLine) {
+    fail("Sales credit note setup did not expose invoice pending line.");
+  }
+  await addSalesInvoiceLine(
+    invoice.id,
+    {
+      salesShipmentLineId: pendingInvoiceLine.salesShipmentLineId,
+      quantity: 10,
+      notes: "Factura completa para nota credito smoke"
+    },
+    session
+  );
+  const postedInvoice = await postSalesInvoice(
+    invoice.id,
+    { idempotencyKey: reservationIdempotencyKey("credit-note-invoice-post") },
+    session
+  );
+  if (postedInvoice.status !== "POSTED" || !postedInvoice.accountsReceivableDocumentId) {
+    fail("Sales credit note setup did not post invoice with AR document.");
+  }
+
+  const returnable = await getSalesShipmentReturnableLines(postedShipment.id, session);
+  const returnableLine = returnable.find((line) => line.salesShipmentLineId);
+  if (!returnableLine || !returnableLine.salesInvoiceLineId || Number(returnableLine.returnableQuantity) !== 10) {
+    fail("Sales credit note setup did not expose invoiced returnable quantity 10.");
+  }
+  const salesReturn = await createSalesReturn(
+    {
+      salesShipmentId: postedShipment.id,
+      salesInvoiceId: postedInvoice.id,
+      reason: "Devolucion para nota credito smoke",
+      reference: `CRN-RET-${smokeRun}`
+    },
+    session
+  );
+  await addSalesReturnLine(
+    salesReturn.id,
+    {
+      salesShipmentLineId: returnableLine.salesShipmentLineId,
+      quantity: 10,
+      reason: "Devolucion completa para nota credito smoke"
+    },
+    session
+  );
+  const postedReturn = await postSalesReturn(
+    salesReturn.id,
+    { idempotencyKey: reservationIdempotencyKey("credit-note-return-post") },
+    session
+  );
+  if (postedReturn.status !== "POSTED") {
+    fail("Sales credit note setup did not post return.");
+  }
+
+  const stockBeforeCredits = await getSmokeStockSnapshot(session, itemId, warehouseId);
+  const movementCountBeforeCredits = await countInventoryMovements(session);
+  const ledgerCountBeforeCredits = await countInventoryLedgerEntries(session);
+  const arBeforeCredits = await getAccountsReceivableDocumentSnapshot(postedInvoice.accountsReceivableDocumentId, session);
+  if (arBeforeCredits.status !== "OPEN" || arBeforeCredits.remainingAmount <= 0) {
+    fail("Sales credit note setup AR document was not OPEN with pending balance.");
+  }
+
+  smokeStep("sales credit note partial draft");
+  const pendingBefore = await getSalesCreditNoteCreditableReturns(
+    { salesReturnId: postedReturn.id, page: "1", pageSize: "10" },
+    session
+  );
+  const pendingReturn = pendingBefore.records?.find((record) => record.salesReturnId === postedReturn.id);
+  if (!pendingReturn || Number(pendingReturn.pendingCreditAmount ?? 0) <= 0) {
+    fail("Creditable sales return was not exposed for credit note creation.");
+  }
+  assertAmount(pendingReturn.pendingCreditAmount, arBeforeCredits.totalAmount, "Creditable return amount must match invoice balance");
+  const partialAmount = Number((Number(pendingReturn.pendingCreditAmount) / 2).toFixed(2));
+  const partialCreateKey = reservationIdempotencyKey("sales-credit-note-create-partial");
+  const partialNote = await createSalesCreditNoteFromReturn(
+    {
+      salesReturnId: postedReturn.id,
+      amount: partialAmount,
+      reference: `CRN-PART-${smokeRun}`,
+      notes: "Nota credito parcial smoke",
+      idempotencyKey: partialCreateKey
+    },
+    session
+  );
+  if (partialNote.status !== "DRAFT" || Number(partialNote.amount) !== partialAmount) {
+    fail("Partial sales credit note was not created in DRAFT with expected amount.");
+  }
+  const retriedPartialCreate = await createSalesCreditNoteFromReturn(
+    {
+      salesReturnId: postedReturn.id,
+      amount: partialAmount,
+      reference: `CRN-PART-${smokeRun}`,
+      notes: "Nota credito parcial smoke",
+      idempotencyKey: partialCreateKey
+    },
+    session
+  );
+  if (retriedPartialCreate.customerCreditNoteId !== partialNote.customerCreditNoteId) {
+    fail("Retrying sales credit note creation did not return the original note.");
+  }
+  await expectSalesCreditNoteFailure(
+    "/sales/credit-notes/from-return",
+    {
+      salesReturnId: postedReturn.id,
+      amount: partialAmount + 1,
+      reference: `CRN-PART-${smokeRun}`,
+      notes: "Nota credito parcial smoke",
+      idempotencyKey: partialCreateKey
+    },
+    session
+  );
+  const arAfterDraft = await getAccountsReceivableDocumentSnapshot(postedInvoice.accountsReceivableDocumentId, session);
+  if (
+    arAfterDraft.paidAmount !== arBeforeCredits.paidAmount ||
+    arAfterDraft.remainingAmount !== arBeforeCredits.remainingAmount ||
+    arAfterDraft.status !== arBeforeCredits.status
+  ) {
+    fail("Draft sales credit note changed AR document balances.");
+  }
+
+  smokeStep("sales credit note partial post");
+  const partialPostKey = reservationIdempotencyKey("sales-credit-note-post-partial");
+  const postedPartialNote = await postSalesCreditNote(partialNote.customerCreditNoteId, { idempotencyKey: partialPostKey }, session);
+  if (postedPartialNote.status !== "POSTED") {
+    fail("Partial sales credit note was not posted.");
+  }
+  const arAfterPartial = await getAccountsReceivableDocumentSnapshot(postedInvoice.accountsReceivableDocumentId, session);
+  assertAmount(arAfterPartial.paidAmount, partialAmount, "Partial sales credit note did not increase paid amount");
+  assertAmount(arAfterPartial.remainingAmount, arBeforeCredits.totalAmount - partialAmount, "Partial sales credit note did not reduce remaining amount");
+  if (arAfterPartial.status !== "PARTIALLY_PAID") {
+    fail("Partial sales credit note did not set AR status to PARTIALLY_PAID.");
+  }
+  const retriedPartialPost = await postSalesCreditNote(partialNote.customerCreditNoteId, { idempotencyKey: partialPostKey }, session);
+  const arAfterPartialRetry = await getAccountsReceivableDocumentSnapshot(postedInvoice.accountsReceivableDocumentId, session);
+  if (retriedPartialPost.customerCreditNoteId !== partialNote.customerCreditNoteId) {
+    fail("Retrying sales credit note post did not return the original note.");
+  }
+  assertAmount(arAfterPartialRetry.paidAmount, arAfterPartial.paidAmount, "Retrying partial sales credit note duplicated paid amount");
+  assertAmount(arAfterPartialRetry.remainingAmount, arAfterPartial.remainingAmount, "Retrying partial sales credit note duplicated remaining amount");
+  await expectSalesCreditNoteFailure(
+    `/sales/credit-notes/${partialNote.customerCreditNoteId}/post`,
+    { idempotencyKey: reservationIdempotencyKey("sales-credit-note-post-again") },
+    session
+  );
+
+  smokeStep("sales credit note final post");
+  const pendingAfterPartial = await getSalesCreditNoteCreditableReturns(
+    { salesReturnId: postedReturn.id, page: "1", pageSize: "10" },
+    session
+  );
+  const remainingPending = pendingAfterPartial.records?.find((record) => record.salesReturnId === postedReturn.id);
+  if (!remainingPending) {
+    fail("Sales credit note pending amount disappeared before final credit.");
+  }
+  const finalAmount = Number(remainingPending.pendingCreditAmount);
+  assertAmount(finalAmount, arAfterPartial.remainingAmount, "Final sales credit note amount must match AR remaining balance");
+  const finalNote = await createSalesCreditNoteFromReturn(
+    {
+      salesReturnId: postedReturn.id,
+      amount: finalAmount,
+      reference: `CRN-FINAL-${smokeRun}`,
+      notes: "Nota credito final smoke",
+      idempotencyKey: reservationIdempotencyKey("sales-credit-note-create-final")
+    },
+    session
+  );
+  const postedFinalNote = await postSalesCreditNote(
+    finalNote.customerCreditNoteId,
+    { idempotencyKey: reservationIdempotencyKey("sales-credit-note-post-final") },
+    session
+  );
+  if (postedFinalNote.status !== "POSTED") {
+    fail("Final sales credit note was not posted.");
+  }
+  const arAfterFinal = await getAccountsReceivableDocumentSnapshot(postedInvoice.accountsReceivableDocumentId, session);
+  if (arAfterFinal.status !== "PAID") {
+    fail("Final sales credit note did not close AR document.");
+  }
+  assertAmount(arAfterFinal.paidAmount, arBeforeCredits.totalAmount, "Final sales credit note did not pay full AR document");
+  assertAmount(arAfterFinal.remainingAmount, 0, "Final sales credit note did not leave AR remaining amount at zero");
+
+  smokeStep("sales credit note excess rejected and no inventory effects");
+  await expectSalesCreditNoteFailure(
+    "/sales/credit-notes/from-return",
+    {
+      salesReturnId: postedReturn.id,
+      amount: 1,
+      reference: `CRN-OVER-${smokeRun}`,
+      notes: "Exceso nota credito smoke",
+      idempotencyKey: reservationIdempotencyKey("sales-credit-note-create-over")
+    },
+    session
+  );
+  const pendingAfterFinal = await getSalesCreditNoteCreditableReturns(
+    { salesReturnId: postedReturn.id, page: "1", pageSize: "10" },
+    session
+  );
+  if (pendingAfterFinal.records?.some((record) => record.salesReturnId === postedReturn.id)) {
+    fail("Fully credited return still appears as pending.");
+  }
+  const creditNotes = await getSalesCreditNotes({ salesReturnId: postedReturn.id, page: "1", pageSize: "10" }, session);
+  if (!creditNotes.records?.some((record) => record.customerCreditNoteId === partialNote.customerCreditNoteId) ||
+      !creditNotes.records?.some((record) => record.customerCreditNoteId === finalNote.customerCreditNoteId)) {
+    fail("Sales credit note list did not expose both posted notes.");
+  }
+  const stockAfterCredits = await getSmokeStockSnapshot(session, itemId, warehouseId);
+  const movementCountAfterCredits = await countInventoryMovements(session);
+  const ledgerCountAfterCredits = await countInventoryLedgerEntries(session);
+  if (
+    stockAfterCredits.quantityOnHand !== stockBeforeCredits.quantityOnHand ||
+    stockAfterCredits.quantityReserved !== stockBeforeCredits.quantityReserved ||
+    movementCountAfterCredits !== movementCountBeforeCredits ||
+    ledgerCountAfterCredits !== ledgerCountBeforeCredits
+  ) {
+    fail("Sales credit notes created inventory stock, movement or ledger effects.");
+  }
+
+  const runtimeNote = await findCatalogRecord("sales-credit-notes", postedPartialNote.creditNoteNumber, session);
+  if (!runtimeNote || runtimeNote.status !== "POSTED") {
+    fail("/master-data/sales-credit-notes did not expose the posted sales credit note.");
+  }
+}
+
 async function validateCrud(session) {
   const suffix = smokeRun;
   const customerCode = `QA-CUST-${suffix}`;
@@ -6544,6 +6905,7 @@ async function main() {
   await validateSalesShipmentFlow(session);
   await validateSalesInvoiceFlow(session);
   await validateSalesReturnFlow(session);
+  await validateSalesCreditNoteFlow(session);
   await validateCrud(session);
   console.log("smoke: local runtime validation OK");
 }
