@@ -189,7 +189,9 @@ export class BaseCatalogService extends BaseService {
     this.validatePayload(definition, normalizedInput);
     await this.prepareSpecialCatalogPayload(definition, context, normalizedInput, id);
     await this.ensureUniqueCode(definition, context, normalizedInput.code, normalizedInput.companyId, id);
-    const item = await this.repository.update(definition, id, normalizedInput);
+    const item = definition.catalogCode === "cost-centers"
+      ? await this.repository.updateCostCenterHierarchy(definition, id, normalizedInput)
+      : await this.repository.update(definition, id, normalizedInput);
 
     const found = this.ensureFound(item, `${definition.displayName} item not found`);
     logger.info("Master data item updated", {

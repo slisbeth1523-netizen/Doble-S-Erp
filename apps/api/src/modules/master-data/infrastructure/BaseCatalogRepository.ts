@@ -1,6 +1,8 @@
 import type { BaseFilters, Pagination, Sorting } from "@doble-s-erp/shared";
+import sql from "mssql";
 
 import { BaseSqlRepository, type SqlParameter } from "../../../repositories/BaseSqlRepository.js";
+import { ConflictError, ValidationError } from "../../../errors/index.js";
 import type { CatalogDefinition } from "../domain/catalog-definition.js";
 
 export type CatalogListInput = {
@@ -335,6 +337,187 @@ export class BaseCatalogRepository extends BaseSqlRepository {
     return result[0];
   }
 
+  async updateCostCenterHierarchy(definition: CatalogDefinition, id: string, input: CatalogWriteInput) {
+    const parentId = typeof input.parentId === "string" && input.parentId.trim() ? input.parentId : null;
+    const companyId = typeof input.companyId === "string" ? input.companyId : null;
+
+    return this.executeInTransaction(async (transaction) => {
+      const current = await this.queryInTransaction<CatalogRecord>(
+        transaction,
+        `
+          SELECT
+            ${buildSelectColumns(definition)}
+          FROM ${definition.tableName} WITH (UPDLOCK, HOLDLOCK, ROWLOCK)
+          WHERE ${definition.columns.tenantId} = @TenantId
+            AND ${definition.columns.companyId} = @CompanyId
+            AND ${definition.idColumn} = @Id
+        `,
+        [
+          { name: "TenantId", value: input.tenantId },
+          { name: "CompanyId", value: companyId },
+          { name: "Id", value: id }
+        ]
+      );
+
+      if (!current[0]) {
+        return undefined;
+      }
+
+      let parentLevel = 0;
+      if (parentId) {
+        const parent = await this.queryInTransaction<CatalogRecord>(
+          transaction,
+          `
+            SELECT
+              ${buildSelectColumns(definition)}
+            FROM ${definition.tableName} WITH (UPDLOCK, HOLDLOCK, ROWLOCK)
+            WHERE ${definition.columns.tenantId} = @TenantId
+              AND ${definition.columns.companyId} = @CompanyId
+              AND ${definition.idColumn} = @ParentId
+          `,
+          [
+            { name: "TenantId", value: input.tenantId },
+            { name: "CompanyId", value: companyId },
+            { name: "ParentId", value: parentId }
+          ]
+        );
+
+        if (!parent[0]) {
+          throw new ValidationError(
+            "Parent cost center was not found in the active company",
+            [{ field: "parentId", message: "Parent cost center must belong to the same company" }],
+            "COST_CENTER_PARENT_NOT_FOUND"
+          );
+        }
+
+        parentLevel = Number(parent[0].level ?? 0);
+      }
+
+      const descendants = await this.queryInTransaction<{ CostCenterId: string }>(
+        transaction,
+        `
+          WITH Descendants AS (
+            SELECT CostCenterId
+            FROM accounting.CostCenters WITH (UPDLOCK, HOLDLOCK, ROWLOCK)
+            WHERE TenantId = @TenantId
+              AND CompanyId = @CompanyId
+              AND CostCenterId = @Id
+
+            UNION ALL
+
+            SELECT child.CostCenterId
+            FROM accounting.CostCenters child WITH (UPDLOCK, HOLDLOCK, ROWLOCK)
+            INNER JOIN Descendants parent ON child.ParentCostCenterId = parent.CostCenterId
+            WHERE child.TenantId = @TenantId
+              AND child.CompanyId = @CompanyId
+          )
+          SELECT CostCenterId
+          FROM Descendants
+          OPTION (MAXRECURSION 32767);
+        `,
+        [
+          { name: "TenantId", value: input.tenantId },
+          { name: "CompanyId", value: companyId },
+          { name: "Id", value: id }
+        ]
+      );
+
+      if (parentId && descendants.some((row) => row.CostCenterId.toLowerCase() === parentId.toLowerCase())) {
+        throw new ConflictError(
+          "Cost center hierarchy cannot contain cycles",
+          { costCenterId: id, parentId },
+          "COST_CENTER_HIERARCHY_CYCLE"
+        );
+      }
+
+      const newLevel = parentLevel + 1;
+      await this.queryInTransaction(
+        transaction,
+        `
+          UPDATE ${definition.tableName}
+          SET
+            ${definition.columns.companyId ?? "CompanyId"} = @CompanyId,
+            ${definition.codeColumn} = @Code,
+            ${definition.nameColumn} = @Name,
+            ${definition.descriptionColumn ? `${definition.descriptionColumn} = @Description,` : ""}
+            ParentCostCenterId = @ParentCostCenterId,
+            Level = @Level,
+            AllowsPosting = @AllowsPosting,
+            ValidFrom = @ValidFrom,
+            ValidTo = @ValidTo,
+            ${definition.columns.isActive} = @IsActive,
+            ${definition.columns.updatedAt} = SYSUTCDATETIME(),
+            ${definition.columns.updatedBy} = @UpdatedBy
+          WHERE ${definition.columns.tenantId} = @TenantId
+            AND ${definition.columns.companyId} = @CompanyId
+            AND ${definition.idColumn} = @Id;
+
+          WITH Subtree AS (
+            SELECT
+              CostCenterId,
+              CAST(@Level AS INT) AS NewLevel
+            FROM accounting.CostCenters WITH (UPDLOCK, HOLDLOCK, ROWLOCK)
+            WHERE TenantId = @TenantId
+              AND CompanyId = @CompanyId
+              AND CostCenterId = @Id
+
+            UNION ALL
+
+            SELECT
+              child.CostCenterId,
+              parent.NewLevel + 1 AS NewLevel
+            FROM accounting.CostCenters child WITH (UPDLOCK, HOLDLOCK, ROWLOCK)
+            INNER JOIN Subtree parent ON child.ParentCostCenterId = parent.CostCenterId
+            WHERE child.TenantId = @TenantId
+              AND child.CompanyId = @CompanyId
+          )
+          UPDATE target
+          SET
+            target.Level = Subtree.NewLevel,
+            target.UpdatedAt = SYSUTCDATETIME(),
+            target.UpdatedBy = @UpdatedBy
+          FROM accounting.CostCenters target
+          INNER JOIN Subtree ON target.CostCenterId = Subtree.CostCenterId
+          OPTION (MAXRECURSION 32767);
+        `,
+        [
+          { name: "TenantId", value: input.tenantId },
+          { name: "CompanyId", value: companyId },
+          { name: "Id", value: id },
+          { name: "Code", value: input.code },
+          { name: "Name", value: input.name },
+          { name: "Description", value: input.description ?? null },
+          { name: "ParentCostCenterId", value: parentId },
+          { name: "Level", value: newLevel },
+          { name: "AllowsPosting", value: input.allowsPosting ?? true },
+          { name: "ValidFrom", value: input.validFrom ?? null },
+          { name: "ValidTo", value: input.validTo ?? null },
+          { name: "IsActive", value: input.isActive ?? true },
+          { name: "UpdatedBy", value: input.userId ?? null }
+        ]
+      );
+
+      const updated = await this.queryInTransaction<CatalogRecord>(
+        transaction,
+        `
+          SELECT
+            ${buildSelectColumns(definition)}
+          FROM ${definition.tableName}
+          WHERE ${definition.columns.tenantId} = @TenantId
+            AND ${definition.columns.companyId} = @CompanyId
+            AND ${definition.idColumn} = @Id
+        `,
+        [
+          { name: "TenantId", value: input.tenantId },
+          { name: "CompanyId", value: companyId },
+          { name: "Id", value: id }
+        ]
+      );
+
+      return updated[0];
+    });
+  }
+
   async setActive(
     definition: CatalogDefinition,
     tenantId: string,
@@ -363,5 +546,20 @@ export class BaseCatalogRepository extends BaseSqlRepository {
     );
 
     return result[0];
+  }
+
+  private async queryInTransaction<TRecord>(
+    transaction: sql.Transaction,
+    sqlText: string,
+    parameters: readonly SqlParameter[] = []
+  ): Promise<TRecord[]> {
+    const request = new sql.Request(transaction);
+
+    for (const parameter of parameters) {
+      request.input(parameter.name, parameter.value);
+    }
+
+    const result = await request.query(sqlText);
+    return result.recordset as TRecord[];
   }
 }

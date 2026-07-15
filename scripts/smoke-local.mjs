@@ -1,4 +1,5 @@
 import sql from "mssql";
+import { randomUUID } from "node:crypto";
 
 import { getSqlConfig } from "./local-env.mjs";
 
@@ -127,6 +128,70 @@ async function expectCatalogFailure(catalog, method, pathSuffix, payload, sessio
   }
 
   return result.body;
+}
+
+async function ensureOtherCompanyCostCenter(session, code) {
+  const companyId = "99999999-9999-9999-9999-999999999998";
+  const costCenterId = randomUUID();
+  const pool = await sql.connect(getSqlConfig());
+
+  try {
+    await pool
+      .request()
+      .input("TenantId", sql.UniqueIdentifier, session.user.tenantId)
+      .input("CompanyId", sql.UniqueIdentifier, companyId)
+      .input("CostCenterId", sql.UniqueIdentifier, costCenterId)
+      .input("Code", sql.NVarChar(30), code)
+      .query(`
+        IF NOT EXISTS (SELECT 1 FROM core.Companies WHERE CompanyId = @CompanyId)
+        BEGIN
+          INSERT INTO core.Companies (CompanyId, TenantId, LegalName, TradeName, TaxId, FiscalCountryCode, IsActive)
+          VALUES (@CompanyId, @TenantId, N'Compania aislamiento smoke', N'Aislamiento smoke', N'999999998', N'DO', 1);
+        END;
+
+        IF NOT EXISTS (
+          SELECT 1
+          FROM accounting.CostCenters
+          WHERE TenantId = @TenantId
+            AND CompanyId = @CompanyId
+            AND Code = @Code
+        )
+        BEGIN
+          INSERT INTO accounting.CostCenters (
+            CostCenterId,
+            TenantId,
+            CompanyId,
+            Code,
+            Name,
+            Description,
+            ParentCostCenterId,
+            Level,
+            AllowsPosting,
+            ValidFrom,
+            ValidTo,
+            IsActive
+          )
+          VALUES (
+            @CostCenterId,
+            @TenantId,
+            @CompanyId,
+            @Code,
+            N'Centro otra compania smoke',
+            N'Centro para validar aislamiento por compania',
+            NULL,
+            1,
+            1,
+            '2026-01-01',
+            '2026-12-31',
+            1
+          );
+        END;
+      `);
+  } finally {
+    await pool.close();
+  }
+
+  return { companyId, costCenterId };
 }
 
 async function postInventoryMovement(movementId, session) {
@@ -6412,6 +6477,72 @@ async function validateCostCenterFlow(session) {
     fail("Cost center reactivate did not set isActive=true.");
   }
 
+  smokeStep("cost center subtree level recalculation");
+  const hierarchyCodes = {
+    a: `CC-A-${suffix}`,
+    b: `CC-B-${suffix}`,
+    c: `CC-C-${suffix}`,
+    d: `CC-D-${suffix}`,
+    e: `CC-E-${suffix}`,
+    f: `CC-F-${suffix}`
+  };
+  const payloadForCostCenter = (code, name, parentId = null) => ({
+    code,
+    name,
+    description: `${name} smoke`,
+    parentId,
+    allowsPosting: true,
+    validFrom: "2026-01-01",
+    validTo: "2026-12-31",
+    isActive: true
+  });
+  const a = await createCatalogRecord("cost-centers", payloadForCostCenter(hierarchyCodes.a, "Centro A"), session);
+  const b = await createCatalogRecord("cost-centers", payloadForCostCenter(hierarchyCodes.b, "Centro B", a.id), session);
+  const c = await createCatalogRecord("cost-centers", payloadForCostCenter(hierarchyCodes.c, "Centro C", b.id), session);
+  const d = await createCatalogRecord("cost-centers", payloadForCostCenter(hierarchyCodes.d, "Centro D"), session);
+  const e = await createCatalogRecord("cost-centers", payloadForCostCenter(hierarchyCodes.e, "Centro E", d.id), session);
+  const f = await createCatalogRecord("cost-centers", payloadForCostCenter(hierarchyCodes.f, "Centro F", e.id), session);
+
+  if (
+    Number(a.level ?? 0) !== 1 ||
+    Number(b.level ?? 0) !== 2 ||
+    Number(c.level ?? 0) !== 3 ||
+    Number(d.level ?? 0) !== 1 ||
+    Number(e.level ?? 0) !== 2 ||
+    Number(f.level ?? 0) !== 3
+  ) {
+    fail("Initial cost center hierarchy did not calculate expected levels.");
+  }
+
+  const movedB = await updateCatalogRecord(
+    "cost-centers",
+    b.id,
+    payloadForCostCenter(hierarchyCodes.b, "Centro B movido", f.id),
+    session
+  );
+  const movedC = await findCatalogRecord("cost-centers", hierarchyCodes.c, session);
+  const unchangedA = await findCatalogRecord("cost-centers", hierarchyCodes.a, session);
+  const unchangedD = await findCatalogRecord("cost-centers", hierarchyCodes.d, session);
+  const unchangedE = await findCatalogRecord("cost-centers", hierarchyCodes.e, session);
+  const unchangedF = await findCatalogRecord("cost-centers", hierarchyCodes.f, session);
+
+  if (movedB.parentId?.toLowerCase() !== f.id.toLowerCase() || Number(movedB.level ?? 0) !== 4) {
+    fail("Moving cost center B under F did not update parent relation or level 4.");
+  }
+
+  if (!movedC || movedC.parentId?.toLowerCase() !== b.id.toLowerCase() || Number(movedC.level ?? 0) !== 5) {
+    fail("Moving cost center B did not recalculate descendant C to level 5.");
+  }
+
+  if (
+    Number(unchangedA?.level ?? 0) !== 1 ||
+    Number(unchangedD?.level ?? 0) !== 1 ||
+    Number(unchangedE?.level ?? 0) !== 2 ||
+    Number(unchangedF?.level ?? 0) !== 3
+  ) {
+    fail("Moving cost center subtree changed unrelated hierarchy levels.");
+  }
+
   smokeStep("cost center validation failures");
   await expectCatalogFailure(
     "cost-centers",
@@ -6465,13 +6596,31 @@ async function validateCostCenterFlow(session) {
   await expectCatalogFailure(
     "cost-centers",
     "PUT",
-    `/${root.id}`,
+    `/${f.id}`,
     {
-      code: rootCode,
+      code: hierarchyCodes.f,
       name: "Ciclo QA",
       description: "Intento de ciclo",
-      parentId: child.id,
+      parentId: movedC.id,
       allowsPosting: false,
+      validFrom: "2026-01-01",
+      validTo: "2026-12-31",
+      isActive: true
+    },
+    session
+  );
+
+  const otherCompanyParent = await ensureOtherCompanyCostCenter(session, `CC-OTHER-${suffix}`);
+  await expectCatalogFailure(
+    "cost-centers",
+    "PUT",
+    `/${d.id}`,
+    {
+      code: hierarchyCodes.d,
+      name: "Padre otra compania QA",
+      description: "Intento de padre de otra compania",
+      parentId: otherCompanyParent.costCenterId,
+      allowsPosting: true,
       validFrom: "2026-01-01",
       validTo: "2026-12-31",
       isActive: true
