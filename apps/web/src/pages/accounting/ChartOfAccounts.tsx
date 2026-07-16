@@ -1,163 +1,218 @@
 import { useState, useEffect } from "react";
 import { PageHeader, Badge, Card, Button, Input, Select, FormField } from "../../components/ui/index.js";
+import {
+  activateAccountingAccount,
+  blockAccountingAccount,
+  createAccountingAccount,
+  deactivateAccountingAccount,
+  listAccountingAccounts,
+  unblockAccountingAccount,
+  updateAccountingAccount,
+  type AccountingAccount,
+  type AccountingAccountPayload
+} from "../../services/accountingAccountsClient.js";
 
-type Account = {
-  id: number;
-  code: string;
-  name: string;
-  type: string;
-  balance: string;
-  parentId?: number;
+const emptyPayload: AccountingAccountPayload = {
+  code: "",
+  name: "",
+  description: "",
+  parentAccountId: undefined,
+  accountType: "ASSET",
+  normalBalance: "DEBIT",
+  classification: "",
+  allowsPosting: true,
+  requiresCostCenter: false,
+  requiresThirdParty: false,
+  isControlAccount: false,
+  currencyCode: "DOP",
+  validFrom: "",
+  validTo: ""
 };
 
-const initialAccounts: Account[] = [
-  { id: 1, code: "1-00-00-000-000", name: "Activos", type: "Header", balance: "Normal Debit" },
-  { id: 2, code: "1-01-00-000-000", name: "Activos Corrientes", type: "Header", balance: "Normal Debit", parentId: 1 },
-  { id: 3, code: "1-01-01-000-000", name: "Efectivo y Equivalentes de Efectivo", type: "Header", balance: "Normal Debit", parentId: 2 },
-  { id: 4, code: "1-01-01-001-000", name: "Caja General", type: "Detail", balance: "Normal Debit", parentId: 3 },
-  { id: 5, code: "1-01-01-002-000", name: "Caja Chica", type: "Detail", balance: "Normal Debit", parentId: 3 },
-  { id: 6, code: "1-01-01-003-000", name: "Bancos Nacionales", type: "Detail", balance: "Normal Debit", parentId: 3 },
-  { id: 7, code: "2-00-00-000-000", name: "Pasivos", type: "Header", balance: "Normal Credit" },
-  { id: 8, code: "2-01-00-000-000", name: "Pasivos Corrientes", type: "Header", balance: "Normal Credit", parentId: 7 },
-  { id: 9, code: "2-01-01-000-000", name: "Cuentas por Pagar", type: "Header", balance: "Normal Credit", parentId: 8 },
-  { id: 10, code: "2-01-01-001-000", name: "Proveedores Locales", type: "Detail", balance: "Normal Credit", parentId: 9 },
-  { id: 11, code: "3-00-00-000-000", name: "Capital", type: "Header", balance: "Normal Credit" },
-  { id: 12, code: "3-01-00-000-000", name: "Capital Social", type: "Detail", balance: "Normal Credit", parentId: 11 },
-  { id: 13, code: "4-00-00-000-000", name: "Ingresos", type: "Header", balance: "Normal Credit" },
-  { id: 14, code: "4-01-00-000-000", name: "Ingresos Operativos", type: "Header", balance: "Normal Credit", parentId: 13 },
-  { id: 15, code: "4-01-01-000-000", name: "Ventas de Bienes", type: "Detail", balance: "Normal Credit", parentId: 14 },
-  { id: 16, code: "5-00-00-000-000", name: "Costos", type: "Header", balance: "Normal Debit" },
-  { id: 17, code: "6-00-00-000-000", name: "Gastos", type: "Header", balance: "Normal Debit" },
-];
+const accountTypeLabels: Record<string, string> = {
+  ASSET: "Activo",
+  LIABILITY: "Pasivo",
+  EQUITY: "Patrimonio",
+  REVENUE: "Ingreso",
+  EXPENSE: "Gasto",
+  COST: "Costo",
+  MEMO: "Memorando"
+};
+
+function toPayload(account: AccountingAccount): AccountingAccountPayload {
+  return {
+    code: account.code,
+    name: account.name,
+    description: account.description ?? "",
+    parentAccountId: account.parentAccountId,
+    accountType: account.accountType,
+    normalBalance: account.normalBalance,
+    classification: account.classification ?? "",
+    allowsPosting: account.allowsPosting,
+    requiresCostCenter: account.requiresCostCenter,
+    requiresThirdParty: account.requiresThirdParty,
+    isControlAccount: account.isControlAccount,
+    currencyCode: account.currencyCode ?? "",
+    validFrom: account.validFrom?.slice(0, 10) ?? "",
+    validTo: account.validTo?.slice(0, 10) ?? ""
+  };
+}
+
+function cleanPayload(payload: AccountingAccountPayload): AccountingAccountPayload {
+  return {
+    ...payload,
+    description: payload.description?.trim() || undefined,
+    parentAccountId: payload.parentAccountId || undefined,
+    classification: payload.classification?.trim() || undefined,
+    currencyCode: payload.currencyCode?.trim() || undefined,
+    validFrom: payload.validFrom || undefined,
+    validTo: payload.validTo || undefined
+  };
+}
 
 export function ChartOfAccounts() {
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [expanded, setExpanded] = useState<Record<number, boolean>>({ 1: true, 2: true, 3: true, 7: true, 8: true, 9: true, 11: true, 13: true, 14: true });
-  const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
-  
-  // Form states
-  const [code, setCode] = useState("");
-  const [name, setName] = useState("");
-  const [type, setType] = useState("Detail");
-  const [balance, setBalance] = useState("Normal Debit");
-  const [parentId, setParentId] = useState<number | undefined>(undefined);
+  const [accounts, setAccounts] = useState<AccountingAccount[]>([]);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [selectedAccount, setSelectedAccount] = useState<AccountingAccount | null>(null);
+  const [form, setForm] = useState<AccountingAccountPayload>(emptyPayload);
   const [isEditing, setIsEditing] = useState(false);
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+  const [legacyLocalStorageDetected, setLegacyLocalStorageDetected] = useState(false);
 
-  // Load from LocalStorage
-  useEffect(() => {
-    const stored = localStorage.getItem("dobles_erp_accounts");
-    if (stored) {
-      try {
-        setAccounts(JSON.parse(stored));
-      } catch {
-        setAccounts(initialAccounts);
-      }
-    } else {
-      setAccounts(initialAccounts);
-      localStorage.setItem("dobles_erp_accounts", JSON.stringify(initialAccounts));
+  async function loadAccounts() {
+    try {
+      setLoading(true);
+      const result = await listAccountingAccounts({ search, accountType: typeFilter, pageSize: 200 });
+      setAccounts(result.records);
+      setExpanded((current) => {
+        if (Object.keys(current).length > 0) return current;
+        return result.records.reduce<Record<string, boolean>>((acc, account) => ({ ...acc, [account.accountId]: account.level <= 3 }), {});
+      });
+      setMessage("");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "No se pudo cargar el plan de cuentas desde la API.");
+    } finally {
+      setLoading(false);
     }
+  }
+
+  useEffect(() => {
+    setLegacyLocalStorageDetected(Boolean(localStorage.getItem("dobles_erp_accounts")));
+    loadAccounts();
   }, []);
 
-  const saveToStorage = (updatedList: Account[]) => {
-    setAccounts(updatedList);
-    localStorage.setItem("dobles_erp_accounts", JSON.stringify(updatedList));
-  };
-
-  const handleSelectAccount = (acc: Account) => {
+  const handleSelectAccount = (acc: AccountingAccount) => {
     setSelectedAccount(acc);
-    setCode(acc.code);
-    setName(acc.name);
-    setType(acc.type);
-    setBalance(acc.balance);
-    setParentId(acc.parentId);
+    setForm(toPayload(acc));
     setIsEditing(true);
   };
 
   const handleNewAccount = () => {
     setSelectedAccount(null);
-    setCode("1-01-01-004-000"); // default template
-    setName("");
-    setType("Detail");
-    setBalance(selectedAccount ? selectedAccount.balance : "Normal Debit");
-    setParentId(selectedAccount ? selectedAccount.id : undefined);
+    setForm({
+      ...emptyPayload,
+      code: selectedAccount ? `${selectedAccount.code}-001` : "",
+      normalBalance: selectedAccount ? selectedAccount.normalBalance : "DEBIT",
+      accountType: selectedAccount ? selectedAccount.accountType : "ASSET",
+      parentAccountId: selectedAccount ? selectedAccount.accountId : undefined
+    });
     setIsEditing(false);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isEditing && selectedAccount) {
-      // Update
-      const updated = accounts.map(acc => 
-        acc.id === selectedAccount.id 
-          ? { ...acc, code, name, type, balance, parentId } 
-          : acc
-      );
-      saveToStorage(updated);
-      setSelectedAccount(null);
-      setIsEditing(false);
-    } else {
-      // Create
-      const newAcc: Account = {
-        id: Date.now(),
-        code,
-        name,
-        type,
-        balance,
-        parentId
-      };
-      const updated = [...accounts, newAcc];
-      saveToStorage(updated);
-      if (parentId) {
-        setExpanded(prev => ({ ...prev, [parentId]: true }));
-      }
-      handleNewAccount();
+    try {
+      setSaving(true);
+      const payload = cleanPayload(form);
+      const saved = isEditing && selectedAccount
+        ? await updateAccountingAccount(selectedAccount.accountId, payload)
+        : await createAccountingAccount(payload);
+      setMessage(isEditing ? "Cuenta actualizada correctamente." : "Cuenta creada correctamente.");
+      setSelectedAccount(saved);
+      setForm(toPayload(saved));
+      setIsEditing(true);
+      await loadAccounts();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "No se pudo guardar la cuenta.");
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleDelete = () => {
-    if (selectedAccount) {
-      const updated = accounts.filter(acc => acc.id !== selectedAccount.id);
-      saveToStorage(updated);
-      setSelectedAccount(null);
-      setIsEditing(false);
+  const handleBlock = async () => {
+    if (!selectedAccount) return;
+    const reason = prompt("Motivo de bloqueo");
+    if (!reason?.trim()) {
+      setMessage("Indica un motivo para bloquear la cuenta.");
+      return;
     }
+    const updated = await blockAccountingAccount(selectedAccount.accountId, reason.trim());
+    setSelectedAccount(updated);
+    setForm(toPayload(updated));
+    setMessage("Cuenta bloqueada correctamente.");
+    await loadAccounts();
   };
 
-  const toggleExpand = (id: number, e: React.MouseEvent) => {
+  const handleUnblock = async () => {
+    if (!selectedAccount) return;
+    const updated = await unblockAccountingAccount(selectedAccount.accountId);
+    setSelectedAccount(updated);
+    setForm(toPayload(updated));
+    setMessage("Cuenta desbloqueada correctamente.");
+    await loadAccounts();
+  };
+
+  const handleToggleActive = async () => {
+    if (!selectedAccount) return;
+    const updated = selectedAccount.isActive
+      ? await deactivateAccountingAccount(selectedAccount.accountId)
+      : await activateAccountingAccount(selectedAccount.accountId);
+    setSelectedAccount(updated);
+    setForm(toPayload(updated));
+    setMessage(selectedAccount.isActive ? "Cuenta desactivada correctamente." : "Cuenta activada correctamente.");
+    await loadAccounts();
+  };
+
+  const toggleExpand = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const renderTree = (pId?: number) => {
-    const nodes = accounts.filter(acc => acc.parentId === pId);
+  const renderTree = (pId?: string) => {
+    const nodes = accounts.filter(acc => (acc.parentAccountId ?? undefined) === pId);
     if (nodes.length === 0) return null;
 
     return (
       <ul style={{ listStyleType: "none", paddingLeft: pId ? "16px" : "0", margin: 0 }}>
         {nodes.map(node => {
-          const hasChildren = accounts.some(acc => acc.parentId === node.id);
-          const isExpanded = expanded[node.id];
-          const isSelected = selectedAccount?.id === node.id;
+          const hasChildren = accounts.some(acc => acc.parentAccountId === node.accountId);
+          const isExpanded = expanded[node.accountId];
+          const isSelected = selectedAccount?.accountId === node.accountId;
 
           return (
-            <li key={node.id} style={{ margin: "4px 0" }}>
+            <li key={node.accountId} style={{ margin: "4px 0" }}>
               <div 
                 style={{ 
                   display: "flex", 
                   alignItems: "center", 
                   padding: "6px 10px", 
-                  background: isSelected ? "var(--primary-light)" : (node.type === "Header" ? "var(--surface-muted)" : "transparent"),
+                  background: isSelected ? "var(--primary-light)" : (!node.allowsPosting ? "var(--surface-muted)" : "transparent"),
                   border: isSelected ? "1px solid var(--primary)" : "1px solid var(--border)",
                   borderRadius: "var(--radius-sm)",
                   cursor: "pointer",
                   transition: "var(--transition)",
-                  gap: "8px"
+                  gap: "8px",
+                  opacity: node.isActive ? 1 : 0.58
                 }}
                 onClick={() => handleSelectAccount(node)}
               >
                 <div 
                   style={{ width: "20px", display: "flex", justifyContent: "center" }}
-                  onClick={(e) => hasChildren && toggleExpand(node.id, e)}
+                  onClick={(e) => hasChildren && toggleExpand(node.accountId, e)}
                 >
                   {hasChildren ? (
                     <svg
@@ -184,21 +239,22 @@ export function ChartOfAccounts() {
                   {node.code}
                 </span>
                 
-                <span style={{ flex: 1, fontSize: "0.9rem", fontWeight: node.type === "Header" ? 600 : 400, textAlign: "left" }}>
+                <span style={{ flex: 1, fontSize: "0.9rem", fontWeight: !node.allowsPosting ? 600 : 400, textAlign: "left" }}>
                   {node.name}
                 </span>
                 
                 <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-                  <Badge tone={node.balance === "Normal Debit" ? "blue" : "neutral"}>
-                    {node.balance === "Normal Debit" ? "Deudora" : "Acreedora"}
+                  <Badge tone={node.normalBalance === "DEBIT" ? "blue" : "neutral"}>
+                    {node.normalBalance === "DEBIT" ? "Deudora" : "Acreedora"}
                   </Badge>
-                  <Badge tone={node.type === "Header" ? "neutral" : "green"}>
-                    {node.type === "Header" ? "Control" : "Detalle"}
+                  <Badge tone={!node.allowsPosting ? "neutral" : "green"}>
+                    {!node.allowsPosting ? "Control" : "Movimiento"}
                   </Badge>
+                  {node.isBlocked ? <Badge tone="amber">Bloqueada</Badge> : null}
                 </div>
               </div>
               
-              {isExpanded && renderTree(node.id)}
+              {isExpanded && renderTree(node.accountId)}
             </li>
           );
         })}
@@ -215,6 +271,20 @@ export function ChartOfAccounts() {
         actions={<Button variant="primary" onClick={handleNewAccount}>Nueva Cuenta</Button>}
       />
 
+      {legacyLocalStorageDetected ? (
+        <Card>
+          <div style={{ padding: "14px 18px", color: "var(--text-secondary)" }}>
+            Se detectaron datos anteriores en este navegador. La fuente oficial ahora es SQL Server mediante API; no se importaron ni eliminaron datos locales.
+          </div>
+        </Card>
+      ) : null}
+
+      {message ? (
+        <Card>
+          <div style={{ padding: "14px 18px", color: "var(--text-secondary)" }}>{message}</div>
+        </Card>
+      ) : null}
+
       <div className="accounts-layout" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "24px" }}>
         {/* Left Side: Tree View */}
         <Card style={{ flex: "1 1 500px" }}>
@@ -224,10 +294,25 @@ export function ChartOfAccounts() {
               <div style={{ display: "flex", gap: "8px" }}>
                 <Button variant="secondary" onClick={() => setExpanded({})}>Colapsar Todo</Button>
                 <Button variant="secondary" onClick={() => {
-                  const allKeys = accounts.reduce((acc, curr) => ({ ...acc, [curr.id]: true }), {});
+                  const allKeys = accounts.reduce((acc, curr) => ({ ...acc, [curr.accountId]: true }), {});
                   setExpanded(allKeys);
                 }}>Expandir Todo</Button>
               </div>
+            </div>
+
+            <div style={{ display: "flex", gap: "8px", marginBottom: "16px", alignItems: "center" }}>
+              <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar cuenta" />
+              <Select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}>
+                <option value="">Todos</option>
+                <option value="ASSET">Activo</option>
+                <option value="LIABILITY">Pasivo</option>
+                <option value="EQUITY">Patrimonio</option>
+                <option value="REVENUE">Ingreso</option>
+                <option value="EXPENSE">Gasto</option>
+                <option value="COST">Costo</option>
+                <option value="MEMO">Memorando</option>
+              </Select>
+              <Button variant="secondary" onClick={loadAccounts}>Aplicar</Button>
             </div>
             
             <div style={{ 
@@ -238,7 +323,7 @@ export function ChartOfAccounts() {
               maxHeight: "600px",
               overflowY: "auto"
             }}>
-              {renderTree(undefined)}
+              {loading ? "Cargando plan de cuentas..." : accounts.length > 0 ? renderTree(undefined) : "Sin cuentas registradas."}
             </div>
           </div>
         </Card>
@@ -251,7 +336,7 @@ export function ChartOfAccounts() {
                 {isEditing ? "Detalle de Cuenta" : "Crear Nueva Cuenta"}
               </h3>
               <p style={{ margin: "4px 0 0 0", fontSize: "0.85rem", color: "#94a3b8" }}>
-                {isEditing ? "Modifique o elimine la cuenta seleccionada." : "Defina los atributos de la cuenta."}
+                {isEditing ? "Modifique o administre la cuenta seleccionada." : "Defina los atributos de la cuenta."}
               </p>
             </div>
 
@@ -259,9 +344,9 @@ export function ChartOfAccounts() {
               <FormField label="Código Contable">
                 <Input 
                   type="text" 
-                  value={code} 
-                  onChange={(e) => setCode(e.target.value)}
-                  placeholder="1-00-00-000-000"
+                  value={form.code} 
+                  onChange={(e) => setForm((current) => ({ ...current, code: e.target.value }))}
+                  placeholder="1-01-001"
                   required
                   style={{ fontFamily: "monospace" }}
                 />
@@ -270,53 +355,79 @@ export function ChartOfAccounts() {
               <FormField label="Nombre de Cuenta">
                 <Input 
                   type="text" 
-                  value={name} 
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Ej. Caja Chica"
+                  value={form.name} 
+                  onChange={(e) => setForm((current) => ({ ...current, name: e.target.value }))}
+                  placeholder="Ej. Caja general"
                   required
                 />
               </FormField>
 
               <FormField label="Tipo de Cuenta">
                 <Select 
-                  value={type} 
-                  onChange={(e) => setType(e.target.value)}
+                  value={form.accountType} 
+                  onChange={(e) => setForm((current) => ({ ...current, accountType: e.target.value }))}
                 >
-                  <option value="Header">Cabecera / Control</option>
-                  <option value="Detail">Detalle / Operativa</option>
+                  {Object.entries(accountTypeLabels).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
                 </Select>
               </FormField>
 
               <FormField label="Origen / Naturaleza">
                 <Select 
-                  value={balance} 
-                  onChange={(e) => setBalance(e.target.value)}
+                  value={form.normalBalance} 
+                  onChange={(e) => setForm((current) => ({ ...current, normalBalance: e.target.value }))}
                 >
-                  <option value="Normal Debit">Deudora (Débito)</option>
-                  <option value="Normal Credit">Acreedora (Crédito)</option>
+                  <option value="DEBIT">Deudora (Débito)</option>
+                  <option value="CREDIT">Acreedora (Crédito)</option>
                 </Select>
               </FormField>
 
               <FormField label="Cuenta Padre">
                 <Select 
-                  value={parentId || ""} 
-                  onChange={(e) => setParentId(e.target.value ? Number(e.target.value) : undefined)}
+                  value={form.parentAccountId || ""} 
+                  onChange={(e) => setForm((current) => ({ ...current, parentAccountId: e.target.value || undefined }))}
                 >
                   <option value="">Ninguna (Raíz)</option>
-                  {accounts.filter(acc => acc.type === "Header").map(acc => (
-                    <option key={acc.id} value={acc.id}>{acc.code} - {acc.name}</option>
+                  {accounts.filter(acc => !acc.allowsPosting && acc.accountId !== selectedAccount?.accountId).map(acc => (
+                    <option key={acc.accountId} value={acc.accountId}>{acc.code} - {acc.name}</option>
                   ))}
                 </Select>
               </FormField>
 
-              <div style={{ display: "flex", gap: "10px", marginTop: "12px" }}>
-                <Button type="submit" variant="primary" style={{ flex: 1 }}>
+              <FormField label="Movimiento">
+                <Select
+                  value={form.allowsPosting ? "true" : "false"}
+                  onChange={(e) => setForm((current) => ({ ...current, allowsPosting: e.target.value === "true", isControlAccount: e.target.value !== "true" }))}
+                >
+                  <option value="true">Sí, acepta movimientos</option>
+                  <option value="false">No, agrupadora/control</option>
+                </Select>
+              </FormField>
+
+              <FormField label="Moneda">
+                <Input
+                  type="text"
+                  value={form.currencyCode ?? ""}
+                  onChange={(e) => setForm((current) => ({ ...current, currencyCode: e.target.value.toUpperCase() }))}
+                  placeholder="DOP"
+                  maxLength={3}
+                />
+              </FormField>
+
+              <div style={{ display: "flex", gap: "10px", marginTop: "12px", flexWrap: "wrap" }}>
+                <Button type="submit" variant="primary" disabled={saving} style={{ flex: 1 }}>
                   {isEditing ? "Guardar Cambios" : "Crear Cuenta"}
                 </Button>
-                {isEditing && (
-                  <Button type="button" variant="danger" onClick={handleDelete}>
-                    Eliminar
-                  </Button>
+                {isEditing && selectedAccount && (
+                  <>
+                    <Button type="button" variant="secondary" onClick={selectedAccount.isBlocked ? handleUnblock : handleBlock}>
+                      {selectedAccount.isBlocked ? "Desbloquear" : "Bloquear"}
+                    </Button>
+                    <Button type="button" variant="danger" onClick={handleToggleActive}>
+                      {selectedAccount.isActive ? "Desactivar" : "Activar"}
+                    </Button>
+                  </>
                 )}
               </div>
             </form>

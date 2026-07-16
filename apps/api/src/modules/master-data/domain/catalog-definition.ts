@@ -7000,7 +7000,82 @@ const itemFields = [
   }
 ] as const satisfies readonly CatalogFieldDefinition[];
 
+const accountingAccountFields: readonly CatalogFieldDefinition[] = [
+  { field: "code", dbColumn: "code", label: "Codigo", type: "text", required: true, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 10, validation: { nullable: false }, grid: { width: 140, align: "left" } },
+  { field: "name", dbColumn: "name", label: "Nombre", type: "text", required: true, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 20, validation: { nullable: false }, grid: { width: 240, align: "left" } },
+  { field: "parentCode", dbColumn: "parentCode", label: "Padre", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 30, validation: { nullable: true }, grid: { width: 140, align: "left" } },
+  { field: "level", dbColumn: "level", label: "Nivel", type: "number", required: true, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 40, validation: { nullable: false }, grid: { width: 90, align: "right" } },
+  { field: "accountType", dbColumn: "accountType", label: "Tipo", type: "text", required: true, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 50, validation: { nullable: false }, grid: { width: 120, align: "left" } },
+  { field: "normalBalance", dbColumn: "normalBalance", label: "Naturaleza", type: "text", required: true, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 60, validation: { nullable: false }, grid: { width: 120, align: "left" } },
+  { field: "allowsPosting", dbColumn: "allowsPosting", label: "Movimiento", type: "boolean", required: true, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 70, validation: { nullable: false }, grid: { width: 110, align: "center", format: "boolean" } },
+  { field: "requiresCostCenter", dbColumn: "requiresCostCenter", label: "Centro costo", type: "boolean", required: true, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 80, validation: { nullable: false }, grid: { width: 120, align: "center", format: "boolean" } },
+  { field: "isBlocked", dbColumn: "isBlocked", label: "Bloqueada", type: "boolean", required: true, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 90, validation: { nullable: false }, grid: { width: 110, align: "center", format: "boolean" } },
+  { field: "isActive", dbColumn: "isActive", label: "Activa", type: "boolean", required: true, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 100, validation: { nullable: false }, grid: { width: 96, align: "center", format: "boolean" } }
+] as const satisfies readonly CatalogFieldDefinition[];
+
 export const catalogDefinitions = {
+  "chart-of-accounts": {
+    catalogCode: "chart-of-accounts",
+    displayName: "Plan de cuentas",
+    tableName: "accounting.V_AccountSummary",
+    idColumn: "accountId",
+    codeColumn: "code",
+    nameColumn: "name",
+    descriptionColumn: "description",
+    allowedSearchColumns: ["code", "name", "description", "fullPath"],
+    allowedSortColumns: ["code", "name", "level", "accountType", "normalBalance", "allowsPosting", "isBlocked", "isActive", "createdAt"],
+    defaultSortBy: "code",
+    permissions: commonPermissions("accounting.accounts"),
+    moduleCode: "accounting",
+    tenantScoped: true,
+    companyScoped: true,
+    readOnly: true,
+    columns: {
+      id: "accountId",
+      tenantId: "tenantId",
+      companyId: "companyId",
+      code: "code",
+      name: "name",
+      description: "description",
+      isActive: "isActive",
+      createdAt: "createdAt",
+      updatedAt: "updatedAt",
+      createdBy: "createdBy",
+      updatedBy: "updatedBy"
+    },
+    fields: accountingAccountFields
+  },
+  "postable-accounts": {
+    catalogCode: "postable-accounts",
+    displayName: "Cuentas de movimiento",
+    tableName: "accounting.V_PostableAccounts",
+    idColumn: "accountId",
+    codeColumn: "code",
+    nameColumn: "name",
+    descriptionColumn: "description",
+    allowedSearchColumns: ["code", "name", "description", "fullPath"],
+    allowedSortColumns: ["code", "name", "level", "accountType", "normalBalance", "createdAt"],
+    defaultSortBy: "code",
+    permissions: commonPermissions("accounting.accounts"),
+    moduleCode: "accounting",
+    tenantScoped: true,
+    companyScoped: true,
+    readOnly: true,
+    columns: {
+      id: "accountId",
+      tenantId: "tenantId",
+      companyId: "companyId",
+      code: "code",
+      name: "name",
+      description: "description",
+      isActive: "isActive",
+      createdAt: "createdAt",
+      updatedAt: "updatedAt",
+      createdBy: "createdBy",
+      updatedBy: "updatedBy"
+    },
+    fields: accountingAccountFields
+  },
   "accounting-periods": {
     catalogCode: "accounting-periods",
     displayName: "Periodos contables",

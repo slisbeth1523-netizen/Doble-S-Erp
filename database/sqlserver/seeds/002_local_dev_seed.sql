@@ -153,6 +153,13 @@ VALUES
   ('accounting', 'accounting.cost-centers.update', 'Local update cost centers'),
   ('accounting', 'accounting.cost-centers.activate', 'Local activate cost centers'),
   ('accounting', 'accounting.cost-centers.deactivate', 'Local deactivate cost centers'),
+  ('accounting', 'accounting.accounts.read', 'Local read accounting accounts'),
+  ('accounting', 'accounting.accounts.create', 'Local create accounting accounts'),
+  ('accounting', 'accounting.accounts.update', 'Local update accounting accounts'),
+  ('accounting', 'accounting.accounts.block', 'Local block accounting accounts'),
+  ('accounting', 'accounting.accounts.unblock', 'Local unblock accounting accounts'),
+  ('accounting', 'accounting.accounts.activate', 'Local activate accounting accounts'),
+  ('accounting', 'accounting.accounts.deactivate', 'Local deactivate accounting accounts'),
   ('accounting', 'accounting.periods.read', 'Local read accounting periods'),
   ('accounting', 'accounting.periods.create', 'Local create accounting periods'),
   ('accounting', 'accounting.periods.update', 'Local update accounting periods'),
@@ -229,6 +236,15 @@ DECLARE @CostCenterAdminId UNIQUEIDENTIFIER = 'acacacac-acac-acac-acac-acacacaca
 DECLARE @CostCenterAccountingId UNIQUEIDENTIFIER = 'acacacac-acac-acac-acac-acacacacac02';
 DECLARE @AccountingPeriodJanId UNIQUEIDENTIFIER = 'b1b1b1b1-b1b1-b1b1-b1b1-b1b1b1b1b101';
 DECLARE @AccountingPeriodFebId UNIQUEIDENTIFIER = 'b1b1b1b1-b1b1-b1b1-b1b1-b1b1b1b1b102';
+DECLARE @AccountAssetsId UNIQUEIDENTIFIER = 'ca000000-0000-0000-0000-000000000001';
+DECLARE @AccountCurrentAssetsId UNIQUEIDENTIFIER = 'ca000000-0000-0000-0000-000000000002';
+DECLARE @AccountCashId UNIQUEIDENTIFIER = 'ca000000-0000-0000-0000-000000000003';
+DECLARE @AccountBankId UNIQUEIDENTIFIER = 'ca000000-0000-0000-0000-000000000004';
+DECLARE @AccountLiabilitiesId UNIQUEIDENTIFIER = 'ca000000-0000-0000-0000-000000000005';
+DECLARE @AccountPayableId UNIQUEIDENTIFIER = 'ca000000-0000-0000-0000-000000000006';
+DECLARE @AccountEquityId UNIQUEIDENTIFIER = 'ca000000-0000-0000-0000-000000000007';
+DECLARE @AccountRevenueId UNIQUEIDENTIFIER = 'ca000000-0000-0000-0000-000000000008';
+DECLARE @AccountExpensesId UNIQUEIDENTIFIER = 'ca000000-0000-0000-0000-000000000009';
 DECLARE @WarehouseId UNIQUEIDENTIFIER = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee';
 DECLARE @TransitWarehouseId UNIQUEIDENTIFIER = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeef';
 DECLARE @InventoryMovementId UNIQUEIDENTIFIER = 'abababab-abab-abab-abab-abababababab';
@@ -380,6 +396,51 @@ BEGIN
   VALUES (
     @AccountingPeriodFebId, @TenantId, @CompanyId, 2025, 2, 'Febrero 2025',
     '2025-02-01', '2025-02-28', 'OPEN', 0, '2025-02-01T00:00:00', @UserId, 1, @UserId
+  );
+END;
+
+IF OBJECT_ID('accounting.Accounts', 'U') IS NOT NULL
+BEGIN
+  DECLARE @SeedAccounts TABLE (
+    AccountId UNIQUEIDENTIFIER NOT NULL,
+    Code NVARCHAR(50) NOT NULL,
+    Name NVARCHAR(200) NOT NULL,
+    ParentAccountId UNIQUEIDENTIFIER NULL,
+    Level INT NOT NULL,
+    AccountType NVARCHAR(30) NOT NULL,
+    NormalBalance NVARCHAR(10) NOT NULL,
+    AllowsPosting BIT NOT NULL,
+    IsControlAccount BIT NOT NULL
+  );
+
+  INSERT INTO @SeedAccounts (AccountId, Code, Name, ParentAccountId, Level, AccountType, NormalBalance, AllowsPosting, IsControlAccount)
+  VALUES
+    (@AccountAssetsId, '1', 'Activos', NULL, 1, 'ASSET', 'DEBIT', 0, 1),
+    (@AccountCurrentAssetsId, '1-01', 'Activos corrientes', @AccountAssetsId, 2, 'ASSET', 'DEBIT', 0, 1),
+    (@AccountCashId, '1-01-001', 'Caja general', @AccountCurrentAssetsId, 3, 'ASSET', 'DEBIT', 1, 0),
+    (@AccountBankId, '1-01-002', 'Banco general', @AccountCurrentAssetsId, 3, 'ASSET', 'DEBIT', 1, 0),
+    (@AccountLiabilitiesId, '2', 'Pasivos', NULL, 1, 'LIABILITY', 'CREDIT', 0, 1),
+    (@AccountPayableId, '2-01', 'Cuentas por pagar', @AccountLiabilitiesId, 2, 'LIABILITY', 'CREDIT', 1, 0),
+    (@AccountEquityId, '3', 'Patrimonio', NULL, 1, 'EQUITY', 'CREDIT', 0, 1),
+    (@AccountRevenueId, '4', 'Ingresos', NULL, 1, 'REVENUE', 'CREDIT', 0, 1),
+    (@AccountExpensesId, '5', 'Gastos', NULL, 1, 'EXPENSE', 'DEBIT', 0, 1);
+
+  INSERT INTO accounting.Accounts (
+    AccountId, TenantId, CompanyId, Code, Name, ParentAccountId, Level,
+    AccountType, NormalBalance, AllowsPosting, IsControlAccount,
+    RequiresCostCenter, RequiresThirdParty, IsBlocked, IsActive, CreatedBy
+  )
+  SELECT
+    seed.AccountId, @TenantId, @CompanyId, seed.Code, seed.Name, seed.ParentAccountId, seed.Level,
+    seed.AccountType, seed.NormalBalance, seed.AllowsPosting, seed.IsControlAccount,
+    0, 0, 0, 1, @UserId
+  FROM @SeedAccounts seed
+  WHERE NOT EXISTS (
+    SELECT 1
+    FROM accounting.Accounts existing
+    WHERE existing.TenantId = @TenantId
+      AND existing.CompanyId = @CompanyId
+      AND existing.Code = seed.Code
   );
 END;
 
