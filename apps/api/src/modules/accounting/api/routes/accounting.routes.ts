@@ -9,6 +9,7 @@ import { sendSuccess } from "../../../../utils/responseBuilder.js";
 import { validateRequest } from "../../../../utils/validateRequest.js";
 import { accountingAccountService } from "../../application/AccountingAccountService.js";
 import { accountingPeriodService } from "../../application/AccountingPeriodService.js";
+import { journalEntryService } from "../../application/JournalEntryService.js";
 import {
   accountingAccountBlockSchema,
   accountingAccountIdParamsSchema,
@@ -22,6 +23,15 @@ import {
   accountingPeriodReopenSchema,
   accountingPeriodUpdateSchema
 } from "../../validators/accounting-period.validators.js";
+import {
+  journalEntryCreateSchema,
+  journalEntryIdParamsSchema,
+  journalEntryLineIdParamsSchema,
+  journalEntryLinePayloadSchema,
+  journalEntryListQuerySchema,
+  journalEntryPostSchema,
+  journalEntryUpdateSchema
+} from "../../validators/journal-entry.validators.js";
 
 export const accountingRouter = Router();
 
@@ -38,6 +48,114 @@ function accountingContext(request: Parameters<typeof getRequestContext>[0]) {
     correlationId: context.correlationId
   };
 }
+
+accountingRouter.get(
+  "/journal-entries",
+  validateRequest({ query: journalEntryListQuerySchema }),
+  requirePermission("accounting", "accounting.journal-entries.read"),
+  asyncHandler(async (request, response) => {
+    const result = await journalEntryService.listEntries(accountingContext(request), request.query);
+
+    sendSuccess(response, result);
+  })
+);
+
+accountingRouter.get(
+  "/journal-entries/:id",
+  validateRequest({ params: journalEntryIdParamsSchema }),
+  requirePermission("accounting", "accounting.journal-entries.read"),
+  asyncHandler(async (request, response) => {
+    const result = await journalEntryService.getEntry(accountingContext(request), request.params.id!);
+
+    sendSuccess(response, result);
+  })
+);
+
+accountingRouter.get(
+  "/journal-entries/:id/lines",
+  validateRequest({ params: journalEntryIdParamsSchema }),
+  requirePermission("accounting", "accounting.journal-entries.read"),
+  asyncHandler(async (request, response) => {
+    const result = await journalEntryService.listLines(accountingContext(request), request.params.id!);
+
+    sendSuccess(response, result);
+  })
+);
+
+accountingRouter.post(
+  "/journal-entries",
+  validateRequest({ body: journalEntryCreateSchema }),
+  requirePermission("accounting", "accounting.journal-entries.create"),
+  asyncHandler(async (request, response) => {
+    const result = await journalEntryService.createEntry(accountingContext(request), request.body);
+
+    sendSuccess(response, result, 201);
+  })
+);
+
+accountingRouter.patch(
+  "/journal-entries/:id",
+  validateRequest({ params: journalEntryIdParamsSchema, body: journalEntryUpdateSchema }),
+  requirePermission("accounting", "accounting.journal-entries.update"),
+  asyncHandler(async (request, response) => {
+    const result = await journalEntryService.updateEntry(accountingContext(request), request.params.id!, request.body);
+
+    sendSuccess(response, result);
+  })
+);
+
+accountingRouter.post(
+  "/journal-entries/:id/lines",
+  validateRequest({ params: journalEntryIdParamsSchema, body: journalEntryLinePayloadSchema }),
+  requirePermission("accounting", "accounting.journal-entries.update"),
+  asyncHandler(async (request, response) => {
+    const result = await journalEntryService.addLine(accountingContext(request), request.params.id!, request.body);
+
+    sendSuccess(response, result, 201);
+  })
+);
+
+accountingRouter.patch(
+  "/journal-entries/:id/lines/:lineId",
+  validateRequest({ params: journalEntryLineIdParamsSchema, body: journalEntryLinePayloadSchema }),
+  requirePermission("accounting", "accounting.journal-entries.update"),
+  asyncHandler(async (request, response) => {
+    const result = await journalEntryService.updateLine(
+      accountingContext(request),
+      request.params.id!,
+      request.params.lineId!,
+      request.body
+    );
+
+    sendSuccess(response, result);
+  })
+);
+
+accountingRouter.delete(
+  "/journal-entries/:id/lines/:lineId",
+  validateRequest({ params: journalEntryLineIdParamsSchema }),
+  requirePermission("accounting", "accounting.journal-entries.update"),
+  asyncHandler(async (request, response) => {
+    const result = await journalEntryService.deleteLine(
+      accountingContext(request),
+      request.params.id!,
+      request.params.lineId!
+    );
+
+    sendSuccess(response, result);
+  })
+);
+
+accountingRouter.post(
+  "/journal-entries/:id/post",
+  validateRequest({ params: journalEntryIdParamsSchema, body: journalEntryPostSchema }),
+  requirePermission("accounting", "accounting.journal-entries.post"),
+  asyncHandler(async (request, response) => {
+    const result = await journalEntryService.postEntry(accountingContext(request), request.params.id!, request.body);
+
+    sendSuccess(response, result);
+  })
+);
 
 accountingRouter.get(
   "/accounts",

@@ -294,6 +294,87 @@ async function expectAccountingPeriodFailure(path, method, payload, session, ext
   return result.body;
 }
 
+async function createJournalEntry(payload, session) {
+  const body = await expectOk("/accounting/journal-entries", {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function updateJournalEntry(entryId, payload, session, extraHeaders = {}) {
+  const body = await expectOk(`/accounting/journal-entries/${entryId}`, {
+    method: "PATCH",
+    headers: { ...authHeaders(session), ...extraHeaders },
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function getJournalEntry(entryId, session, extraHeaders = {}) {
+  const body = await expectOk(`/accounting/journal-entries/${entryId}`, {
+    headers: { ...authHeaders(session), ...extraHeaders }
+  });
+
+  return body.data;
+}
+
+async function addJournalEntryLine(entryId, payload, session, extraHeaders = {}) {
+  const body = await expectOk(`/accounting/journal-entries/${entryId}/lines`, {
+    method: "POST",
+    headers: { ...authHeaders(session), ...extraHeaders },
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function updateJournalEntryLine(entryId, lineId, payload, session, extraHeaders = {}) {
+  const body = await expectOk(`/accounting/journal-entries/${entryId}/lines/${lineId}`, {
+    method: "PATCH",
+    headers: { ...authHeaders(session), ...extraHeaders },
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function deleteJournalEntryLine(entryId, lineId, session, extraHeaders = {}) {
+  const body = await expectOk(`/accounting/journal-entries/${entryId}/lines/${lineId}`, {
+    method: "DELETE",
+    headers: { ...authHeaders(session), ...extraHeaders }
+  });
+
+  return body.data;
+}
+
+async function postJournalEntry(entryId, idempotencyKey, session, extraHeaders = {}, requestHash) {
+  const body = await expectOk(`/accounting/journal-entries/${entryId}/post`, {
+    method: "POST",
+    headers: { ...authHeaders(session), ...extraHeaders },
+    body: JSON.stringify({ idempotencyKey, ...(requestHash ? { requestHash } : {}) })
+  });
+
+  return body.data;
+}
+
+async function expectJournalEntryFailure(path, method, payload, session, extraHeaders = {}) {
+  const result = await request(path, {
+    method,
+    headers: { ...authHeaders(session), ...extraHeaders },
+    body: payload === undefined ? undefined : JSON.stringify(payload)
+  });
+
+  if (result.response.ok || result.body?.success !== false) {
+    fail(`Expected journal entry request ${method} ${path} to fail.`);
+  }
+
+  return result.body;
+}
+
 async function ensureOtherCompanyCostCenter(session, code) {
   const companyId = "99999999-9999-9999-9999-999999999998";
   const costCenterId = randomUUID();
@@ -7174,6 +7255,389 @@ async function validateAccountingPeriodFlow(session) {
   }
 }
 
+async function countJournalPostOperations(entryId) {
+  const pool = await sql.connect(getSqlConfig());
+
+  try {
+    const result = await pool
+      .request()
+      .input("JournalEntryId", sql.UniqueIdentifier, entryId)
+      .query(`
+        SELECT COUNT(1) AS total
+        FROM accounting.JournalEntryOperations
+        WHERE JournalEntryId = @JournalEntryId
+          AND OperationType = N'POST';
+      `);
+
+    return result.recordset[0]?.total ?? 0;
+  } finally {
+    await pool.close();
+  }
+}
+
+async function validateJournalEntryFlow(session) {
+  const suffix = smokeRun;
+  const accountPayload = (code, name, overrides = {}) => ({
+    code,
+    name,
+    description: `${name} smoke`,
+    accountType: "ASSET",
+    normalBalance: "DEBIT",
+    allowsPosting: true,
+    requiresCostCenter: false,
+    requiresThirdParty: false,
+    isControlAccount: false,
+    validFrom: "2025-01-01",
+    validTo: "2025-12-31",
+    ...overrides
+  });
+  const costCenterPayload = (code, name, overrides = {}) => ({
+    code,
+    name,
+    description: `${name} smoke`,
+    parentId: null,
+    allowsPosting: true,
+    validFrom: "2025-01-01",
+    validTo: "2025-12-31",
+    isActive: true,
+    ...overrides
+  });
+  const linePayload = (accountId, debitAmount, creditAmount, overrides = {}) => ({
+    accountId,
+    costCenterId: overrides.costCenterId,
+    description: overrides.description ?? "Linea smoke asiento",
+    debitAmount,
+    creditAmount,
+    reference: overrides.reference ?? `JE-${suffix}`
+  });
+
+  const accounts = await listAccountingAccounts({ pageSize: "200" }, session);
+  const cash = accounts.records.find((account) => account.code === "1-01-001");
+  const payable = accounts.records.find((account) => account.code === "2-01");
+  if (!cash?.accountId || !payable?.accountId) {
+    fail("Seeded postable accounting accounts were not available for journal entry smoke.");
+  }
+
+  smokeStep("journal entry create draft and period detection");
+  const entry = await createJournalEntry(
+    {
+      entryDate: "2025-02-15",
+      description: `Smoke asiento ${suffix}`,
+      reference: `JE-${suffix}`,
+      currencyCode: "DOP",
+      exchangeRate: 1
+    },
+    session
+  );
+  if (entry.status !== "DRAFT" || entry.periodCode !== "2025-02" || !entry.entryNumber || entry.totalDebit !== 0 || entry.totalCredit !== 0) {
+    fail("Journal entry creation did not set DRAFT, generated number, detected period and zero totals.");
+  }
+
+  smokeStep("journal entry period validation");
+  await expectJournalEntryFailure(
+    "/accounting/journal-entries",
+    "POST",
+    { entryDate: "2035-01-15", description: "Sin periodo", currencyCode: "DOP", exchangeRate: 1 },
+    session
+  );
+  await expectJournalEntryFailure(
+    "/accounting/journal-entries",
+    "POST",
+    { entryDate: "2025-01-15", description: "Periodo cerrado", currencyCode: "DOP", exchangeRate: 1 },
+    session
+  );
+
+  smokeStep("journal entry line totals and base amounts");
+  const debitAdded = await addJournalEntryLine(entry.journalEntryId, linePayload(cash.accountId, 1000, 0, { description: "Debito caja" }), session);
+  const creditAdded = await addJournalEntryLine(entry.journalEntryId, linePayload(payable.accountId, 0, 1000, { description: "Credito proveedor" }), session);
+  if (creditAdded.totalDebit !== 1000 || creditAdded.totalCredit !== 1000 || creditAdded.difference !== 0 || !creditAdded.isBalanced) {
+    fail("Journal entry totals did not balance after debit and credit lines.");
+  }
+  const debitLine = creditAdded.lines.find((line) => line.debitAmount === 1000);
+  const creditLine = creditAdded.lines.find((line) => line.creditAmount === 1000);
+  if (!debitLine || !creditLine || debitLine.debitBaseAmount !== 1000 || creditLine.creditBaseAmount !== 1000) {
+    fail("Journal entry base amounts were not calculated from the exchange rate.");
+  }
+
+  smokeStep("journal entry line validations");
+  await expectJournalEntryFailure(
+    `/accounting/journal-entries/${entry.journalEntryId}/lines`,
+    "POST",
+    linePayload(cash.accountId, 10, 10),
+    session
+  );
+  await expectJournalEntryFailure(
+    `/accounting/journal-entries/${entry.journalEntryId}/lines`,
+    "POST",
+    linePayload(cash.accountId, 0, 0),
+    session
+  );
+  await expectJournalEntryFailure(
+    `/accounting/journal-entries/${entry.journalEntryId}/lines`,
+    "POST",
+    { ...linePayload(cash.accountId, -1, 0), description: "Negativo" },
+    session
+  );
+  await expectJournalEntryFailure(
+    `/accounting/journal-entries/${entry.journalEntryId}/lines`,
+    "POST",
+    linePayload(randomUUID(), 5, 0),
+    session
+  );
+
+  const groupingAccount = await createAccountingAccount(
+    accountPayload(`JE-GRP-${suffix}`, "Cuenta agrupadora smoke", { allowsPosting: false, isControlAccount: true }),
+    session
+  );
+  await expectJournalEntryFailure(
+    `/accounting/journal-entries/${entry.journalEntryId}/lines`,
+    "POST",
+    linePayload(groupingAccount.accountId, 5, 0),
+    session
+  );
+
+  const blockedAccount = await createAccountingAccount(accountPayload(`JE-BLK-${suffix}`, "Cuenta bloqueada smoke"), session);
+  await blockAccountingAccount(blockedAccount.accountId, "Bloqueada para smoke", session);
+  await expectJournalEntryFailure(
+    `/accounting/journal-entries/${entry.journalEntryId}/lines`,
+    "POST",
+    linePayload(blockedAccount.accountId, 5, 0),
+    session
+  );
+
+  const inactiveAccount = await createAccountingAccount(accountPayload(`JE-INACT-${suffix}`, "Cuenta inactiva smoke"), session);
+  await deactivateAccountingAccount(inactiveAccount.accountId, session);
+  await expectJournalEntryFailure(
+    `/accounting/journal-entries/${entry.journalEntryId}/lines`,
+    "POST",
+    linePayload(inactiveAccount.accountId, 5, 0),
+    session
+  );
+
+  const expiredAccount = await createAccountingAccount(
+    accountPayload(`JE-EXP-${suffix}`, "Cuenta vencida smoke", { validFrom: "2024-01-01", validTo: "2024-12-31" }),
+    session
+  );
+  await expectJournalEntryFailure(
+    `/accounting/journal-entries/${entry.journalEntryId}/lines`,
+    "POST",
+    linePayload(expiredAccount.accountId, 5, 0),
+    session
+  );
+
+  const otherCompanyAccount = await ensureOtherCompanyAccount(session, `JE-OTHER-${suffix}`);
+  await expectJournalEntryFailure(
+    `/accounting/journal-entries/${entry.journalEntryId}/lines`,
+    "POST",
+    linePayload(otherCompanyAccount.accountId, 5, 0),
+    session
+  );
+
+  const validCostCenter = await createCatalogRecord("cost-centers", costCenterPayload(`JE-CC-${suffix}`, "Centro asiento"), session);
+  const costRequiredAccount = await createAccountingAccount(
+    accountPayload(`JE-REQCC-${suffix}`, "Cuenta requiere centro", { requiresCostCenter: true }),
+    session
+  );
+  await expectJournalEntryFailure(
+    `/accounting/journal-entries/${entry.journalEntryId}/lines`,
+    "POST",
+    linePayload(costRequiredAccount.accountId, 5, 0),
+    session
+  );
+  const requiredCenterLine = await addJournalEntryLine(
+    entry.journalEntryId,
+    linePayload(costRequiredAccount.accountId, 5, 0, { costCenterId: validCostCenter.id, description: "Centro requerido" }),
+    session
+  );
+  const addedRequiredLine = requiredCenterLine.lines.find((line) => line.accountId === costRequiredAccount.accountId);
+  if (!addedRequiredLine?.costCenterId) {
+    fail("Journal entry did not accept a required valid cost center.");
+  }
+  await deleteJournalEntryLine(entry.journalEntryId, addedRequiredLine.journalEntryLineId, session);
+
+  const otherCompanyCostCenter = await ensureOtherCompanyCostCenter(session, `JE-CC-OTHER-${suffix}`);
+  await expectJournalEntryFailure(
+    `/accounting/journal-entries/${entry.journalEntryId}/lines`,
+    "POST",
+    linePayload(costRequiredAccount.accountId, 5, 0, { costCenterId: otherCompanyCostCenter.costCenterId }),
+    session
+  );
+  const inactiveCostCenter = await createCatalogRecord("cost-centers", costCenterPayload(`JE-CC-IN-${suffix}`, "Centro inactivo"), session);
+  await setCatalogRecordActive("cost-centers", inactiveCostCenter.id, false, session);
+  await expectJournalEntryFailure(
+    `/accounting/journal-entries/${entry.journalEntryId}/lines`,
+    "POST",
+    linePayload(costRequiredAccount.accountId, 5, 0, { costCenterId: inactiveCostCenter.id }),
+    session
+  );
+  const expiredCostCenter = await createCatalogRecord(
+    "cost-centers",
+    costCenterPayload(`JE-CC-EXP-${suffix}`, "Centro vencido", { validFrom: "2024-01-01", validTo: "2024-12-31" }),
+    session
+  );
+  await expectJournalEntryFailure(
+    `/accounting/journal-entries/${entry.journalEntryId}/lines`,
+    "POST",
+    linePayload(costRequiredAccount.accountId, 5, 0, { costCenterId: expiredCostCenter.id }),
+    session
+  );
+  const nonPostingCostCenter = await createCatalogRecord(
+    "cost-centers",
+    costCenterPayload(`JE-CC-NP-${suffix}`, "Centro no postea", { allowsPosting: false }),
+    session
+  );
+  await expectJournalEntryFailure(
+    `/accounting/journal-entries/${entry.journalEntryId}/lines`,
+    "POST",
+    linePayload(costRequiredAccount.accountId, 5, 0, { costCenterId: nonPostingCostCenter.id }),
+    session
+  );
+
+  smokeStep("journal entry unbalanced post rejected");
+  const unbalanced = await updateJournalEntryLine(
+    entry.journalEntryId,
+    creditLine.journalEntryLineId,
+    linePayload(payable.accountId, 0, 900, { description: "Credito desbalanceado" }),
+    session
+  );
+  if (unbalanced.status !== "DRAFT" || unbalanced.difference === 0) {
+    fail("Journal entry did not remain DRAFT and unbalanced after line change.");
+  }
+  await expectJournalEntryFailure(
+    `/accounting/journal-entries/${entry.journalEntryId}/post`,
+    "POST",
+    { idempotencyKey: `je-unbalanced-${suffix}` },
+    session
+  );
+
+  smokeStep("journal entry exchange rate recalculation");
+  await updateJournalEntryLine(
+    entry.journalEntryId,
+    creditLine.journalEntryLineId,
+    linePayload(payable.accountId, 0, 1000, { description: "Credito balanceado" }),
+    session
+  );
+  const rateChanged = await updateJournalEntry(
+    entry.journalEntryId,
+    { entryDate: "2025-02-15", description: `Smoke asiento ${suffix}`, reference: `JE-${suffix}`, currencyCode: "DOP", exchangeRate: 1.25 },
+    session
+  );
+  if (rateChanged.totalDebitBase !== 1250 || rateChanged.totalCreditBase !== 1250 || !rateChanged.isBalanced) {
+    fail("Journal entry exchange rate update did not recalculate base amounts and totals.");
+  }
+
+  smokeStep("journal entry post and idempotency");
+  const postKey = `je-post-${suffix}`;
+  const posted = await postJournalEntry(entry.journalEntryId, postKey, session);
+  if (posted.status !== "POSTED" || !posted.postedAt || !posted.postedBy || posted.totalDebit !== 1000 || posted.totalCredit !== 1000) {
+    fail("Journal entry post did not set POSTED trace and preserve totals.");
+  }
+  const retry = await postJournalEntry(entry.journalEntryId, postKey, session);
+  if (retry.status !== "POSTED" || retry.postedAt !== posted.postedAt) {
+    fail("Journal entry idempotent retry did not return the posted result.");
+  }
+  const operationCount = await countJournalPostOperations(entry.journalEntryId);
+  if (operationCount !== 1) {
+    fail("Journal entry idempotent retry duplicated post operation.");
+  }
+  await expectJournalEntryFailure(
+    `/accounting/journal-entries/${entry.journalEntryId}/post`,
+    "POST",
+    { idempotencyKey: postKey, requestHash: "different" },
+    session
+  );
+  await expectJournalEntryFailure(
+    `/accounting/journal-entries/${entry.journalEntryId}/post`,
+    "POST",
+    { idempotencyKey: `je-post-new-${suffix}` },
+    session
+  );
+
+  smokeStep("journal entry immutability after post");
+  await expectJournalEntryFailure(
+    `/accounting/journal-entries/${entry.journalEntryId}`,
+    "PATCH",
+    { entryDate: "2025-02-15", description: "No editable", currencyCode: "DOP", exchangeRate: 1 },
+    session
+  );
+  await expectJournalEntryFailure(
+    `/accounting/journal-entries/${entry.journalEntryId}/lines`,
+    "POST",
+    linePayload(cash.accountId, 1, 0),
+    session
+  );
+  await expectJournalEntryFailure(
+    `/accounting/journal-entries/${entry.journalEntryId}/lines/${debitLine.journalEntryLineId}`,
+    "PATCH",
+    linePayload(cash.accountId, 1, 0),
+    session
+  );
+  await expectJournalEntryFailure(
+    `/accounting/journal-entries/${entry.journalEntryId}/lines/${debitLine.journalEntryLineId}`,
+    "DELETE",
+    undefined,
+    session
+  );
+
+  smokeStep("journal entry concurrent post");
+  const concurrent = await createJournalEntry(
+    {
+      entryDate: "2025-02-15",
+      description: `Smoke asiento concurrente ${suffix}`,
+      reference: `JE-CON-${suffix}`,
+      currencyCode: "DOP",
+      exchangeRate: 1
+    },
+    session
+  );
+  const concurrentDebit = await addJournalEntryLine(concurrent.journalEntryId, linePayload(cash.accountId, 50, 0), session);
+  await addJournalEntryLine(concurrent.journalEntryId, linePayload(payable.accountId, 0, 50), session);
+  const concurrentKey = `je-concurrent-${suffix}`;
+  const concurrentResults = await Promise.allSettled([
+    postJournalEntry(concurrent.journalEntryId, concurrentKey, session),
+    postJournalEntry(concurrent.journalEntryId, concurrentKey, session)
+  ]);
+  const concurrentSuccesses = concurrentResults.filter((result) => result.status === "fulfilled");
+  if (concurrentSuccesses.length !== 2 || (await countJournalPostOperations(concurrent.journalEntryId)) !== 1) {
+    fail("Concurrent journal entry post did not produce one persisted post operation with idempotent retry.");
+  }
+  if (!concurrentDebit.lines?.length) {
+    fail("Concurrent journal entry setup did not persist lines.");
+  }
+
+  smokeStep("journal entry company isolation and runtime metadata");
+  const isolatedHeaders = { "x-company-id": otherCompanyAccount.companyId };
+  await expectJournalEntryFailure(`/accounting/journal-entries/${entry.journalEntryId}`, "GET", undefined, session, isolatedHeaders);
+  await expectJournalEntryFailure(
+    `/accounting/journal-entries/${entry.journalEntryId}`,
+    "PATCH",
+    { entryDate: "2025-02-15", description: "Aislamiento", currencyCode: "DOP", exchangeRate: 1 },
+    session,
+    isolatedHeaders
+  );
+  await expectJournalEntryFailure(
+    `/accounting/journal-entries/${entry.journalEntryId}/post`,
+    "POST",
+    { idempotencyKey: `je-isolated-${suffix}` },
+    session,
+    isolatedHeaders
+  );
+  const runtimeEntries = await expectOk(
+    `/master-data/journal-entries?search=${encodeURIComponent(entry.entryNumber)}&page=1&pageSize=10`,
+    { headers: authHeaders(session) }
+  );
+  if (!runtimeEntries.data?.some((record) => record.code === entry.entryNumber)) {
+    fail("/master-data/journal-entries did not expose posted journal entry read-only data.");
+  }
+  const runtimeLines = await expectOk(
+    `/master-data/journal-entry-lines?search=${encodeURIComponent(entry.entryNumber)}&page=1&pageSize=10`,
+    { headers: authHeaders(session) }
+  );
+  if (!runtimeLines.data?.some((record) => record.code === entry.entryNumber)) {
+    fail("/master-data/journal-entry-lines did not expose journal entry line read-only data.");
+  }
+}
+
 async function validateCrud(session) {
   const suffix = smokeRun;
   const customerCode = `QA-CUST-${suffix}`;
@@ -7420,6 +7884,7 @@ async function main() {
   await validateAccountingAccountFlow(session);
   await validateCostCenterFlow(session);
   await validateAccountingPeriodFlow(session);
+  await validateJournalEntryFlow(session);
   await validateCrud(session);
   console.log("smoke: local runtime validation OK");
 }

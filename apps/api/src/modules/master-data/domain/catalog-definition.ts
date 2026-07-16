@@ -7013,7 +7013,93 @@ const accountingAccountFields: readonly CatalogFieldDefinition[] = [
   { field: "isActive", dbColumn: "isActive", label: "Activa", type: "boolean", required: true, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 100, validation: { nullable: false }, grid: { width: 96, align: "center", format: "boolean" } }
 ] as const satisfies readonly CatalogFieldDefinition[];
 
+const journalEntryFields: readonly CatalogFieldDefinition[] = [
+  { field: "entryNumber", dbColumn: "entryNumber", label: "Numero", type: "text", required: true, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 10, validation: { nullable: false }, grid: { width: 150, align: "left" } },
+  { field: "entryDate", dbColumn: "entryDate", label: "Fecha", type: "date", required: true, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 20, validation: { nullable: false }, grid: { width: 120, align: "left" } },
+  { field: "periodCode", dbColumn: "periodCode", label: "Periodo", type: "text", required: true, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 30, validation: { nullable: false }, grid: { width: 110, align: "left" } },
+  { field: "description", dbColumn: "description", label: "Descripcion", type: "textarea", required: true, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 40, validation: { nullable: false }, grid: { width: 260, align: "left" } },
+  { field: "status", dbColumn: "status", label: "Estado", type: "text", required: true, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 50, validation: { nullable: false }, grid: { width: 110, align: "center" } },
+  { field: "currencyCode", dbColumn: "currencyCode", label: "Moneda", type: "text", required: true, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 60, validation: { nullable: false }, grid: { width: 90, align: "center" } },
+  { field: "totalDebit", dbColumn: "totalDebit", label: "Debito", type: "number", required: true, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 70, validation: { nullable: false }, grid: { width: 120, align: "right", format: "currency" } },
+  { field: "totalCredit", dbColumn: "totalCredit", label: "Credito", type: "number", required: true, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 80, validation: { nullable: false }, grid: { width: 120, align: "right", format: "currency" } },
+  { field: "difference", dbColumn: "difference", label: "Diferencia", type: "number", required: true, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 90, validation: { nullable: false }, grid: { width: 120, align: "right", format: "currency" } },
+  { field: "lineCount", dbColumn: "lineCount", label: "Lineas", type: "number", required: true, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 100, validation: { nullable: false }, grid: { width: 90, align: "right" } }
+] as const satisfies readonly CatalogFieldDefinition[];
+
+const journalEntryLineFields: readonly CatalogFieldDefinition[] = [
+  { field: "entryNumber", dbColumn: "entryNumber", label: "Asiento", type: "text", required: true, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 10, validation: { nullable: false }, grid: { width: 150, align: "left" } },
+  { field: "lineNumber", dbColumn: "lineNumber", label: "Linea", type: "number", required: true, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 20, validation: { nullable: false }, grid: { width: 90, align: "right" } },
+  { field: "accountCode", dbColumn: "accountCode", label: "Cuenta", type: "text", required: true, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 30, validation: { nullable: false }, grid: { width: 130, align: "left" } },
+  { field: "accountName", dbColumn: "accountName", label: "Nombre cuenta", type: "text", required: true, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 40, validation: { nullable: false }, grid: { width: 230, align: "left" } },
+  { field: "costCenterCode", dbColumn: "costCenterCode", label: "Centro", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 50, validation: { nullable: true }, grid: { width: 120, align: "left" } },
+  { field: "description", dbColumn: "description", label: "Descripcion", type: "textarea", required: true, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 60, validation: { nullable: false }, grid: { width: 240, align: "left" } },
+  { field: "debitAmount", dbColumn: "debitAmount", label: "Debito", type: "number", required: true, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 70, validation: { nullable: false }, grid: { width: 120, align: "right", format: "currency" } },
+  { field: "creditAmount", dbColumn: "creditAmount", label: "Credito", type: "number", required: true, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 80, validation: { nullable: false }, grid: { width: 120, align: "right", format: "currency" } }
+] as const satisfies readonly CatalogFieldDefinition[];
+
 export const catalogDefinitions = {
+  "journal-entries": {
+    catalogCode: "journal-entries",
+    displayName: "Asientos contables",
+    tableName: "accounting.V_JournalEntrySummary",
+    idColumn: "journalEntryId",
+    codeColumn: "entryNumber",
+    nameColumn: "description",
+    descriptionColumn: "reference",
+    allowedSearchColumns: ["entryNumber", "description", "reference", "periodCode"],
+    allowedSortColumns: ["entryNumber", "entryDate", "periodCode", "status", "currencyCode", "totalDebit", "totalCredit", "difference", "lineCount", "createdAt"],
+    defaultSortBy: "entryDate",
+    permissions: commonPermissions("accounting.journal-entries"),
+    moduleCode: "accounting",
+    tenantScoped: true,
+    companyScoped: true,
+    readOnly: true,
+    columns: {
+      id: "journalEntryId",
+      tenantId: "tenantId",
+      companyId: "companyId",
+      code: "entryNumber",
+      name: "description",
+      description: "reference",
+      isActive: "status",
+      createdAt: "createdAt",
+      updatedAt: "updatedAt",
+      createdBy: "createdBy",
+      updatedBy: "updatedBy"
+    },
+    fields: journalEntryFields
+  },
+  "journal-entry-lines": {
+    catalogCode: "journal-entry-lines",
+    displayName: "Lineas de asientos",
+    tableName: "accounting.V_JournalEntryLineSummary",
+    idColumn: "journalEntryLineId",
+    codeColumn: "entryNumber",
+    nameColumn: "description",
+    descriptionColumn: "reference",
+    allowedSearchColumns: ["entryNumber", "accountCode", "accountName", "costCenterCode", "description", "reference"],
+    allowedSortColumns: ["entryNumber", "lineNumber", "accountCode", "costCenterCode", "debitAmount", "creditAmount", "createdAt"],
+    defaultSortBy: "entryNumber",
+    permissions: commonPermissions("accounting.journal-entries"),
+    moduleCode: "accounting",
+    tenantScoped: true,
+    companyScoped: true,
+    readOnly: true,
+    columns: {
+      id: "journalEntryLineId",
+      tenantId: "tenantId",
+      companyId: "companyId",
+      code: "entryNumber",
+      name: "description",
+      description: "reference",
+      isActive: "isActive",
+      createdAt: "createdAt",
+      updatedAt: "updatedAt",
+      createdBy: "createdBy",
+      updatedBy: "updatedBy"
+    },
+    fields: journalEntryLineFields
+  },
   "chart-of-accounts": {
     catalogCode: "chart-of-accounts",
     displayName: "Plan de cuentas",
