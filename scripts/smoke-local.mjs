@@ -15,6 +15,8 @@ const requiredCatalogs = [
   { code: "brands", seedCode: "DOBLES" },
   { code: "units-of-measure", seedCode: "UND" },
   { code: "warehouses", seedCode: "ALM-PRINCIPAL" },
+  { code: "chart-of-accounts", seedCode: "1-01-001" },
+  { code: "postable-accounts", seedCode: "1-01-001" },
   { code: "cost-centers", seedCode: "ADMIN" },
   { code: "accounting-periods", seedCode: "2025-01" },
   { code: "inventory-stocks", seedCode: "ART-DEMO" },
@@ -187,6 +189,94 @@ async function listAccountingPeriods(query, session) {
   return body.data;
 }
 
+async function createAccountingAccount(payload, session) {
+  const body = await expectOk("/accounting/accounts", {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function updateAccountingAccount(accountId, payload, session, extraHeaders = {}) {
+  const body = await expectOk(`/accounting/accounts/${accountId}`, {
+    method: "PATCH",
+    headers: { ...authHeaders(session), ...extraHeaders },
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function getAccountingAccount(accountId, session, extraHeaders = {}) {
+  const body = await expectOk(`/accounting/accounts/${accountId}`, {
+    headers: { ...authHeaders(session), ...extraHeaders }
+  });
+
+  return body.data;
+}
+
+async function listAccountingAccounts(query, session) {
+  const params = new URLSearchParams(query);
+  const body = await expectOk(`/accounting/accounts?${params.toString()}`, {
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
+async function blockAccountingAccount(accountId, reason, session, extraHeaders = {}) {
+  const body = await expectOk(`/accounting/accounts/${accountId}/block`, {
+    method: "POST",
+    headers: { ...authHeaders(session), ...extraHeaders },
+    body: JSON.stringify({ reason })
+  });
+
+  return body.data;
+}
+
+async function unblockAccountingAccount(accountId, session) {
+  const body = await expectOk(`/accounting/accounts/${accountId}/unblock`, {
+    method: "POST",
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
+async function activateAccountingAccount(accountId, session) {
+  const body = await expectOk(`/accounting/accounts/${accountId}/activate`, {
+    method: "POST",
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
+async function deactivateAccountingAccount(accountId, session, extraHeaders = {}) {
+  const body = await expectOk(`/accounting/accounts/${accountId}/deactivate`, {
+    method: "POST",
+    headers: { ...authHeaders(session), ...extraHeaders }
+  });
+
+  return body.data;
+}
+
+async function expectAccountingAccountFailure(path, method, payload, session, extraHeaders = {}) {
+  const result = await request(path, {
+    method,
+    headers: { ...authHeaders(session), ...extraHeaders },
+    body: payload === undefined ? undefined : JSON.stringify(payload)
+  });
+
+  if (result.response.ok || result.body?.success !== false) {
+    fail(`Expected accounting account request ${method} ${path} to fail.`);
+  }
+
+  return result.body;
+}
+
 async function expectAccountingPeriodFailure(path, method, payload, session, extraHeaders = {}) {
   const result = await request(path, {
     method,
@@ -282,6 +372,74 @@ async function cleanupAccountingPeriodSmokeData(session) {
           AND CompanyId = @CompanyId
           AND Name LIKE N'Smoke Fase 21.2%';
       `);
+  } finally {
+    await pool.close();
+  }
+}
+
+async function cleanupAccountingAccountSmokeData(session) {
+  const pool = await sql.connect(getSqlConfig());
+  try {
+    await pool
+      .request()
+      .input("TenantId", sql.UniqueIdentifier, session.user.tenantId)
+      .input("CompanyId", sql.UniqueIdentifier, session.user.companyId)
+      .query(`
+        IF OBJECT_ID('accounting.Accounts', 'U') IS NOT NULL
+        BEGIN
+          UPDATE accounting.Accounts
+          SET ParentAccountId = NULL
+          WHERE TenantId = @TenantId
+            AND CompanyId = @CompanyId
+            AND Code LIKE N'ACCT-%';
+
+          DELETE FROM accounting.Accounts
+          WHERE TenantId = @TenantId
+            AND CompanyId = @CompanyId
+            AND Code LIKE N'ACCT-%';
+        END;
+      `);
+  } finally {
+    await pool.close();
+  }
+}
+
+async function ensureOtherCompanyAccount(session, code) {
+  const companyId = "99999999-9999-9999-9999-999999999997";
+  const accountId = randomUUID();
+  const pool = await sql.connect(getSqlConfig());
+
+  try {
+    await pool
+      .request()
+      .input("TenantId", sql.UniqueIdentifier, session.user.tenantId)
+      .input("CompanyId", sql.UniqueIdentifier, companyId)
+      .input("AccountId", sql.UniqueIdentifier, accountId)
+      .input("Code", sql.NVarChar(50), code)
+      .query(`
+        IF NOT EXISTS (SELECT 1 FROM core.Companies WHERE CompanyId = @CompanyId)
+        BEGIN
+          INSERT INTO core.Companies (CompanyId, TenantId, LegalName, TradeName, TaxId, FiscalCountryCode, IsActive)
+          VALUES (@CompanyId, @TenantId, N'Compania cuentas smoke', N'Cuentas smoke', N'999999997', N'DO', 1);
+        END;
+
+        IF NOT EXISTS (
+          SELECT 1 FROM accounting.Accounts
+          WHERE TenantId = @TenantId AND CompanyId = @CompanyId AND Code = @Code
+        )
+        BEGIN
+          INSERT INTO accounting.Accounts (
+            AccountId, TenantId, CompanyId, Code, Name, Level, AccountType, NormalBalance,
+            AllowsPosting, RequiresCostCenter, RequiresThirdParty, IsControlAccount, IsBlocked, IsActive
+          )
+          VALUES (
+            @AccountId, @TenantId, @CompanyId, @Code, N'Cuenta otra compania smoke', 1, N'ASSET', N'DEBIT',
+            0, 0, 0, 1, 0, 1
+          );
+        END;
+      `);
+
+    return { accountId, companyId };
   } finally {
     await pool.close();
   }
@@ -6722,6 +6880,137 @@ async function validateCostCenterFlow(session) {
   );
 }
 
+async function validateAccountingAccountFlow(session) {
+  await cleanupAccountingAccountSmokeData(session);
+  const suffix = smokeRun;
+  const payload = (code, name, parentAccountId = undefined, allowsPosting = false) => ({
+    code,
+    name,
+    description: `${name} smoke`,
+    parentAccountId,
+    accountType: "ASSET",
+    normalBalance: "DEBIT",
+    classification: "SMOKE",
+    allowsPosting,
+    requiresCostCenter: false,
+    requiresThirdParty: false,
+    isControlAccount: !allowsPosting,
+    currencyCode: "DOP",
+    validFrom: "2026-01-01",
+    validTo: "2026-12-31"
+  });
+
+  smokeStep("accounting account seed and metadata");
+  const seedAccounts = await listAccountingAccounts({ search: "1-01-001", pageSize: "10" }, session);
+  if (!seedAccounts.records?.some((account) => account.code === "1-01-001")) {
+    fail("Demo chart of accounts seed was not exposed by API.");
+  }
+  const runtimeAccount = await findCatalogRecord("chart-of-accounts", "1-01-001", session);
+  const runtimePostable = await findCatalogRecord("postable-accounts", "1-01-001", session);
+  if (!runtimeAccount || !runtimePostable) {
+    fail("Chart of accounts runtime metadata did not expose account summaries.");
+  }
+
+  smokeStep("accounting account hierarchy create");
+  const root = await createAccountingAccount(payload(`ACCT-ROOT-${suffix}`, "Cuenta raiz QA"), session);
+  const child = await createAccountingAccount(payload(`ACCT-CHILD-${suffix}`, "Cuenta hija QA", root.accountId), session);
+  const grandchild = await createAccountingAccount(payload(`ACCT-GRAND-${suffix}`, "Cuenta nieta QA", child.accountId, true), session);
+  if (root.level !== 1 || child.level !== 2 || grandchild.level !== 3) {
+    fail("Accounting account hierarchy did not calculate expected levels 1, 2 and 3.");
+  }
+
+  smokeStep("accounting account subtree move");
+  const a = await createAccountingAccount(payload(`ACCT-A-${suffix}`, "Cuenta A"), session);
+  const b = await createAccountingAccount(payload(`ACCT-B-${suffix}`, "Cuenta B", a.accountId), session);
+  const c = await createAccountingAccount(payload(`ACCT-C-${suffix}`, "Cuenta C", b.accountId, true), session);
+  const d = await createAccountingAccount(payload(`ACCT-D-${suffix}`, "Cuenta D"), session);
+  const e = await createAccountingAccount(payload(`ACCT-E-${suffix}`, "Cuenta E", d.accountId), session);
+  const f = await createAccountingAccount(payload(`ACCT-F-${suffix}`, "Cuenta F", e.accountId), session);
+
+  await expectAccountingAccountFailure(`/accounting/accounts/${b.accountId}`, "PATCH", payload(`ACCT-B-${suffix}`, "Cuenta B ciclo", c.accountId), session);
+  const movedB = await updateAccountingAccount(b.accountId, payload(`ACCT-B-${suffix}`, "Cuenta B movida", f.accountId), session);
+  const movedC = await getAccountingAccount(c.accountId, session);
+  const unchangedD = await getAccountingAccount(d.accountId, session);
+  const unchangedE = await getAccountingAccount(e.accountId, session);
+  const unchangedF = await getAccountingAccount(f.accountId, session);
+  if (movedB.parentAccountId?.toLowerCase() !== f.accountId.toLowerCase() || movedB.level !== 4 || movedC.level !== 5) {
+    fail("Moving accounting account subtree did not recalculate moved node or descendant levels.");
+  }
+  if (unchangedD.level !== 1 || unchangedE.level !== 2 || unchangedF.level !== 3) {
+    fail("Moving accounting account subtree changed unrelated account levels.");
+  }
+
+  smokeStep("accounting account company isolation");
+  const otherCompanyParent = await ensureOtherCompanyAccount(session, `ACCT-OTHER-${suffix}`);
+  await expectAccountingAccountFailure(
+    `/accounting/accounts/${root.accountId}`,
+    "PATCH",
+    payload(`ACCT-ROOT-${suffix}`, "Cuenta padre otra compania", otherCompanyParent.accountId),
+    session
+  );
+  await expectAccountingAccountFailure(
+    `/accounting/accounts/${root.accountId}`,
+    "GET",
+    undefined,
+    session,
+    { "x-company-id": otherCompanyParent.companyId }
+  );
+
+  smokeStep("accounting account posting grouping rules");
+  const postingParent = await createAccountingAccount(payload(`ACCT-POST-PARENT-${suffix}`, "Padre movimiento QA", undefined, true), session);
+  await expectAccountingAccountFailure(
+    "/accounting/accounts",
+    "POST",
+    payload(`ACCT-POST-CHILD-${suffix}`, "Hijo rechazado QA", postingParent.accountId, true),
+    session
+  );
+  const groupingParent = await updateAccountingAccount(
+    postingParent.accountId,
+    payload(`ACCT-POST-PARENT-${suffix}`, "Padre agrupador QA", undefined, false),
+    session
+  );
+  const groupingChild = await createAccountingAccount(
+    payload(`ACCT-POST-CHILD-${suffix}`, "Hijo permitido QA", groupingParent.accountId, true),
+    session
+  );
+  if (groupingChild.level !== 2) {
+    fail("Creating child under explicit grouping parent did not succeed.");
+  }
+  await expectAccountingAccountFailure(
+    `/accounting/accounts/${groupingParent.accountId}`,
+    "PATCH",
+    payload(`ACCT-POST-PARENT-${suffix}`, "Padre vuelve movimiento QA", undefined, true),
+    session
+  );
+
+  smokeStep("accounting account block and unblock");
+  const blocked = await blockAccountingAccount(grandchild.accountId, "Bloqueo smoke", session);
+  if (!blocked.isBlocked || blocked.blockReason !== "Bloqueo smoke") {
+    fail("Blocking accounting account did not persist block status and reason.");
+  }
+  const unblocked = await unblockAccountingAccount(grandchild.accountId, session);
+  if (unblocked.isBlocked || unblocked.blockReason) {
+    fail("Unblocking accounting account did not clear active block status.");
+  }
+
+  smokeStep("accounting account activation");
+  const deactivated = await deactivateAccountingAccount(grandchild.accountId, session);
+  if (deactivated.isActive !== false) {
+    fail("Deactivating leaf accounting account did not set isActive=false.");
+  }
+  const reactivated = await activateAccountingAccount(grandchild.accountId, session);
+  if (reactivated.isActive !== true) {
+    fail("Activating accounting account did not set isActive=true.");
+  }
+  await expectAccountingAccountFailure(`/accounting/accounts/${root.accountId}/deactivate`, "POST", undefined, session);
+
+  smokeStep("accounting account API persistence");
+  const persisted = await getAccountingAccount(grandchild.accountId, session);
+  if (persisted.code !== grandchild.code || persisted.parentAccountId?.toLowerCase() !== child.accountId.toLowerCase()) {
+    fail("Accounting account data was not persisted as API source of truth.");
+  }
+}
+
 async function validateAccountingPeriodFlow(session) {
   await cleanupAccountingPeriodSmokeData(session);
 
@@ -7128,6 +7417,7 @@ async function main() {
   await validateSalesShipmentFlow(session);
   await validateSalesInvoiceFlow(session);
   await validateSalesReturnFlow(session);
+  await validateAccountingAccountFlow(session);
   await validateCostCenterFlow(session);
   await validateAccountingPeriodFlow(session);
   await validateCrud(session);

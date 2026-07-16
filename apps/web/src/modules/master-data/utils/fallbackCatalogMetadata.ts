@@ -92,6 +92,25 @@ const technicalFields: FieldInput[] = [
 ];
 
 const catalogFields: Record<string, FieldInput[]> = {
+  "chart-of-accounts": [
+    { field: "code", label: "Codigo", searchable: true, sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 140 },
+    { field: "name", label: "Nombre", searchable: true, sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 240 },
+    { field: "parentCode", label: "Padre", searchable: true, sortable: true, editable: false, readOnly: true, validation: { nullable: true }, width: 140 },
+    { field: "level", label: "Nivel", type: "number", sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 90, align: "right" },
+    { field: "accountType", label: "Tipo", searchable: true, sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 130 },
+    { field: "normalBalance", label: "Naturaleza", searchable: true, sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 130 },
+    { field: "allowsPosting", label: "Movimiento", type: "boolean", sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 120, align: "center", format: "boolean" },
+    { field: "isBlocked", label: "Bloqueada", type: "boolean", sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 110, align: "center", format: "boolean" },
+    { field: "isActive", label: "Activa", type: "boolean", sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 96, align: "center", format: "boolean" }
+  ],
+  "postable-accounts": [
+    { field: "code", label: "Codigo", searchable: true, sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 140 },
+    { field: "name", label: "Nombre", searchable: true, sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 240 },
+    { field: "accountType", label: "Tipo", searchable: true, sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 130 },
+    { field: "normalBalance", label: "Naturaleza", searchable: true, sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 130 },
+    { field: "currencyCode", label: "Moneda", searchable: true, sortable: true, editable: false, readOnly: true, validation: { nullable: true }, width: 100 },
+    { field: "isActive", label: "Activa", type: "boolean", sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 96, align: "center", format: "boolean" }
+  ],
   "accounting-periods": [
     { field: "code", label: "Codigo", searchable: true, sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 110 },
     { field: "name", label: "Nombre", searchable: true, sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 220 },
@@ -1109,6 +1128,8 @@ function buildFormField(field: RuntimeField, input: FieldInput): RuntimeFormFiel
 export function getFallbackCatalogMetadata(catalog: string): CatalogMetadata | null {
   const inputs = catalogFields[catalog];
   const catalogReadOnly = [
+    "chart-of-accounts",
+    "postable-accounts",
     "accounting-periods",
     "inventory-stocks",
     "item-availability",
