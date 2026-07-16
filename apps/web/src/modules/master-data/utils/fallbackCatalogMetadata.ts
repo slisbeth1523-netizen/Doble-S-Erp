@@ -123,6 +123,28 @@ const catalogFields: Record<string, FieldInput[]> = {
     { field: "durationDays", label: "Dias", type: "number", sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 90, align: "right" },
     { field: "isActive", label: "Activo", type: "boolean", sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 96, align: "center", format: "boolean" }
   ],
+  "journal-entries": [
+    { field: "entryNumber", label: "Numero", searchable: true, sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 150 },
+    { field: "entryDate", label: "Fecha", type: "date", sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 120 },
+    { field: "periodCode", label: "Periodo", searchable: true, sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 110 },
+    { field: "description", label: "Descripcion", type: "textarea", searchable: true, sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 260 },
+    { field: "status", label: "Estado", searchable: true, sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 110, align: "center" },
+    { field: "currencyCode", label: "Moneda", searchable: true, sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 90, align: "center" },
+    { field: "totalDebit", label: "Debito", type: "number", sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 120, align: "right", format: "currency" },
+    { field: "totalCredit", label: "Credito", type: "number", sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 120, align: "right", format: "currency" },
+    { field: "difference", label: "Diferencia", type: "number", sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 120, align: "right", format: "currency" },
+    { field: "lineCount", label: "Lineas", type: "number", sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 90, align: "right" }
+  ],
+  "journal-entry-lines": [
+    { field: "entryNumber", label: "Asiento", searchable: true, sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 150 },
+    { field: "lineNumber", label: "Linea", type: "number", sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 90, align: "right" },
+    { field: "accountCode", label: "Cuenta", searchable: true, sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 130 },
+    { field: "accountName", label: "Nombre cuenta", searchable: true, sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 230 },
+    { field: "costCenterCode", label: "Centro", searchable: true, sortable: true, editable: false, readOnly: true, validation: { nullable: true }, width: 120 },
+    { field: "description", label: "Descripcion", type: "textarea", searchable: true, sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 240 },
+    { field: "debitAmount", label: "Debito", type: "number", sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 120, align: "right", format: "currency" },
+    { field: "creditAmount", label: "Credito", type: "number", sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 120, align: "right", format: "currency" }
+  ],
   "cost-centers": [
     { field: "code", label: "Codigo", searchable: true, sortable: true, validation: { required: true, minLength: 1, maxLength: 30, nullable: false }, width: 130 },
     { field: "name", label: "Nombre", searchable: true, sortable: true, validation: { required: true, minLength: 1, maxLength: 150, nullable: false }, width: 220 },
@@ -1131,6 +1153,8 @@ export function getFallbackCatalogMetadata(catalog: string): CatalogMetadata | n
     "chart-of-accounts",
     "postable-accounts",
     "accounting-periods",
+    "journal-entries",
+    "journal-entry-lines",
     "inventory-stocks",
     "item-availability",
     "inventory-reservations",

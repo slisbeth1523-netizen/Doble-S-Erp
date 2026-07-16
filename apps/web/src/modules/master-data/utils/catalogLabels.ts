@@ -53,6 +53,8 @@ export const catalogLabels: Record<string, string> = {
   "customer-aging": "Antiguedad de clientes",
   "customer-receivable-balances": "Saldos por cliente",
   "chart-of-accounts": "Plan de cuentas",
+  "journal-entries": "Asientos contables",
+  "journal-entry-lines": "Lineas de asientos",
   "postable-accounts": "Cuentas de movimiento",
   "cost-centers": "Centros de costo",
   "accounting-periods": "Periodos contables"
