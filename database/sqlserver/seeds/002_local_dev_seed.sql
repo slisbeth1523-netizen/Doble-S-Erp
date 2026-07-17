@@ -169,6 +169,8 @@ VALUES
   ('accounting', 'accounting.journal-entries.create', 'Local create accounting journal entries'),
   ('accounting', 'accounting.journal-entries.update', 'Local update accounting journal entries'),
   ('accounting', 'accounting.journal-entries.post', 'Local post accounting journal entries'),
+  ('accounting', 'accounting.general-ledger.read', 'Local read accounting general ledger'),
+  ('accounting', 'accounting.general-ledger.export', 'Reserved export accounting general ledger'),
   ('inventory', 'inventory.items.read', 'Local read items'),
   ('inventory', 'inventory.items.create', 'Local create items'),
   ('inventory', 'inventory.items.update', 'Local update items'),

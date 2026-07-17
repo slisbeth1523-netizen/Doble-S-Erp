@@ -7037,7 +7037,131 @@ const journalEntryLineFields: readonly CatalogFieldDefinition[] = [
   { field: "creditAmount", dbColumn: "creditAmount", label: "Credito", type: "number", required: true, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 80, validation: { nullable: false }, grid: { width: 120, align: "right", format: "currency" } }
 ] as const satisfies readonly CatalogFieldDefinition[];
 
+const generalLedgerFields: readonly CatalogFieldDefinition[] = [
+  { field: "entryDate", dbColumn: "entryDate", label: "Fecha", type: "date", required: true, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 10, validation: { nullable: false }, grid: { width: 120, align: "left" } },
+  { field: "entryNumber", dbColumn: "entryNumber", label: "Asiento", type: "text", required: true, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 20, validation: { nullable: false }, grid: { width: 150, align: "left" } },
+  { field: "periodCode", dbColumn: "periodCode", label: "Periodo", type: "text", required: true, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 30, validation: { nullable: false }, grid: { width: 110, align: "left" } },
+  { field: "accountCode", dbColumn: "accountCode", label: "Cuenta", type: "text", required: true, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 40, validation: { nullable: false }, grid: { width: 130, align: "left" } },
+  { field: "accountName", dbColumn: "accountName", label: "Nombre cuenta", type: "text", required: true, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 50, validation: { nullable: false }, grid: { width: 220, align: "left" } },
+  { field: "costCenterCode", dbColumn: "costCenterCode", label: "Centro", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 60, validation: { nullable: true }, grid: { width: 120, align: "left" } },
+  { field: "lineDescription", dbColumn: "lineDescription", label: "Descripcion", type: "textarea", required: true, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 70, validation: { nullable: false }, grid: { width: 240, align: "left" } },
+  { field: "currencyCode", dbColumn: "currencyCode", label: "Moneda", type: "text", required: true, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 80, validation: { nullable: false }, grid: { width: 90, align: "center" } },
+  { field: "debitAmount", dbColumn: "debitAmount", label: "Debito", type: "number", required: true, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 90, validation: { nullable: false }, grid: { width: 120, align: "right", format: "currency" } },
+  { field: "creditAmount", dbColumn: "creditAmount", label: "Credito", type: "number", required: true, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 100, validation: { nullable: false }, grid: { width: 120, align: "right", format: "currency" } },
+  { field: "signedBaseAmount", dbColumn: "signedBaseAmount", label: "Movimiento base", type: "number", required: true, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 110, validation: { nullable: false }, grid: { width: 140, align: "right", format: "currency" } }
+] as const satisfies readonly CatalogFieldDefinition[];
+
+const generalLedgerAccountSummaryFields: readonly CatalogFieldDefinition[] = [
+  { field: "accountCode", dbColumn: "accountCode", label: "Cuenta", type: "text", required: true, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 10, validation: { nullable: false }, grid: { width: 130, align: "left" } },
+  { field: "accountName", dbColumn: "accountName", label: "Nombre", type: "text", required: true, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 20, validation: { nullable: false }, grid: { width: 240, align: "left" } },
+  { field: "accountType", dbColumn: "accountType", label: "Tipo", type: "text", required: true, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 30, validation: { nullable: false }, grid: { width: 120, align: "left" } },
+  { field: "normalBalance", dbColumn: "normalBalance", label: "Naturaleza", type: "text", required: true, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 40, validation: { nullable: false }, grid: { width: 120, align: "left" } },
+  { field: "totalDebitBase", dbColumn: "totalDebitBase", label: "Debito base", type: "number", required: true, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 50, validation: { nullable: false }, grid: { width: 130, align: "right", format: "currency" } },
+  { field: "totalCreditBase", dbColumn: "totalCreditBase", label: "Credito base", type: "number", required: true, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 60, validation: { nullable: false }, grid: { width: 130, align: "right", format: "currency" } },
+  { field: "netBaseMovement", dbColumn: "netBaseMovement", label: "Neto base", type: "number", required: true, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 70, validation: { nullable: false }, grid: { width: 130, align: "right", format: "currency" } },
+  { field: "movementCount", dbColumn: "movementCount", label: "Movimientos", type: "number", required: true, visibleInGrid: true, visibleInForm: false, searchable: false, sortable: true, editable: false, readOnly: true, displayOrder: 80, validation: { nullable: false }, grid: { width: 110, align: "right" } }
+] as const satisfies readonly CatalogFieldDefinition[];
+
+const generalLedgerPeriodSummaryFields: readonly CatalogFieldDefinition[] = [
+  ...generalLedgerAccountSummaryFields,
+  { field: "periodCode", dbColumn: "periodCode", label: "Periodo", type: "text", required: true, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 90, validation: { nullable: false }, grid: { width: 110, align: "left" } },
+  { field: "costCenterCode", dbColumn: "costCenterCode", label: "Centro", type: "text", required: false, visibleInGrid: true, visibleInForm: false, searchable: true, sortable: true, editable: false, readOnly: true, displayOrder: 100, validation: { nullable: true }, grid: { width: 120, align: "left" } }
+] as const satisfies readonly CatalogFieldDefinition[];
+
 export const catalogDefinitions = {
+  "general-ledger": {
+    catalogCode: "general-ledger",
+    displayName: "Libro Mayor",
+    tableName: "accounting.V_GeneralLedgerEntries",
+    idColumn: "journalEntryLineId",
+    codeColumn: "entryNumber",
+    nameColumn: "lineDescription",
+    descriptionColumn: "headerDescription",
+    allowedSearchColumns: ["entryNumber", "headerDescription", "lineDescription", "headerReference", "lineReference", "accountCode", "accountName", "costCenterCode", "costCenterName"],
+    allowedSortColumns: ["entryDate", "entryNumber", "periodCode", "accountCode", "costCenterCode", "currencyCode", "debitAmount", "creditAmount", "signedBaseAmount", "createdAt"],
+    defaultSortBy: "entryDate",
+    permissions: commonPermissions("accounting.general-ledger"),
+    moduleCode: "accounting",
+    tenantScoped: true,
+    companyScoped: true,
+    readOnly: true,
+    columns: {
+      id: "journalEntryLineId",
+      tenantId: "tenantId",
+      companyId: "companyId",
+      code: "entryNumber",
+      name: "lineDescription",
+      description: "headerDescription",
+      isActive: "isActive",
+      createdAt: "createdAt",
+      updatedAt: "updatedAt",
+      createdBy: "createdBy",
+      updatedBy: "updatedBy"
+    },
+    fields: generalLedgerFields
+  },
+  "general-ledger-account-summary": {
+    catalogCode: "general-ledger-account-summary",
+    displayName: "Resumen Libro Mayor por cuenta",
+    tableName: "accounting.V_GeneralLedgerAccountPeriodSummary",
+    idColumn: "accountId",
+    codeColumn: "accountCode",
+    nameColumn: "accountName",
+    descriptionColumn: "periodCode",
+    allowedSearchColumns: ["accountCode", "accountName", "periodCode", "costCenterCode", "costCenterName"],
+    allowedSortColumns: ["accountCode", "accountName", "accountType", "normalBalance", "totalDebitBase", "totalCreditBase", "netBaseMovement", "movementCount"],
+    defaultSortBy: "accountCode",
+    permissions: commonPermissions("accounting.general-ledger"),
+    moduleCode: "accounting",
+    tenantScoped: true,
+    companyScoped: true,
+    readOnly: true,
+    columns: {
+      id: "accountId",
+      tenantId: "tenantId",
+      companyId: "companyId",
+      code: "accountCode",
+      name: "accountName",
+      description: "periodCode",
+      isActive: "isActive",
+      createdAt: "createdAt",
+      updatedAt: "updatedAt",
+      createdBy: "createdBy",
+      updatedBy: "updatedBy"
+    },
+    fields: generalLedgerAccountSummaryFields
+  },
+  "general-ledger-period-summary": {
+    catalogCode: "general-ledger-period-summary",
+    displayName: "Resumen Libro Mayor por periodo",
+    tableName: "accounting.V_GeneralLedgerAccountPeriodSummary",
+    idColumn: "accountingPeriodId",
+    codeColumn: "periodCode",
+    nameColumn: "accountName",
+    descriptionColumn: "costCenterName",
+    allowedSearchColumns: ["accountCode", "accountName", "periodCode", "costCenterCode", "costCenterName"],
+    allowedSortColumns: ["periodCode", "accountCode", "costCenterCode", "totalDebitBase", "totalCreditBase", "netBaseMovement", "movementCount"],
+    defaultSortBy: "periodCode",
+    permissions: commonPermissions("accounting.general-ledger"),
+    moduleCode: "accounting",
+    tenantScoped: true,
+    companyScoped: true,
+    readOnly: true,
+    columns: {
+      id: "accountingPeriodId",
+      tenantId: "tenantId",
+      companyId: "companyId",
+      code: "periodCode",
+      name: "accountName",
+      description: "costCenterName",
+      isActive: "isActive",
+      createdAt: "createdAt",
+      updatedAt: "updatedAt",
+      createdBy: "createdBy",
+      updatedBy: "updatedBy"
+    },
+    fields: generalLedgerPeriodSummaryFields
+  },
   "journal-entries": {
     catalogCode: "journal-entries",
     displayName: "Asientos contables",
