@@ -411,6 +411,24 @@ async function listGeneralLedgerAccountPeriods(accountId, query, session, extraH
   return body.data;
 }
 
+async function listTrialBalance(query, session, extraHeaders = {}) {
+  const params = new URLSearchParams(query);
+  const body = await expectOk(`/accounting/trial-balance?${params.toString()}`, {
+    headers: { ...authHeaders(session), ...extraHeaders }
+  });
+
+  return body.data;
+}
+
+async function getTrialBalanceSummary(query, session, extraHeaders = {}) {
+  const params = new URLSearchParams(query);
+  const body = await expectOk(`/accounting/trial-balance/summary?${params.toString()}`, {
+    headers: { ...authHeaders(session), ...extraHeaders }
+  });
+
+  return body.data;
+}
+
 async function ensureOtherCompanyCostCenter(session, code) {
   const companyId = "99999999-9999-9999-9999-999999999998";
   const costCenterId = randomUUID();
@@ -7944,6 +7962,139 @@ async function validateGeneralLedgerFlow(session) {
   await expectOk("/master-data/general-ledger-period-summary/metadata", { headers: authHeaders(session) });
 }
 
+async function validateTrialBalanceFlow(session) {
+  const suffix = smokeRun;
+  const accounts = await listAccountingAccounts({ pageSize: "200" }, session);
+  const cash = accounts.records.find((account) => account.code === "1-01-001");
+  const payable = accounts.records.find((account) => account.code === "2-01");
+  if (!cash?.accountId || !payable?.accountId) {
+    fail("Seeded accounting accounts were not available for trial balance smoke.");
+  }
+
+  const createPosted = async (entryDate, reference, currencyCode, exchangeRate, lines) => {
+    const entry = await createJournalEntry(
+      {
+        entryDate,
+        description: reference,
+        reference,
+        currencyCode,
+        exchangeRate
+      },
+      session
+    );
+    for (const line of lines) {
+      await addJournalEntryLine(entry.journalEntryId, line, session);
+    }
+    return postJournalEntry(entry.journalEntryId, `tb-post-${reference}`, session);
+  };
+  const cashLine = (debitAmount, creditAmount, reference) => ({
+    accountId: cash.accountId,
+    description: reference,
+    debitAmount,
+    creditAmount,
+    reference
+  });
+  const payableLine = (debitAmount, creditAmount, reference) => ({
+    accountId: payable.accountId,
+    description: reference,
+    debitAmount,
+    creditAmount,
+    reference
+  });
+
+  const ref = `TB-MC-${suffix}`;
+  smokeStep("trial balance read-only multcurrency base summary");
+  const draftEntry = await createJournalEntry(
+    {
+      entryDate: "2025-02-19",
+      description: `${ref}-DRAFT`,
+      reference: `${ref}-DRAFT`,
+      currencyCode: "DOP",
+      exchangeRate: 1
+    },
+    session
+  );
+  await addJournalEntryLine(draftEntry.journalEntryId, cashLine(999, 0, `${ref}-DRAFT`), session);
+  await addJournalEntryLine(draftEntry.journalEntryId, payableLine(0, 999, `${ref}-DRAFT`), session);
+  await createPosted("2025-02-03", `${ref}-OPEN-DOP`, "DOP", 1, [
+    cashLine(100, 0, `${ref}-OPEN-DOP`),
+    payableLine(0, 100, `${ref}-OPEN-DOP`)
+  ]);
+  await createPosted("2025-02-04", `${ref}-OPEN-USD`, "USD", 60, [
+    cashLine(10, 0, `${ref}-OPEN-USD`),
+    payableLine(0, 10, `${ref}-OPEN-USD`)
+  ]);
+  await createPosted("2025-02-18", `${ref}-RANGE-DOP`, "DOP", 1, [
+    cashLine(40, 0, `${ref}-RANGE-DOP`),
+    payableLine(0, 40, `${ref}-RANGE-DOP`)
+  ]);
+
+  const query = { search: ref, dateFrom: "2025-02-10", dateTo: "2025-02-20", page: "1", pageSize: "1" };
+  const pageOne = await listTrialBalance(query, session);
+  const pageTwo = await listTrialBalance({ ...query, page: "2" }, session);
+  const cashRow = [pageOne, pageTwo].flatMap((page) => page.records).find((record) => record.accountId === cash.accountId);
+  const payableRow = [pageOne, pageTwo].flatMap((page) => page.records).find((record) => record.accountId === payable.accountId);
+  const dopSummary = pageOne.summary.currencyTotals.find((item) => item.currencyCode === "DOP");
+  const usdSummary = pageOne.summary.currencyTotals.find((item) => item.currencyCode === "USD");
+  if (
+    !pageOne.summary.hasMultipleCurrencies ||
+    pageOne.summary.totalDebits !== null ||
+    pageOne.summary.totalCredits !== null ||
+    pageOne.summary.difference !== null ||
+    pageOne.summary.totalDebitsBase !== 740 ||
+    pageOne.summary.totalCreditsBase !== 740 ||
+    pageOne.summary.differenceBase !== 0 ||
+    !pageOne.summary.isBalanced ||
+    pageOne.summary.accountCount !== 2 ||
+    pageOne.summary.movementCount !== 2 ||
+    dopSummary?.totalDebits !== 140 ||
+    dopSummary.totalCredits !== 140 ||
+    usdSummary?.totalDebits !== 10 ||
+    usdSummary.totalCredits !== 10 ||
+    cashRow?.openingBalance !== null ||
+    cashRow?.openingBaseBalance !== 700 ||
+    cashRow.periodDebitBase !== 40 ||
+    cashRow.endingDebitBase !== 740 ||
+    payableRow?.endingCreditBase !== 740
+  ) {
+    fail("Trial balance multcurrency summary mixed original currencies or missed base account totals.");
+  }
+  if (JSON.stringify(pageOne.summary) !== JSON.stringify(pageTwo.summary) || pageOne.records[0]?.accountId === pageTwo.records[0]?.accountId) {
+    fail("Trial balance pagination did not keep global summary with distinct records.");
+  }
+
+  smokeStep("trial balance opening-only multcurrency summary");
+  const openingOnly = await getTrialBalanceSummary({ search: ref, dateFrom: "2025-02-10", dateTo: "2025-02-11" }, session);
+  if (
+    !openingOnly.hasMultipleCurrencies ||
+    openingOnly.totalDebits !== null ||
+    openingOnly.totalCredits !== null ||
+    openingOnly.totalDebitsBase !== 700 ||
+    openingOnly.totalCreditsBase !== 700 ||
+    openingOnly.movementCount !== 0 ||
+    openingOnly.currencyTotals.length !== 2
+  ) {
+    fail("Trial balance opening-only query did not preserve multcurrency opening balances.");
+  }
+
+  smokeStep("trial balance currency filter isolates original totals");
+  const dopOnly = await getTrialBalanceSummary(
+    { search: ref, dateFrom: "2025-02-10", dateTo: "2025-02-20", currencyCode: "DOP" },
+    session
+  );
+  if (
+    dopOnly.hasMultipleCurrencies ||
+    dopOnly.totalDebits !== 140 ||
+    dopOnly.totalCredits !== 140 ||
+    dopOnly.difference !== 0 ||
+    dopOnly.totalDebitsBase !== 140 ||
+    dopOnly.totalCreditsBase !== 140 ||
+    dopOnly.currencyTotals.length !== 1
+  ) {
+    fail("Trial balance currencyCode filter did not isolate DOP original totals.");
+  }
+}
+
 async function validateCrud(session) {
   const suffix = smokeRun;
   const customerCode = `QA-CUST-${suffix}`;
@@ -8192,6 +8343,7 @@ async function main() {
   await validateAccountingPeriodFlow(session);
   await validateJournalEntryFlow(session);
   await validateGeneralLedgerFlow(session);
+  await validateTrialBalanceFlow(session);
   await validateCrud(session);
   console.log("smoke: local runtime validation OK");
 }
