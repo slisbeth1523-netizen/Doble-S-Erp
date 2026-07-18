@@ -11,6 +11,7 @@ import { accountingAccountService } from "../../application/AccountingAccountSer
 import { accountingPeriodService } from "../../application/AccountingPeriodService.js";
 import { generalLedgerService } from "../../application/GeneralLedgerService.js";
 import { journalEntryService } from "../../application/JournalEntryService.js";
+import { trialBalanceService } from "../../application/TrialBalanceService.js";
 import {
   accountingAccountBlockSchema,
   accountingAccountIdParamsSchema,
@@ -39,6 +40,7 @@ import {
   journalEntryPostSchema,
   journalEntryUpdateSchema
 } from "../../validators/journal-entry.validators.js";
+import { trialBalanceQuerySchema } from "../../validators/trial-balance.validators.js";
 
 export const accountingRouter = Router();
 
@@ -55,6 +57,28 @@ function accountingContext(request: Parameters<typeof getRequestContext>[0]) {
     correlationId: context.correlationId
   };
 }
+
+accountingRouter.get(
+  "/trial-balance",
+  validateRequest({ query: trialBalanceQuerySchema }),
+  requirePermission("accounting", "accounting.trial-balance.read"),
+  asyncHandler(async (request, response) => {
+    const result = await trialBalanceService.listAccounts(accountingContext(request), request.query);
+
+    sendSuccess(response, result);
+  })
+);
+
+accountingRouter.get(
+  "/trial-balance/summary",
+  validateRequest({ query: trialBalanceQuerySchema }),
+  requirePermission("accounting", "accounting.trial-balance.read"),
+  asyncHandler(async (request, response) => {
+    const result = await trialBalanceService.getSummary(accountingContext(request), request.query);
+
+    sendSuccess(response, result);
+  })
+);
 
 accountingRouter.get(
   "/general-ledger",

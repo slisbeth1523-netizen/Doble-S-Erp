@@ -35,6 +35,7 @@ import { ChartOfAccounts } from "./pages/accounting/ChartOfAccounts.js";
 import { AccountingPeriodsPage } from "./pages/accounting/AccountingPeriodsPage.js";
 import { GeneralLedgerPage } from "./pages/accounting/GeneralLedgerPage.js";
 import { JournalEntriesPage } from "./pages/accounting/JournalEntriesPage.js";
+import { TrialBalancePage } from "./pages/accounting/TrialBalancePage.js";
 import { DgiiReportsDashboard } from "./pages/dgii/DgiiReportsDashboard.js";
 import { CertificationWizard } from "./pages/dgii/CertificationWizard.js";
 
@@ -179,6 +180,10 @@ export function App() {
 
     if (path === "/accounting/general-ledger") {
       return <GeneralLedgerPage />;
+    }
+
+    if (path === "/accounting/trial-balance") {
+      return <TrialBalancePage />;
     }
 
     if (path === "/security") {
