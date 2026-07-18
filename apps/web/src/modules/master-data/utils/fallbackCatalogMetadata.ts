@@ -145,6 +145,39 @@ const catalogFields: Record<string, FieldInput[]> = {
     { field: "debitAmount", label: "Debito", type: "number", sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 120, align: "right", format: "currency" },
     { field: "creditAmount", label: "Credito", type: "number", sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 120, align: "right", format: "currency" }
   ],
+  "general-ledger": [
+    { field: "entryDate", label: "Fecha", type: "date", sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 120 },
+    { field: "entryNumber", label: "Asiento", searchable: true, sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 150 },
+    { field: "periodCode", label: "Periodo", searchable: true, sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 110 },
+    { field: "accountCode", label: "Cuenta", searchable: true, sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 130 },
+    { field: "accountName", label: "Nombre cuenta", searchable: true, sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 220 },
+    { field: "costCenterCode", label: "Centro", searchable: true, sortable: true, editable: false, readOnly: true, validation: { nullable: true }, width: 120 },
+    { field: "lineDescription", label: "Descripcion", type: "textarea", searchable: true, sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 240 },
+    { field: "currencyCode", label: "Moneda", searchable: true, sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 90, align: "center" },
+    { field: "debitAmount", label: "Debito", type: "number", sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 120, align: "right", format: "currency" },
+    { field: "creditAmount", label: "Credito", type: "number", sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 120, align: "right", format: "currency" },
+    { field: "signedBaseAmount", label: "Movimiento base", type: "number", sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 140, align: "right", format: "currency" }
+  ],
+  "general-ledger-account-summary": [
+    { field: "accountCode", label: "Cuenta", searchable: true, sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 130 },
+    { field: "accountName", label: "Nombre", searchable: true, sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 240 },
+    { field: "accountType", label: "Tipo", searchable: true, sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 120 },
+    { field: "normalBalance", label: "Naturaleza", searchable: true, sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 120 },
+    { field: "totalDebitBase", label: "Debito base", type: "number", sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 130, align: "right", format: "currency" },
+    { field: "totalCreditBase", label: "Credito base", type: "number", sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 130, align: "right", format: "currency" },
+    { field: "netBaseMovement", label: "Neto base", type: "number", sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 130, align: "right", format: "currency" },
+    { field: "movementCount", label: "Movimientos", type: "number", sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 110, align: "right" }
+  ],
+  "general-ledger-period-summary": [
+    { field: "periodCode", label: "Periodo", searchable: true, sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 110 },
+    { field: "accountCode", label: "Cuenta", searchable: true, sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 130 },
+    { field: "accountName", label: "Nombre", searchable: true, sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 240 },
+    { field: "costCenterCode", label: "Centro", searchable: true, sortable: true, editable: false, readOnly: true, validation: { nullable: true }, width: 120 },
+    { field: "totalDebitBase", label: "Debito base", type: "number", sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 130, align: "right", format: "currency" },
+    { field: "totalCreditBase", label: "Credito base", type: "number", sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 130, align: "right", format: "currency" },
+    { field: "netBaseMovement", label: "Neto base", type: "number", sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 130, align: "right", format: "currency" },
+    { field: "movementCount", label: "Movimientos", type: "number", sortable: true, editable: false, readOnly: true, validation: { nullable: false }, width: 110, align: "right" }
+  ],
   "cost-centers": [
     { field: "code", label: "Codigo", searchable: true, sortable: true, validation: { required: true, minLength: 1, maxLength: 30, nullable: false }, width: 130 },
     { field: "name", label: "Nombre", searchable: true, sortable: true, validation: { required: true, minLength: 1, maxLength: 150, nullable: false }, width: 220 },
@@ -1151,6 +1184,9 @@ export function getFallbackCatalogMetadata(catalog: string): CatalogMetadata | n
   const inputs = catalogFields[catalog];
   const catalogReadOnly = [
     "chart-of-accounts",
+    "general-ledger",
+    "general-ledger-account-summary",
+    "general-ledger-period-summary",
     "postable-accounts",
     "accounting-periods",
     "journal-entries",

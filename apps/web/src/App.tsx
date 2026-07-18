@@ -33,6 +33,7 @@ import { WorkflowsPreview } from "./pages/WorkflowsPreview.js";
 
 import { ChartOfAccounts } from "./pages/accounting/ChartOfAccounts.js";
 import { AccountingPeriodsPage } from "./pages/accounting/AccountingPeriodsPage.js";
+import { GeneralLedgerPage } from "./pages/accounting/GeneralLedgerPage.js";
 import { JournalEntriesPage } from "./pages/accounting/JournalEntriesPage.js";
 import { DgiiReportsDashboard } from "./pages/dgii/DgiiReportsDashboard.js";
 import { CertificationWizard } from "./pages/dgii/CertificationWizard.js";
@@ -174,6 +175,10 @@ export function App() {
 
     if (path === "/accounting/journal-entries") {
       return <JournalEntriesPage />;
+    }
+
+    if (path === "/accounting/general-ledger") {
+      return <GeneralLedgerPage />;
     }
 
     if (path === "/security") {

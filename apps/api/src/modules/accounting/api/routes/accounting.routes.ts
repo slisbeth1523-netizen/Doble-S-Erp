@@ -9,6 +9,7 @@ import { sendSuccess } from "../../../../utils/responseBuilder.js";
 import { validateRequest } from "../../../../utils/validateRequest.js";
 import { accountingAccountService } from "../../application/AccountingAccountService.js";
 import { accountingPeriodService } from "../../application/AccountingPeriodService.js";
+import { generalLedgerService } from "../../application/GeneralLedgerService.js";
 import { journalEntryService } from "../../application/JournalEntryService.js";
 import {
   accountingAccountBlockSchema,
@@ -23,6 +24,12 @@ import {
   accountingPeriodReopenSchema,
   accountingPeriodUpdateSchema
 } from "../../validators/accounting-period.validators.js";
+import {
+  generalLedgerAccountParamsSchema,
+  generalLedgerCostCenterParamsSchema,
+  generalLedgerDetailQuerySchema,
+  generalLedgerQuerySchema
+} from "../../validators/general-ledger.validators.js";
 import {
   journalEntryCreateSchema,
   journalEntryIdParamsSchema,
@@ -48,6 +55,84 @@ function accountingContext(request: Parameters<typeof getRequestContext>[0]) {
     correlationId: context.correlationId
   };
 }
+
+accountingRouter.get(
+  "/general-ledger",
+  validateRequest({ query: generalLedgerDetailQuerySchema }),
+  requirePermission("accounting", "accounting.general-ledger.read"),
+  asyncHandler(async (request, response) => {
+    const result = await generalLedgerService.listEntries(accountingContext(request), request.query);
+
+    sendSuccess(response, result);
+  })
+);
+
+accountingRouter.get(
+  "/general-ledger/summary",
+  validateRequest({ query: generalLedgerQuerySchema }),
+  requirePermission("accounting", "accounting.general-ledger.read"),
+  asyncHandler(async (request, response) => {
+    const result = await generalLedgerService.getSummary(accountingContext(request), request.query);
+
+    sendSuccess(response, result);
+  })
+);
+
+accountingRouter.get(
+  "/general-ledger/accounts",
+  validateRequest({ query: generalLedgerQuerySchema }),
+  requirePermission("accounting", "accounting.general-ledger.read"),
+  asyncHandler(async (request, response) => {
+    const result = await generalLedgerService.listAccountSummaries(accountingContext(request), request.query);
+
+    sendSuccess(response, result);
+  })
+);
+
+accountingRouter.get(
+  "/general-ledger/accounts/:accountId",
+  validateRequest({ params: generalLedgerAccountParamsSchema, query: generalLedgerQuerySchema }),
+  requirePermission("accounting", "accounting.general-ledger.read"),
+  asyncHandler(async (request, response) => {
+    const result = await generalLedgerService.getAccountLedger(
+      accountingContext(request),
+      request.params.accountId!,
+      request.query
+    );
+
+    sendSuccess(response, result);
+  })
+);
+
+accountingRouter.get(
+  "/general-ledger/accounts/:accountId/periods",
+  validateRequest({ params: generalLedgerAccountParamsSchema, query: generalLedgerQuerySchema }),
+  requirePermission("accounting", "accounting.general-ledger.read"),
+  asyncHandler(async (request, response) => {
+    const result = await generalLedgerService.listAccountPeriodSummaries(
+      accountingContext(request),
+      request.params.accountId!,
+      request.query
+    );
+
+    sendSuccess(response, result);
+  })
+);
+
+accountingRouter.get(
+  "/general-ledger/cost-centers/:costCenterId",
+  validateRequest({ params: generalLedgerCostCenterParamsSchema, query: generalLedgerQuerySchema }),
+  requirePermission("accounting", "accounting.general-ledger.read"),
+  asyncHandler(async (request, response) => {
+    const result = await generalLedgerService.listCostCenterEntries(
+      accountingContext(request),
+      request.params.costCenterId!,
+      request.query
+    );
+
+    sendSuccess(response, result);
+  })
+);
 
 accountingRouter.get(
   "/journal-entries",

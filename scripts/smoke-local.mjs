@@ -375,6 +375,42 @@ async function expectJournalEntryFailure(path, method, payload, session, extraHe
   return result.body;
 }
 
+async function listGeneralLedgerEntries(query, session, extraHeaders = {}) {
+  const params = new URLSearchParams(query);
+  const body = await expectOk(`/accounting/general-ledger?${params.toString()}`, {
+    headers: { ...authHeaders(session), ...extraHeaders }
+  });
+
+  return body.data;
+}
+
+async function getGeneralLedgerSummary(query, session, extraHeaders = {}) {
+  const params = new URLSearchParams(query);
+  const body = await expectOk(`/accounting/general-ledger/summary?${params.toString()}`, {
+    headers: { ...authHeaders(session), ...extraHeaders }
+  });
+
+  return body.data;
+}
+
+async function listGeneralLedgerAccountSummaries(query, session, extraHeaders = {}) {
+  const params = new URLSearchParams(query);
+  const body = await expectOk(`/accounting/general-ledger/accounts?${params.toString()}`, {
+    headers: { ...authHeaders(session), ...extraHeaders }
+  });
+
+  return body.data;
+}
+
+async function listGeneralLedgerAccountPeriods(accountId, query, session, extraHeaders = {}) {
+  const params = new URLSearchParams(query);
+  const body = await expectOk(`/accounting/general-ledger/accounts/${accountId}/periods?${params.toString()}`, {
+    headers: { ...authHeaders(session), ...extraHeaders }
+  });
+
+  return body.data;
+}
+
 async function ensureOtherCompanyCostCenter(session, code) {
   const companyId = "99999999-9999-9999-9999-999999999998";
   const costCenterId = randomUUID();
@@ -7638,6 +7674,276 @@ async function validateJournalEntryFlow(session) {
   }
 }
 
+async function validateGeneralLedgerFlow(session) {
+  const suffix = smokeRun;
+  const accounts = await listAccountingAccounts({ pageSize: "200" }, session);
+  const cash = accounts.records.find((account) => account.code === "1-01-001");
+  const payable = accounts.records.find((account) => account.code === "2-01");
+  if (!cash?.accountId || !payable?.accountId) {
+    fail("Seeded accounting accounts were not available for general ledger smoke.");
+  }
+
+  const costCenter = await createCatalogRecord(
+    "cost-centers",
+    {
+      code: `GL-CC-${suffix}`,
+      name: "Centro mayor smoke",
+      description: "Centro mayor smoke",
+      parentId: null,
+      allowsPosting: true,
+      validFrom: "2025-01-01",
+      validTo: "2025-12-31",
+      isActive: true
+    },
+    session
+  );
+
+  const createPosted = async (entryDate, reference, currencyCode, exchangeRate, lines) => {
+    const entry = await createJournalEntry(
+      {
+        entryDate,
+        description: reference,
+        reference,
+        currencyCode,
+        exchangeRate
+      },
+      session
+    );
+    let detail = entry;
+    for (const line of lines) {
+      detail = await addJournalEntryLine(entry.journalEntryId, line, session);
+    }
+    return postJournalEntry(entry.journalEntryId, `gl-post-${reference}`, session);
+  };
+
+  const cashLine = (debitAmount, creditAmount, reference, extra = {}) => ({
+    accountId: cash.accountId,
+    costCenterId: extra.costCenterId,
+    description: reference,
+    debitAmount,
+    creditAmount,
+    reference
+  });
+  const payableLine = (debitAmount, creditAmount, reference) => ({
+    accountId: payable.accountId,
+    description: reference,
+    debitAmount,
+    creditAmount,
+    reference
+  });
+
+  const cashRef = `GL-CASH-${suffix}`;
+  smokeStep("general ledger excludes DRAFT and includes POSTED");
+  const draftEntry = await createJournalEntry(
+    {
+      entryDate: "2025-02-11",
+      description: `${cashRef}-DRAFT`,
+      reference: `${cashRef}-DRAFT`,
+      currencyCode: "DOP",
+      exchangeRate: 1
+    },
+    session
+  );
+  await addJournalEntryLine(draftEntry.journalEntryId, cashLine(50, 0, `${cashRef}-DRAFT`), session);
+  await addJournalEntryLine(draftEntry.journalEntryId, payableLine(0, 50, `${cashRef}-DRAFT`), session);
+  const draftLedger = await listGeneralLedgerEntries(
+    { accountId: cash.accountId, search: `${cashRef}-DRAFT`, page: "1", pageSize: "5" },
+    session
+  );
+  if (draftLedger.records.length !== 0 || draftLedger.summary.movementCount !== 0) {
+    fail("General ledger exposed a DRAFT journal entry.");
+  }
+
+  const opening = await createPosted("2025-02-05", `${cashRef}-OPEN`, "DOP", 1, [
+    cashLine(300, 0, `${cashRef}-OPEN`),
+    payableLine(0, 300, `${cashRef}-OPEN`)
+  ]);
+  const debitEntry = await createPosted("2025-02-12", `${cashRef}-DEBIT`, "DOP", 1, [
+    cashLine(1000, 0, `${cashRef}-DEBIT`, { costCenterId: costCenter.id }),
+    payableLine(0, 1000, `${cashRef}-DEBIT`)
+  ]);
+  await createPosted("2025-02-13", `${cashRef}-CREDIT`, "DOP", 1, [
+    cashLine(0, 200, `${cashRef}-CREDIT`),
+    payableLine(200, 0, `${cashRef}-CREDIT`)
+  ]);
+  await createPosted("2025-02-14", `${cashRef}-TAIL`, "DOP", 1, [
+    cashLine(20, 0, `${cashRef}-TAIL`),
+    payableLine(0, 20, `${cashRef}-TAIL`)
+  ]);
+
+  const cashQuery = {
+    accountId: cash.accountId,
+    search: cashRef,
+    dateFrom: "2025-02-10",
+    dateTo: "2025-02-20",
+    page: "1",
+    pageSize: "2"
+  };
+  const cashPageOne = await listGeneralLedgerEntries(cashQuery, session);
+  if (
+    cashPageOne.summary.openingBalance !== 300 ||
+    cashPageOne.summary.totalDebit !== 1020 ||
+    cashPageOne.summary.totalCredit !== 200 ||
+    cashPageOne.summary.netMovement !== 820 ||
+    cashPageOne.summary.closingBalance !== 1120 ||
+    cashPageOne.summary.movementCount !== 3
+  ) {
+    fail("General ledger debit-nature account summary is not global or correctly signed.");
+  }
+  if (cashPageOne.records.length !== 2 || cashPageOne.records[0].runningBalance !== 1300 || cashPageOne.records[1].runningBalance !== 1100) {
+    fail("General ledger running balance page 1 is incorrect.");
+  }
+
+  smokeStep("general ledger pagination keeps global summary");
+  const cashPageTwo = await listGeneralLedgerEntries({ ...cashQuery, page: "2" }, session);
+  if (
+    cashPageTwo.records.length !== 1 ||
+    cashPageTwo.records[0].journalEntryLineId === cashPageOne.records[0].journalEntryLineId ||
+    cashPageTwo.records[0].runningBalance !== 1120
+  ) {
+    fail("General ledger page 2 did not continue the running balance correctly.");
+  }
+  if (JSON.stringify(cashPageOne.summary) !== JSON.stringify(cashPageTwo.summary)) {
+    fail("General ledger paginated pages did not keep the same global summary.");
+  }
+
+  smokeStep("general ledger cost center and period filters");
+  const costCenterLedger = await listGeneralLedgerEntries(
+    { accountId: cash.accountId, costCenterId: costCenter.id, search: cashRef, page: "1", pageSize: "10" },
+    session
+  );
+  if (costCenterLedger.records.length !== 1 || costCenterLedger.summary.totalDebit !== 1000) {
+    fail("General ledger cost center filter returned incorrect movements or totals.");
+  }
+  const periodLedger = await listGeneralLedgerEntries(
+    { accountId: cash.accountId, accountingPeriodId: debitEntry.accountingPeriodId, search: cashRef, page: "1", pageSize: "10" },
+    session
+  );
+  if (periodLedger.records.some((record) => record.accountingPeriodId !== debitEntry.accountingPeriodId)) {
+    fail("General ledger period filter mixed movements from another period.");
+  }
+  const periodSummary = await listGeneralLedgerAccountPeriods(
+    cash.accountId,
+    { accountingPeriodId: debitEntry.accountingPeriodId, page: "1", pageSize: "10" },
+    session
+  );
+  if (!periodSummary.records.some((record) => record.accountingPeriodId === debitEntry.accountingPeriodId)) {
+    fail("General ledger account period summary did not include the posted period.");
+  }
+
+  smokeStep("general ledger credit nature and multcurrency");
+  const creditRef = `GL-CREDIT-${suffix}`;
+  await createPosted("2025-02-16", `${creditRef}-CR`, "DOP", 1, [
+    cashLine(700, 0, `${creditRef}-CR`),
+    payableLine(0, 700, `${creditRef}-CR`)
+  ]);
+  await createPosted("2025-02-17", `${creditRef}-DB`, "DOP", 1, [
+    cashLine(0, 100, `${creditRef}-DB`),
+    payableLine(100, 0, `${creditRef}-DB`)
+  ]);
+  const payableLedger = await listGeneralLedgerEntries(
+    { accountId: payable.accountId, search: creditRef, dateFrom: "2025-02-10", dateTo: "2025-02-20", page: "1", pageSize: "10" },
+    session
+  );
+  if (payableLedger.summary.totalDebit !== 100 || payableLedger.summary.totalCredit !== 700 || payableLedger.summary.netMovement !== 600) {
+    fail("General ledger credit-nature account did not calculate net movement correctly.");
+  }
+
+  const currencyRef = `GL-MC-${suffix}`;
+  await createPosted("2025-02-03", `${currencyRef}-OPEN-DOP`, "DOP", 1, [
+    cashLine(100, 0, `${currencyRef}-OPEN-DOP`),
+    payableLine(0, 100, `${currencyRef}-OPEN-DOP`)
+  ]);
+  await createPosted("2025-02-04", `${currencyRef}-OPEN-USD`, "USD", 60, [
+    cashLine(10, 0, `${currencyRef}-OPEN-USD`),
+    payableLine(0, 10, `${currencyRef}-OPEN-USD`)
+  ]);
+  await createPosted("2025-02-18", `${currencyRef}-RANGE-DOP`, "DOP", 1, [
+    cashLine(40, 0, `${currencyRef}-RANGE-DOP`),
+    payableLine(0, 40, `${currencyRef}-RANGE-DOP`)
+  ]);
+  const multiCurrency = await getGeneralLedgerSummary(
+    { accountId: cash.accountId, search: currencyRef, dateFrom: "2025-02-10", dateTo: "2025-02-20" },
+    session
+  );
+  const dopBreakdown = multiCurrency.currencyTotals.find((item) => item.currencyCode === "DOP");
+  const usdBreakdown = multiCurrency.currencyTotals.find((item) => item.currencyCode === "USD");
+  if (
+    !multiCurrency.hasMultipleCurrencies ||
+    multiCurrency.currencyTotals.length !== 2 ||
+    multiCurrency.openingBalance !== null ||
+    multiCurrency.totalDebit !== null ||
+    multiCurrency.totalCredit !== null ||
+    multiCurrency.netMovement !== null ||
+    multiCurrency.closingBalance !== null ||
+    multiCurrency.openingBaseBalance !== 700 ||
+    multiCurrency.totalDebitBase !== 40 ||
+    multiCurrency.closingBaseBalance !== 740 ||
+    dopBreakdown?.openingBalance !== 100 ||
+    dopBreakdown.totalDebit !== 40 ||
+    dopBreakdown.closingBalance !== 140 ||
+    usdBreakdown?.openingBalance !== 10 ||
+    usdBreakdown.totalDebit !== 0 ||
+    usdBreakdown.closingBalance !== 10
+  ) {
+    fail("General ledger multcurrency opening/range summary mixed original currencies or missed base totals.");
+  }
+
+  const emptyRangeMultiCurrency = await getGeneralLedgerSummary(
+    { accountId: cash.accountId, search: currencyRef, dateFrom: "2025-02-10", dateTo: "2025-02-11" },
+    session
+  );
+  if (
+    !emptyRangeMultiCurrency.hasMultipleCurrencies ||
+    emptyRangeMultiCurrency.movementCount !== 0 ||
+    emptyRangeMultiCurrency.currencyTotals.length !== 2 ||
+    emptyRangeMultiCurrency.openingBalance !== null ||
+    emptyRangeMultiCurrency.closingBalance !== null ||
+    emptyRangeMultiCurrency.closingBaseBalance !== 700
+  ) {
+    fail("General ledger multcurrency opening-only summary did not preserve breakdown without range movements.");
+  }
+
+  const dopOnlyCurrency = await getGeneralLedgerSummary(
+    { accountId: cash.accountId, search: currencyRef, dateFrom: "2025-02-10", dateTo: "2025-02-20", currencyCode: "DOP" },
+    session
+  );
+  if (
+    dopOnlyCurrency.hasMultipleCurrencies ||
+    dopOnlyCurrency.currencyTotals.length !== 1 ||
+    dopOnlyCurrency.openingBalance !== 100 ||
+    dopOnlyCurrency.totalDebit !== 40 ||
+    dopOnlyCurrency.closingBalance !== 140 ||
+    dopOnlyCurrency.openingBaseBalance !== 100 ||
+    dopOnlyCurrency.closingBaseBalance !== 140
+  ) {
+    fail("General ledger currencyCode filter did not isolate original DOP totals.");
+  }
+
+  smokeStep("general ledger isolation and runtime metadata");
+  const otherCompanyAccount = await ensureOtherCompanyAccount(session, `GL-OTHER-${suffix}`);
+  const isolated = await request(
+    `/accounting/general-ledger?accountId=${encodeURIComponent(cash.accountId)}&search=${encodeURIComponent(cashRef)}`,
+    { headers: { ...authHeaders(session), "x-company-id": otherCompanyAccount.companyId } }
+  );
+  if (isolated.response.ok || isolated.body?.success !== false) {
+    fail("General ledger allowed another company to query the account.");
+  }
+  const accountSummaries = await listGeneralLedgerAccountSummaries({ search: cashRef, page: "1", pageSize: "10" }, session);
+  if (!accountSummaries.records.some((record) => record.accountId === cash.accountId)) {
+    fail("General ledger account summaries did not include the controlled cash account.");
+  }
+  const runtimeLedger = await expectOk(
+    `/master-data/general-ledger?search=${encodeURIComponent(opening.entryNumber)}&page=1&pageSize=10`,
+    { headers: authHeaders(session) }
+  );
+  if (!runtimeLedger.data?.some((record) => record.code === opening.entryNumber)) {
+    fail("/master-data/general-ledger did not expose posted ledger read-only data.");
+  }
+  await expectOk("/master-data/general-ledger-account-summary/metadata", { headers: authHeaders(session) });
+  await expectOk("/master-data/general-ledger-period-summary/metadata", { headers: authHeaders(session) });
+}
+
 async function validateCrud(session) {
   const suffix = smokeRun;
   const customerCode = `QA-CUST-${suffix}`;
@@ -7885,6 +8191,7 @@ async function main() {
   await validateCostCenterFlow(session);
   await validateAccountingPeriodFlow(session);
   await validateJournalEntryFlow(session);
+  await validateGeneralLedgerFlow(session);
   await validateCrud(session);
   console.log("smoke: local runtime validation OK");
 }

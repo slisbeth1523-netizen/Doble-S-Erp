@@ -121,7 +121,8 @@ const navigation: NavigationItem[] = [
       { label: "Catálogo de Cuentas", path: "/accounting/chart-of-accounts" },
       { label: "Centros de costo", path: "/master-data/cost-centers" },
       { label: "Periodos contables", path: "/accounting/periods" },
-      { label: "Asientos contables", path: "/accounting/journal-entries" }
+      { label: "Asientos contables", path: "/accounting/journal-entries" },
+      { label: "Libro Mayor", path: "/accounting/general-ledger" }
     ]
   },
   { label: "Workflows", path: "/workflows" },
@@ -323,6 +324,10 @@ function breadcrumb(path: string) {
     return ["Doble S ERP", "Contabilidad", "Asientos contables"];
   }
 
+  if (segments[0] === "accounting" && segments[1] === "general-ledger") {
+    return ["Doble S ERP", "Contabilidad", "Libro Mayor"];
+  }
+
   const labels: Record<string, string> = {
     dashboard: "Dashboard",
     workflows: "Workflows",
@@ -491,6 +496,7 @@ export function AppLayout({ children, currentPath, onNavigate }: AppLayoutProps)
     { label: "Centros de costo", category: "Contabilidad", path: "/master-data/cost-centers" },
     { label: "Periodos contables", category: "Contabilidad", path: "/accounting/periods" },
     { label: "Asientos contables", category: "Contabilidad", path: "/accounting/journal-entries" },
+    { label: "Libro Mayor", category: "Contabilidad", path: "/accounting/general-ledger" },
     { label: "Seguridad y Accesos", category: "Configuración", path: "/security" },
     { label: "Configuración General", category: "Configuración", path: "/settings" }
   ];
