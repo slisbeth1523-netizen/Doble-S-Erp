@@ -53,15 +53,15 @@ export type GeneralLedgerEntry = {
 };
 
 export type GeneralLedgerSummary = {
-  openingBalance: number;
+  openingBalance: number | null;
   openingBaseBalance: number;
-  totalDebit: number;
-  totalCredit: number;
+  totalDebit: number | null;
+  totalCredit: number | null;
   totalDebitBase: number;
   totalCreditBase: number;
-  netMovement: number;
+  netMovement: number | null;
   netBaseMovement: number;
-  closingBalance: number;
+  closingBalance: number | null;
   closingBaseBalance: number;
   movementCount: number;
   hasMultipleCurrencies: boolean;
@@ -70,9 +70,11 @@ export type GeneralLedgerSummary = {
 
 export type GeneralLedgerCurrencyTotal = {
   currencyCode: string;
+  openingBalance: number;
   totalDebit: number;
   totalCredit: number;
   netMovement: number;
+  closingBalance: number;
   movementCount: number;
 };
 
@@ -112,9 +114,9 @@ type SummaryRow = {
   netMovement: number | null;
   netBaseMovement: number | null;
   movementCount: number;
-  currencyCount: number;
 };
 type BalanceRow = { balance: number | null; baseBalance: number | null };
+type CurrencyTotalRow = GeneralLedgerCurrencyTotal;
 type ExistsRow = { id: string };
 
 export class GeneralLedgerRepository extends BaseSqlRepository {
@@ -201,31 +203,31 @@ export class GeneralLedgerRepository extends BaseSqlRepository {
           COALESCE(SUM(ledger.creditBaseAmount), 0) AS totalCreditBase,
           COALESCE(SUM(ledger.signedAmount), 0) AS netMovement,
           COALESCE(SUM(ledger.signedBaseAmount), 0) AS netBaseMovement,
-          COUNT(1) AS movementCount,
-          COUNT(DISTINCT ledger.currencyCode) AS currencyCount
+          COUNT(1) AS movementCount
         FROM accounting.V_GeneralLedgerEntries ledger
         WHERE ${filteredWhere};
       `,
       baseParameters
     );
     const currencyTotals = await this.getCurrencyTotals(context, query);
+    const hasMultipleCurrencies = currencyTotals.length > 1;
     const row = rows[0];
     const netMovement = this.number(row?.netMovement);
     const netBaseMovement = this.number(row?.netBaseMovement);
 
     return {
-      openingBalance: opening.openingBalance,
+      openingBalance: hasMultipleCurrencies ? null : opening.openingBalance,
       openingBaseBalance: opening.openingBaseBalance,
-      totalDebit: this.number(row?.totalDebit),
-      totalCredit: this.number(row?.totalCredit),
+      totalDebit: hasMultipleCurrencies ? null : this.number(row?.totalDebit),
+      totalCredit: hasMultipleCurrencies ? null : this.number(row?.totalCredit),
       totalDebitBase: this.number(row?.totalDebitBase),
       totalCreditBase: this.number(row?.totalCreditBase),
-      netMovement,
+      netMovement: hasMultipleCurrencies ? null : netMovement,
       netBaseMovement,
-      closingBalance: opening.openingBalance + netMovement,
+      closingBalance: hasMultipleCurrencies ? null : opening.openingBalance + netMovement,
       closingBaseBalance: opening.openingBaseBalance + netBaseMovement,
       movementCount: row?.movementCount ?? 0,
-      hasMultipleCurrencies: (row?.currencyCount ?? 0) > 1,
+      hasMultipleCurrencies,
       currencyTotals
     };
   }
@@ -350,28 +352,59 @@ export class GeneralLedgerRepository extends BaseSqlRepository {
 
   private async getCurrencyTotals(context: GeneralLedgerContextInput, query: GeneralLedgerQuery) {
     const parameters = this.parameters(context, query);
-    const whereSql = this.whereClause(query, "ledger", { includeDateRange: true });
-    const rows = await this.query<GeneralLedgerCurrencyTotal>(
+    const rangeWhereSql = this.whereClause(query, "ledger", { includeDateRange: true });
+    const openingWhereSql = query.dateFrom
+      ? `${this.whereClause(query, "ledger", { includeDateRange: false })} AND ledger.entryDate < @DateFrom`
+      : "1 = 0";
+    const rows = await this.query<CurrencyTotalRow>(
       `
+        WITH Opening AS (
+          SELECT
+            ledger.currencyCode,
+            COALESCE(SUM(ledger.signedAmount), 0) AS openingBalance
+          FROM accounting.V_GeneralLedgerEntries ledger
+          WHERE ${openingWhereSql}
+          GROUP BY ledger.currencyCode
+        ),
+        Period AS (
+          SELECT
+            ledger.currencyCode,
+            COALESCE(SUM(ledger.debitAmount), 0) AS totalDebit,
+            COALESCE(SUM(ledger.creditAmount), 0) AS totalCredit,
+            COALESCE(SUM(ledger.signedAmount), 0) AS netMovement,
+            COUNT(1) AS movementCount
+          FROM accounting.V_GeneralLedgerEntries ledger
+          WHERE ${rangeWhereSql}
+          GROUP BY ledger.currencyCode
+        ),
+        Currencies AS (
+          SELECT currencyCode FROM Opening
+          UNION
+          SELECT currencyCode FROM Period
+        )
         SELECT
-          ledger.currencyCode,
-          SUM(ledger.debitAmount) AS totalDebit,
-          SUM(ledger.creditAmount) AS totalCredit,
-          SUM(ledger.signedAmount) AS netMovement,
-          COUNT(1) AS movementCount
-        FROM accounting.V_GeneralLedgerEntries ledger
-        WHERE ${whereSql}
-        GROUP BY ledger.currencyCode
-        ORDER BY ledger.currencyCode;
+          currencies.currencyCode,
+          COALESCE(opening.openingBalance, 0) AS openingBalance,
+          COALESCE(period.totalDebit, 0) AS totalDebit,
+          COALESCE(period.totalCredit, 0) AS totalCredit,
+          COALESCE(period.netMovement, 0) AS netMovement,
+          COALESCE(opening.openingBalance, 0) + COALESCE(period.netMovement, 0) AS closingBalance,
+          COALESCE(period.movementCount, 0) AS movementCount
+        FROM Currencies currencies
+        LEFT JOIN Opening opening ON opening.currencyCode = currencies.currencyCode
+        LEFT JOIN Period period ON period.currencyCode = currencies.currencyCode
+        ORDER BY currencies.currencyCode;
       `,
       parameters
     );
 
     return rows.map((row) => ({
       currencyCode: row.currencyCode,
+      openingBalance: this.number(row.openingBalance),
       totalDebit: this.number(row.totalDebit),
       totalCredit: this.number(row.totalCredit),
       netMovement: this.number(row.netMovement),
+      closingBalance: this.number(row.closingBalance),
       movementCount: row.movementCount
     }));
   }

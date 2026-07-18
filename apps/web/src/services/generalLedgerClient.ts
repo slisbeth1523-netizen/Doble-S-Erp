@@ -30,23 +30,25 @@ export type GeneralLedgerEntry = {
 };
 
 export type GeneralLedgerSummary = {
-  openingBalance: number;
+  openingBalance: number | null;
   openingBaseBalance: number;
-  totalDebit: number;
-  totalCredit: number;
+  totalDebit: number | null;
+  totalCredit: number | null;
   totalDebitBase: number;
   totalCreditBase: number;
-  netMovement: number;
+  netMovement: number | null;
   netBaseMovement: number;
-  closingBalance: number;
+  closingBalance: number | null;
   closingBaseBalance: number;
   movementCount: number;
   hasMultipleCurrencies: boolean;
   currencyTotals: Array<{
     currencyCode: string;
+    openingBalance: number;
     totalDebit: number;
     totalCredit: number;
     netMovement: number;
+    closingBalance: number;
     movementCount: number;
   }>;
 };

@@ -58,8 +58,16 @@ const emptySummary: GeneralLedgerSummary = {
   currencyTotals: []
 };
 
-function money(value: number | undefined) {
+function money(value: number | null | undefined) {
   return new Intl.NumberFormat("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value ?? 0);
+}
+
+function summaryAmount(summary: GeneralLedgerSummary, original: keyof GeneralLedgerSummary, base: keyof GeneralLedgerSummary) {
+  return summary.hasMultipleCurrencies ? money(summary[base] as number) : money(summary[original] as number | null);
+}
+
+function summaryHint(summary: GeneralLedgerSummary, base: keyof GeneralLedgerSummary) {
+  return summary.hasMultipleCurrencies ? "Consolidado base" : `Base ${money(summary[base] as number)}`;
 }
 
 function dateOnly(value?: string) {
@@ -292,33 +300,50 @@ export function GeneralLedgerPage() {
       <div className="stats-grid">
         <Card>
           <span className="metric-label">Saldo inicial</span>
-          <strong className="metric-value">{money(summary.openingBalance)}</strong>
-          <span className="muted-text">Base {money(summary.openingBaseBalance)}</span>
+          <strong className="metric-value">{summaryAmount(summary, "openingBalance", "openingBaseBalance")}</strong>
+          <span className="muted-text">{summaryHint(summary, "openingBaseBalance")}</span>
         </Card>
         <Card>
           <span className="metric-label">Debitos</span>
-          <strong className="metric-value">{money(summary.totalDebit)}</strong>
-          <span className="muted-text">Base {money(summary.totalDebitBase)}</span>
+          <strong className="metric-value">{summaryAmount(summary, "totalDebit", "totalDebitBase")}</strong>
+          <span className="muted-text">{summaryHint(summary, "totalDebitBase")}</span>
         </Card>
         <Card>
           <span className="metric-label">Creditos</span>
-          <strong className="metric-value">{money(summary.totalCredit)}</strong>
-          <span className="muted-text">Base {money(summary.totalCreditBase)}</span>
+          <strong className="metric-value">{summaryAmount(summary, "totalCredit", "totalCreditBase")}</strong>
+          <span className="muted-text">{summaryHint(summary, "totalCreditBase")}</span>
         </Card>
         <Card>
           <span className="metric-label">Movimiento neto</span>
-          <strong className="metric-value">{money(summary.netMovement)}</strong>
-          <span className="muted-text">Base {money(summary.netBaseMovement)}</span>
+          <strong className="metric-value">{summaryAmount(summary, "netMovement", "netBaseMovement")}</strong>
+          <span className="muted-text">{summaryHint(summary, "netBaseMovement")}</span>
         </Card>
         <Card>
           <span className="metric-label">Saldo final</span>
-          <strong className="metric-value">{money(summary.closingBalance)}</strong>
-          <span className="muted-text">Base {money(summary.closingBaseBalance)}</span>
+          <strong className="metric-value">{summaryAmount(summary, "closingBalance", "closingBaseBalance")}</strong>
+          <span className="muted-text">{summaryHint(summary, "closingBaseBalance")}</span>
         </Card>
       </div>
 
       {summary.hasMultipleCurrencies ? (
         <Alert tone="warning">La consulta tiene varias monedas; los importes originales se muestran separados y el resumen consolidado usa valores base.</Alert>
+      ) : null}
+
+      {summary.currencyTotals.length > 0 ? (
+        <Card>
+          <Table
+            columns={["Moneda", "Saldo inicial", "Debito", "Credito", "Movimiento neto", "Saldo final", "Movimientos"]}
+            rows={summary.currencyTotals.map((currency) => [
+              currency.currencyCode,
+              money(currency.openingBalance),
+              money(currency.totalDebit),
+              money(currency.totalCredit),
+              money(currency.netMovement),
+              money(currency.closingBalance),
+              String(currency.movementCount)
+            ])}
+          />
+        </Card>
       ) : null}
 
       {loading ? (

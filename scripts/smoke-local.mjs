@@ -7850,25 +7850,74 @@ async function validateGeneralLedgerFlow(session) {
   }
 
   const currencyRef = `GL-MC-${suffix}`;
-  await createPosted("2025-02-18", `${currencyRef}-DOP`, "DOP", 1, [
-    cashLine(40, 0, `${currencyRef}-DOP`),
-    payableLine(0, 40, `${currencyRef}-DOP`)
+  await createPosted("2025-02-03", `${currencyRef}-OPEN-DOP`, "DOP", 1, [
+    cashLine(100, 0, `${currencyRef}-OPEN-DOP`),
+    payableLine(0, 100, `${currencyRef}-OPEN-DOP`)
   ]);
-  await createPosted("2025-02-19", `${currencyRef}-USD`, "USD", 60, [
-    cashLine(10, 0, `${currencyRef}-USD`),
-    payableLine(0, 10, `${currencyRef}-USD`)
+  await createPosted("2025-02-04", `${currencyRef}-OPEN-USD`, "USD", 60, [
+    cashLine(10, 0, `${currencyRef}-OPEN-USD`),
+    payableLine(0, 10, `${currencyRef}-OPEN-USD`)
+  ]);
+  await createPosted("2025-02-18", `${currencyRef}-RANGE-DOP`, "DOP", 1, [
+    cashLine(40, 0, `${currencyRef}-RANGE-DOP`),
+    payableLine(0, 40, `${currencyRef}-RANGE-DOP`)
   ]);
   const multiCurrency = await getGeneralLedgerSummary(
     { accountId: cash.accountId, search: currencyRef, dateFrom: "2025-02-10", dateTo: "2025-02-20" },
     session
   );
+  const dopBreakdown = multiCurrency.currencyTotals.find((item) => item.currencyCode === "DOP");
+  const usdBreakdown = multiCurrency.currencyTotals.find((item) => item.currencyCode === "USD");
   if (
     !multiCurrency.hasMultipleCurrencies ||
     multiCurrency.currencyTotals.length !== 2 ||
-    multiCurrency.totalDebit !== 50 ||
-    multiCurrency.totalDebitBase !== 640
+    multiCurrency.openingBalance !== null ||
+    multiCurrency.totalDebit !== null ||
+    multiCurrency.totalCredit !== null ||
+    multiCurrency.netMovement !== null ||
+    multiCurrency.closingBalance !== null ||
+    multiCurrency.openingBaseBalance !== 700 ||
+    multiCurrency.totalDebitBase !== 40 ||
+    multiCurrency.closingBaseBalance !== 740 ||
+    dopBreakdown?.openingBalance !== 100 ||
+    dopBreakdown.totalDebit !== 40 ||
+    dopBreakdown.closingBalance !== 140 ||
+    usdBreakdown?.openingBalance !== 10 ||
+    usdBreakdown.totalDebit !== 0 ||
+    usdBreakdown.closingBalance !== 10
   ) {
-    fail("General ledger multcurrency summary did not separate original currencies or consolidate base amounts.");
+    fail("General ledger multcurrency opening/range summary mixed original currencies or missed base totals.");
+  }
+
+  const emptyRangeMultiCurrency = await getGeneralLedgerSummary(
+    { accountId: cash.accountId, search: currencyRef, dateFrom: "2025-02-10", dateTo: "2025-02-11" },
+    session
+  );
+  if (
+    !emptyRangeMultiCurrency.hasMultipleCurrencies ||
+    emptyRangeMultiCurrency.movementCount !== 0 ||
+    emptyRangeMultiCurrency.currencyTotals.length !== 2 ||
+    emptyRangeMultiCurrency.openingBalance !== null ||
+    emptyRangeMultiCurrency.closingBalance !== null ||
+    emptyRangeMultiCurrency.closingBaseBalance !== 700
+  ) {
+    fail("General ledger multcurrency opening-only summary did not preserve breakdown without range movements.");
+  }
+
+  const dopOnlyCurrency = await getGeneralLedgerSummary(
+    { accountId: cash.accountId, search: currencyRef, dateFrom: "2025-02-10", dateTo: "2025-02-20", currencyCode: "DOP" },
+    session
+  );
+  if (
+    dopOnlyCurrency.hasMultipleCurrencies ||
+    dopOnlyCurrency.currencyTotals.length !== 1 ||
+    dopOnlyCurrency.openingBalance !== 100 ||
+    dopOnlyCurrency.totalDebit !== 40 ||
+    dopOnlyCurrency.closingBalance !== 140 ||
+    dopOnlyCurrency.openingBaseBalance !== 100 ||
+    dopOnlyCurrency.closingBaseBalance !== 140
+  ) {
+    fail("General ledger currencyCode filter did not isolate original DOP totals.");
   }
 
   smokeStep("general ledger isolation and runtime metadata");
