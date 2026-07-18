@@ -429,6 +429,24 @@ async function getTrialBalanceSummary(query, session, extraHeaders = {}) {
   return body.data;
 }
 
+async function getIncomeStatement(query, session, extraHeaders = {}) {
+  const params = new URLSearchParams(query);
+  const body = await expectOk(`/accounting/income-statement?${params.toString()}`, {
+    headers: { ...authHeaders(session), ...extraHeaders }
+  });
+
+  return body.data;
+}
+
+async function getIncomeStatementSummary(query, session, extraHeaders = {}) {
+  const params = new URLSearchParams(query);
+  const body = await expectOk(`/accounting/income-statement/summary?${params.toString()}`, {
+    headers: { ...authHeaders(session), ...extraHeaders }
+  });
+
+  return body.data;
+}
+
 async function ensureOtherCompanyCostCenter(session, code) {
   const companyId = "99999999-9999-9999-9999-999999999998";
   const costCenterId = randomUUID();
@@ -8095,6 +8113,160 @@ async function validateTrialBalanceFlow(session) {
   }
 }
 
+async function validateIncomeStatementFlow(session) {
+  const suffix = smokeRun;
+  const codeSuffix = suffix.slice(-8);
+  const accounts = await listAccountingAccounts({ pageSize: "200" }, session);
+  const cash = accounts.records.find((account) => account.code === "1-01-001");
+  if (!cash?.accountId) {
+    fail("Seeded cash account was not available for income statement smoke.");
+  }
+
+  const accountPayload = (code, name, accountType, normalBalance) => ({
+    code,
+    name,
+    description: `${name} smoke`,
+    parentAccountId: null,
+    accountType,
+    normalBalance,
+    allowsPosting: true,
+    requiresCostCenter: false,
+    requiresThirdParty: false,
+    isControlAccount: false,
+    validFrom: "2025-01-01",
+    validTo: "2025-12-31"
+  });
+
+  const revenue = await createAccountingAccount(accountPayload(`4-IS-${codeSuffix}`, "Ingresos smoke", "REVENUE", "CREDIT"), session);
+  const cost = await createAccountingAccount(accountPayload(`6-IS-${codeSuffix}`, "Costos smoke", "COST", "DEBIT"), session);
+  const expense = await createAccountingAccount(accountPayload(`5-IS-${codeSuffix}`, "Gastos operativos smoke", "EXPENSE", "DEBIT"), session);
+  const otherIncome = await createAccountingAccount(accountPayload(`7-IS-${codeSuffix}`, "Otros ingresos smoke", "REVENUE", "CREDIT"), session);
+  const otherExpense = await createAccountingAccount(accountPayload(`8-IS-${codeSuffix}`, "Otros gastos smoke", "EXPENSE", "DEBIT"), session);
+
+  const line = (accountId, debitAmount, creditAmount, reference) => ({
+    accountId,
+    description: reference,
+    debitAmount,
+    creditAmount,
+    reference
+  });
+  const createPosted = async (entryDate, reference, currencyCode, exchangeRate, lines) => {
+    const entry = await createJournalEntry(
+      {
+        entryDate,
+        description: reference,
+        reference,
+        currencyCode,
+        exchangeRate
+      },
+      session
+    );
+    for (const item of lines) {
+      await addJournalEntryLine(entry.journalEntryId, item, session);
+    }
+    return postJournalEntry(entry.journalEntryId, `is-post-${reference}`, session);
+  };
+
+  const ref = `IS-${suffix}`;
+  smokeStep("income statement excludes balance sheet accounts and calculates profit");
+  await createPosted("2025-02-10", `${ref}-CMP-REV`, "DOP", 1, [
+    line(cash.accountId, 500, 0, `${ref}-CMP-REV`),
+    line(revenue.accountId, 0, 500, `${ref}-CMP-REV`)
+  ]);
+  await createPosted("2025-02-11", `${ref}-CMP-COST`, "DOP", 1, [
+    line(cost.accountId, 200, 0, `${ref}-CMP-COST`),
+    line(cash.accountId, 0, 200, `${ref}-CMP-COST`)
+  ]);
+  await createPosted("2025-02-12", `${ref}-CMP-EXP`, "DOP", 1, [
+    line(expense.accountId, 50, 0, `${ref}-CMP-EXP`),
+    line(cash.accountId, 0, 50, `${ref}-CMP-EXP`)
+  ]);
+  await createPosted("2025-02-18", `${ref}-REV`, "DOP", 1, [
+    line(cash.accountId, 1000, 0, `${ref}-REV`),
+    line(revenue.accountId, 0, 1000, `${ref}-REV`)
+  ]);
+  await createPosted("2025-02-18", `${ref}-COST`, "DOP", 1, [
+    line(cost.accountId, 300, 0, `${ref}-COST`),
+    line(cash.accountId, 0, 300, `${ref}-COST`)
+  ]);
+  await createPosted("2025-02-19", `${ref}-EXP`, "DOP", 1, [
+    line(expense.accountId, 120, 0, `${ref}-EXP`),
+    line(cash.accountId, 0, 120, `${ref}-EXP`)
+  ]);
+  await createPosted("2025-02-19", `${ref}-OI`, "DOP", 1, [
+    line(cash.accountId, 40, 0, `${ref}-OI`),
+    line(otherIncome.accountId, 0, 40, `${ref}-OI`)
+  ]);
+  await createPosted("2025-02-20", `${ref}-OE`, "DOP", 1, [
+    line(otherExpense.accountId, 15, 0, `${ref}-OE`),
+    line(cash.accountId, 0, 15, `${ref}-OE`)
+  ]);
+
+  const statement = await getIncomeStatement(
+    {
+      search: ref,
+      dateFrom: "2025-02-15",
+      dateTo: "2025-02-20",
+      compareDateFrom: "2025-02-10",
+      compareDateTo: "2025-02-14",
+      currencyCode: "DOP"
+    },
+    session
+  );
+  if (
+    statement.records.some((record) => ["ASSET", "LIABILITY", "EQUITY"].includes(record.accountType)) ||
+    statement.summary.hasMultipleCurrencies ||
+    statement.summary.totalRevenue !== 1000 ||
+    statement.summary.costs !== 300 ||
+    statement.summary.grossProfit !== 700 ||
+    statement.summary.operatingExpenses !== 120 ||
+    statement.summary.operatingIncome !== 580 ||
+    statement.summary.otherIncome !== 40 ||
+    statement.summary.otherExpenses !== 15 ||
+    statement.summary.profitBeforeTax !== 605 ||
+    statement.summary.netIncome !== 605 ||
+    statement.summary.comparison?.netIncome !== 250 ||
+    statement.summary.comparison.varianceNetIncome !== 355 ||
+    !statement.records.some((record) => record.section === "OTHER_INCOME") ||
+    !statement.records.some((record) => record.section === "OTHER_EXPENSE")
+  ) {
+    fail("Income statement did not calculate DOP profit, comparison or result-account filtering correctly.");
+  }
+
+  smokeStep("income statement multcurrency policy uses base totals");
+  await createPosted("2025-02-20", `${ref}-USD-REV`, "USD", 60, [
+    line(cash.accountId, 10, 0, `${ref}-USD-REV`),
+    line(revenue.accountId, 0, 10, `${ref}-USD-REV`)
+  ]);
+  const multiCurrency = await getIncomeStatementSummary(
+    { search: ref, dateFrom: "2025-02-15", dateTo: "2025-02-20" },
+    session
+  );
+  const dopBreakdown = multiCurrency.currencyTotals.find((item) => item.currencyCode === "DOP");
+  const usdBreakdown = multiCurrency.currencyTotals.find((item) => item.currencyCode === "USD");
+  if (
+    !multiCurrency.hasMultipleCurrencies ||
+    multiCurrency.totalRevenue !== null ||
+    multiCurrency.netIncome !== null ||
+    multiCurrency.totalRevenueBase !== 1600 ||
+    multiCurrency.costsBase !== 300 ||
+    multiCurrency.netIncomeBase !== 1205 ||
+    dopBreakdown?.netIncome !== 605 ||
+    usdBreakdown?.totalRevenue !== 10 ||
+    usdBreakdown.netIncome !== 10
+  ) {
+    fail("Income statement multcurrency summary mixed original currencies or missed base totals.");
+  }
+
+  const dopOnly = await getIncomeStatementSummary(
+    { search: ref, dateFrom: "2025-02-15", dateTo: "2025-02-20", currencyCode: "DOP" },
+    session
+  );
+  if (dopOnly.hasMultipleCurrencies || dopOnly.totalRevenue !== 1000 || dopOnly.netIncome !== 605 || dopOnly.netIncomeBase !== 605) {
+    fail("Income statement currencyCode filter did not isolate DOP totals.");
+  }
+}
+
 async function validateCrud(session) {
   const suffix = smokeRun;
   const customerCode = `QA-CUST-${suffix}`;
@@ -8344,6 +8516,7 @@ async function main() {
   await validateJournalEntryFlow(session);
   await validateGeneralLedgerFlow(session);
   await validateTrialBalanceFlow(session);
+  await validateIncomeStatementFlow(session);
   await validateCrud(session);
   console.log("smoke: local runtime validation OK");
 }

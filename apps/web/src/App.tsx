@@ -34,6 +34,7 @@ import { WorkflowsPreview } from "./pages/WorkflowsPreview.js";
 import { ChartOfAccounts } from "./pages/accounting/ChartOfAccounts.js";
 import { AccountingPeriodsPage } from "./pages/accounting/AccountingPeriodsPage.js";
 import { GeneralLedgerPage } from "./pages/accounting/GeneralLedgerPage.js";
+import { IncomeStatementPage } from "./pages/accounting/IncomeStatementPage.js";
 import { JournalEntriesPage } from "./pages/accounting/JournalEntriesPage.js";
 import { TrialBalancePage } from "./pages/accounting/TrialBalancePage.js";
 import { DgiiReportsDashboard } from "./pages/dgii/DgiiReportsDashboard.js";
@@ -184,6 +185,10 @@ export function App() {
 
     if (path === "/accounting/trial-balance") {
       return <TrialBalancePage />;
+    }
+
+    if (path === "/accounting/income-statement") {
+      return <IncomeStatementPage />;
     }
 
     if (path === "/security") {

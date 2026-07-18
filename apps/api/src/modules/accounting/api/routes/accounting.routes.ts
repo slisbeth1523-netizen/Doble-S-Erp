@@ -10,6 +10,7 @@ import { validateRequest } from "../../../../utils/validateRequest.js";
 import { accountingAccountService } from "../../application/AccountingAccountService.js";
 import { accountingPeriodService } from "../../application/AccountingPeriodService.js";
 import { generalLedgerService } from "../../application/GeneralLedgerService.js";
+import { incomeStatementService } from "../../application/IncomeStatementService.js";
 import { journalEntryService } from "../../application/JournalEntryService.js";
 import { trialBalanceService } from "../../application/TrialBalanceService.js";
 import {
@@ -40,6 +41,7 @@ import {
   journalEntryPostSchema,
   journalEntryUpdateSchema
 } from "../../validators/journal-entry.validators.js";
+import { incomeStatementQuerySchema } from "../../validators/income-statement.validators.js";
 import { trialBalanceQuerySchema } from "../../validators/trial-balance.validators.js";
 
 export const accountingRouter = Router();
@@ -57,6 +59,28 @@ function accountingContext(request: Parameters<typeof getRequestContext>[0]) {
     correlationId: context.correlationId
   };
 }
+
+accountingRouter.get(
+  "/income-statement",
+  validateRequest({ query: incomeStatementQuerySchema }),
+  requirePermission("accounting", "accounting.income-statement.read"),
+  asyncHandler(async (request, response) => {
+    const result = await incomeStatementService.getStatement(accountingContext(request), request.query);
+
+    sendSuccess(response, result);
+  })
+);
+
+accountingRouter.get(
+  "/income-statement/summary",
+  validateRequest({ query: incomeStatementQuerySchema }),
+  requirePermission("accounting", "accounting.income-statement.read"),
+  asyncHandler(async (request, response) => {
+    const result = await incomeStatementService.getSummary(accountingContext(request), request.query);
+
+    sendSuccess(response, result);
+  })
+);
 
 accountingRouter.get(
   "/trial-balance",
