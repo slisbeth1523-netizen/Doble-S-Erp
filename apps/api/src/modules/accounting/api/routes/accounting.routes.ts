@@ -10,6 +10,7 @@ import { validateRequest } from "../../../../utils/validateRequest.js";
 import { accountingAccountService } from "../../application/AccountingAccountService.js";
 import { accountingPeriodService } from "../../application/AccountingPeriodService.js";
 import { balanceSheetService } from "../../application/BalanceSheetService.js";
+import { cashFlowService } from "../../application/CashFlowService.js";
 import { generalLedgerService } from "../../application/GeneralLedgerService.js";
 import { incomeStatementService } from "../../application/IncomeStatementService.js";
 import { journalEntryService } from "../../application/JournalEntryService.js";
@@ -21,6 +22,7 @@ import {
   accountingAccountPayloadSchema
 } from "../../validators/accounting-account.validators.js";
 import { balanceSheetQuerySchema } from "../../validators/balance-sheet.validators.js";
+import { cashFlowQuerySchema } from "../../validators/cash-flow.validators.js";
 import {
   accountingPeriodCreateSchema,
   accountingPeriodIdParamsSchema,
@@ -61,6 +63,28 @@ function accountingContext(request: Parameters<typeof getRequestContext>[0]) {
     correlationId: context.correlationId
   };
 }
+
+accountingRouter.get(
+  "/cash-flow",
+  validateRequest({ query: cashFlowQuerySchema }),
+  requirePermission("accounting", "accounting.cash-flow.read"),
+  asyncHandler(async (request, response) => {
+    const result = await cashFlowService.getStatement(accountingContext(request), request.query);
+
+    sendSuccess(response, result);
+  })
+);
+
+accountingRouter.get(
+  "/cash-flow/summary",
+  validateRequest({ query: cashFlowQuerySchema }),
+  requirePermission("accounting", "accounting.cash-flow.read"),
+  asyncHandler(async (request, response) => {
+    const result = await cashFlowService.getSummary(accountingContext(request), request.query);
+
+    sendSuccess(response, result);
+  })
+);
 
 accountingRouter.get(
   "/balance-sheet",

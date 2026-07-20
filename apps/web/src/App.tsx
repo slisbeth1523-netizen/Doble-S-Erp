@@ -32,6 +32,7 @@ import { SettingsPreview } from "./pages/SettingsPreview.js";
 import { WorkflowsPreview } from "./pages/WorkflowsPreview.js";
 
 import { BalanceSheetPage } from "./pages/accounting/BalanceSheetPage.js";
+import { CashFlowPage } from "./pages/accounting/CashFlowPage.js";
 import { ChartOfAccounts } from "./pages/accounting/ChartOfAccounts.js";
 import { AccountingPeriodsPage } from "./pages/accounting/AccountingPeriodsPage.js";
 import { GeneralLedgerPage } from "./pages/accounting/GeneralLedgerPage.js";
@@ -194,6 +195,10 @@ export function App() {
 
     if (path === "/accounting/balance-sheet") {
       return <BalanceSheetPage />;
+    }
+
+    if (path === "/accounting/cash-flow") {
+      return <CashFlowPage />;
     }
 
     if (path === "/security") {

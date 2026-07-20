@@ -465,6 +465,24 @@ async function getBalanceSheetSummary(query, session, extraHeaders = {}) {
   return body.data;
 }
 
+async function getCashFlow(query, session, extraHeaders = {}) {
+  const params = new URLSearchParams(query);
+  const body = await expectOk(`/accounting/cash-flow?${params.toString()}`, {
+    headers: { ...authHeaders(session), ...extraHeaders }
+  });
+
+  return body.data;
+}
+
+async function getCashFlowSummary(query, session, extraHeaders = {}) {
+  const params = new URLSearchParams(query);
+  const body = await expectOk(`/accounting/cash-flow/summary?${params.toString()}`, {
+    headers: { ...authHeaders(session), ...extraHeaders }
+  });
+
+  return body.data;
+}
+
 async function ensureOtherCompanyCostCenter(session, code) {
   const companyId = "99999999-9999-9999-9999-999999999998";
   const costCenterId = randomUUID();
@@ -8420,6 +8438,190 @@ async function validateBalanceSheetFlow(session) {
   }
 }
 
+async function validateCashFlowStatementFlow(session) {
+  const suffix = smokeRun;
+  const codeSuffix = suffix.slice(-8);
+  const accounts = await listAccountingAccounts({ pageSize: "200" }, session);
+  const cash = accounts.records.find((account) => account.code === "1-01-001");
+  if (!cash?.accountId) {
+    fail("Seeded cash account was not available for cash flow smoke.");
+  }
+
+  const accountPayload = (code, name, accountType, normalBalance) => ({
+    code,
+    name,
+    description: `${name} smoke`,
+    parentAccountId: null,
+    accountType,
+    normalBalance,
+    allowsPosting: true,
+    requiresCostCenter: false,
+    requiresThirdParty: false,
+    isControlAccount: false,
+    validFrom: "2025-01-01",
+    validTo: "2025-12-31"
+  });
+
+  const receivable = await createAccountingAccount(
+    accountPayload(`1-01-CF-${codeSuffix}`, "Cuenta por cobrar flujo smoke", "ASSET", "DEBIT"),
+    session
+  );
+  const fixedAsset = await createAccountingAccount(
+    accountPayload(`1-02-CF-${codeSuffix}`, "Activo fijo flujo smoke", "ASSET", "DEBIT"),
+    session
+  );
+  const loan = await createAccountingAccount(
+    accountPayload(`2-02-CF-${codeSuffix}`, "Prestamo flujo smoke", "LIABILITY", "CREDIT"),
+    session
+  );
+  const capital = await createAccountingAccount(
+    accountPayload(`3-CF-${codeSuffix}`, "Capital flujo smoke", "EQUITY", "CREDIT"),
+    session
+  );
+  const revenue = await createAccountingAccount(
+    accountPayload(`4-CF-${codeSuffix}`, "Ingresos flujo smoke", "REVENUE", "CREDIT"),
+    session
+  );
+  const expense = await createAccountingAccount(
+    accountPayload(`5-CF-${codeSuffix}`, "Gastos flujo smoke", "EXPENSE", "DEBIT"),
+    session
+  );
+
+  const line = (accountId, debitAmount, creditAmount, reference) => ({
+    accountId,
+    description: reference,
+    debitAmount,
+    creditAmount,
+    reference
+  });
+  const createPosted = async (entryDate, reference, currencyCode, exchangeRate, lines) => {
+    const entry = await createJournalEntry(
+      {
+        entryDate,
+        description: reference,
+        reference,
+        currencyCode,
+        exchangeRate
+      },
+      session
+    );
+    for (const item of lines) {
+      await addJournalEntryLine(entry.journalEntryId, item, session);
+    }
+    return postJournalEntry(entry.journalEntryId, `cf-post-${reference}`, session);
+  };
+
+  const ref = `CF-${suffix}`;
+  await createPosted("2025-02-05", `${ref}-CMP-CAPITAL`, "DOP", 1, [
+    line(cash.accountId, 1000, 0, `${ref}-CMP-CAPITAL`),
+    line(capital.accountId, 0, 1000, `${ref}-CMP-CAPITAL`)
+  ]);
+  await createPosted("2025-02-10", `${ref}-REV-CASH`, "DOP", 1, [
+    line(cash.accountId, 500, 0, `${ref}-REV-CASH`),
+    line(revenue.accountId, 0, 500, `${ref}-REV-CASH`)
+  ]);
+  await createPosted("2025-02-11", `${ref}-REV-AR`, "DOP", 1, [
+    line(receivable.accountId, 50, 0, `${ref}-REV-AR`),
+    line(revenue.accountId, 0, 50, `${ref}-REV-AR`)
+  ]);
+  await createPosted("2025-02-12", `${ref}-EXP-CASH`, "DOP", 1, [
+    line(expense.accountId, 100, 0, `${ref}-EXP-CASH`),
+    line(cash.accountId, 0, 100, `${ref}-EXP-CASH`)
+  ]);
+  await createPosted("2025-02-13", `${ref}-ASSET`, "DOP", 1, [
+    line(fixedAsset.accountId, 200, 0, `${ref}-ASSET`),
+    line(cash.accountId, 0, 200, `${ref}-ASSET`)
+  ]);
+  await createPosted("2025-02-14", `${ref}-LOAN`, "DOP", 1, [
+    line(cash.accountId, 300, 0, `${ref}-LOAN`),
+    line(loan.accountId, 0, 300, `${ref}-LOAN`)
+  ]);
+  await createPosted("2025-02-15", `${ref}-CAPITAL`, "DOP", 1, [
+    line(cash.accountId, 100, 0, `${ref}-CAPITAL`),
+    line(capital.accountId, 0, 100, `${ref}-CAPITAL`)
+  ]);
+
+  smokeStep("cash flow indirect method calculates operating, investing and financing");
+  const dopStatement = await getCashFlow(
+    {
+      search: ref,
+      dateFrom: "2025-02-10",
+      dateTo: "2025-02-20",
+      compareDateFrom: "2025-02-01",
+      compareDateTo: "2025-02-09",
+      currencyCode: "DOP"
+    },
+    session
+  );
+  const netIncomeLine = dopStatement.records.find((record) => record.lineType === "NET_INCOME");
+  const workingCapitalLine = dopStatement.records.find((record) => record.lineType === "WORKING_CAPITAL");
+  const assetPurchaseLine = dopStatement.records.find((record) => record.lineType === "ASSET_PURCHASES");
+  const loanLine = dopStatement.records.find((record) => record.lineType === "LOANS");
+  if (
+    dopStatement.summary.hasMultipleCurrencies ||
+    dopStatement.summary.beginningCash !== 1000 ||
+    dopStatement.summary.endingCash !== 1600 ||
+    dopStatement.summary.operatingCashFlow !== 400 ||
+    dopStatement.summary.investingCashFlow !== -200 ||
+    dopStatement.summary.financingCashFlow !== 400 ||
+    dopStatement.summary.netChange !== 600 ||
+    dopStatement.summary.comparison?.netChange !== 1000 ||
+    dopStatement.summary.comparison.financingCashFlow !== 1000 ||
+    netIncomeLine?.amount !== 450 ||
+    workingCapitalLine?.amount !== -50 ||
+    assetPurchaseLine?.amount !== -200 ||
+    loanLine?.amount !== 300
+  ) {
+    fail("Cash flow statement did not calculate indirect DOP flows and comparison correctly.");
+  }
+
+  smokeStep("cash flow multcurrency policy uses base totals");
+  await createPosted("2025-02-16", `${ref}-USD-REV`, "USD", 60, [
+    line(cash.accountId, 10, 0, `${ref}-USD-REV`),
+    line(revenue.accountId, 0, 10, `${ref}-USD-REV`)
+  ]);
+  const multiCurrency = await getCashFlowSummary({ search: ref, dateFrom: "2025-02-10", dateTo: "2025-02-20" }, session);
+  const dopBreakdown = multiCurrency.currencyTotals.find((item) => item.currencyCode === "DOP");
+  const usdBreakdown = multiCurrency.currencyTotals.find((item) => item.currencyCode === "USD");
+  if (
+    !multiCurrency.hasMultipleCurrencies ||
+    multiCurrency.operatingCashFlow !== null ||
+    multiCurrency.investingCashFlow !== null ||
+    multiCurrency.financingCashFlow !== null ||
+    multiCurrency.netChange !== null ||
+    multiCurrency.operatingCashFlowBase !== 1000 ||
+    multiCurrency.investingCashFlowBase !== -200 ||
+    multiCurrency.financingCashFlowBase !== 400 ||
+    multiCurrency.netChangeBase !== 1200 ||
+    multiCurrency.beginningCashBase !== 1000 ||
+    multiCurrency.endingCashBase !== 2200 ||
+    dopBreakdown?.operatingCashFlow !== 400 ||
+    dopBreakdown?.netChange !== 600 ||
+    usdBreakdown?.operatingCashFlow !== 10 ||
+    usdBreakdown?.netChange !== 10
+  ) {
+    fail("Cash flow multcurrency summary mixed original currencies or missed base totals.");
+  }
+
+  smokeStep("cash flow currency filter isolates original totals");
+  const dopOnly = await getCashFlowSummary(
+    { search: ref, dateFrom: "2025-02-10", dateTo: "2025-02-20", currencyCode: "DOP" },
+    session
+  );
+  if (
+    dopOnly.hasMultipleCurrencies ||
+    dopOnly.operatingCashFlow !== 400 ||
+    dopOnly.investingCashFlow !== -200 ||
+    dopOnly.financingCashFlow !== 400 ||
+    dopOnly.netChange !== 600 ||
+    dopOnly.beginningCash !== 1000 ||
+    dopOnly.endingCash !== 1600 ||
+    dopOnly.currencyTotals.length !== 1
+  ) {
+    fail("Cash flow currencyCode filter did not isolate DOP totals.");
+  }
+}
+
 async function validateCrud(session) {
   const suffix = smokeRun;
   const customerCode = `QA-CUST-${suffix}`;
@@ -8671,6 +8873,7 @@ async function main() {
   await validateTrialBalanceFlow(session);
   await validateIncomeStatementFlow(session);
   await validateBalanceSheetFlow(session);
+  await validateCashFlowStatementFlow(session);
   await validateCrud(session);
   console.log("smoke: local runtime validation OK");
 }
