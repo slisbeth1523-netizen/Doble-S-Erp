@@ -447,6 +447,24 @@ async function getIncomeStatementSummary(query, session, extraHeaders = {}) {
   return body.data;
 }
 
+async function getBalanceSheet(query, session, extraHeaders = {}) {
+  const params = new URLSearchParams(query);
+  const body = await expectOk(`/accounting/balance-sheet?${params.toString()}`, {
+    headers: { ...authHeaders(session), ...extraHeaders }
+  });
+
+  return body.data;
+}
+
+async function getBalanceSheetSummary(query, session, extraHeaders = {}) {
+  const params = new URLSearchParams(query);
+  const body = await expectOk(`/accounting/balance-sheet/summary?${params.toString()}`, {
+    headers: { ...authHeaders(session), ...extraHeaders }
+  });
+
+  return body.data;
+}
+
 async function ensureOtherCompanyCostCenter(session, code) {
   const companyId = "99999999-9999-9999-9999-999999999998";
   const costCenterId = randomUUID();
@@ -8267,6 +8285,141 @@ async function validateIncomeStatementFlow(session) {
   }
 }
 
+async function validateBalanceSheetFlow(session) {
+  const suffix = smokeRun;
+  const codeSuffix = suffix.slice(-8);
+  const accounts = await listAccountingAccounts({ pageSize: "200" }, session);
+  const cash = accounts.records.find((account) => account.code === "1-01-001");
+  const payable = accounts.records.find((account) => account.code === "2-01");
+  if (!cash?.accountId || !payable?.accountId) {
+    fail("Seeded balance sheet accounts were not available for balance sheet smoke.");
+  }
+
+  const accountPayload = (code, name, accountType, normalBalance) => ({
+    code,
+    name,
+    description: `${name} smoke`,
+    parentAccountId: null,
+    accountType,
+    normalBalance,
+    allowsPosting: true,
+    requiresCostCenter: false,
+    requiresThirdParty: false,
+    isControlAccount: false,
+    validFrom: "2025-01-01",
+    validTo: "2025-12-31"
+  });
+  const equity = await createAccountingAccount(accountPayload(`3-BS-${codeSuffix}`, "Capital smoke", "EQUITY", "CREDIT"), session);
+  const revenue = await createAccountingAccount(accountPayload(`4-BS-${codeSuffix}`, "Ingresos balance smoke", "REVENUE", "CREDIT"), session);
+  const expense = await createAccountingAccount(accountPayload(`5-BS-${codeSuffix}`, "Gastos balance smoke", "EXPENSE", "DEBIT"), session);
+
+  const line = (accountId, debitAmount, creditAmount, reference) => ({
+    accountId,
+    description: reference,
+    debitAmount,
+    creditAmount,
+    reference
+  });
+  const createPosted = async (entryDate, reference, currencyCode, exchangeRate, lines) => {
+    const entry = await createJournalEntry(
+      {
+        entryDate,
+        description: reference,
+        reference,
+        currencyCode,
+        exchangeRate
+      },
+      session
+    );
+    for (const item of lines) {
+      await addJournalEntryLine(entry.journalEntryId, item, session);
+    }
+    return postJournalEntry(entry.journalEntryId, `bs-post-${reference}`, session);
+  };
+
+  const ref = `BS-${suffix}`;
+  smokeStep("balance sheet calculates equation and current year result");
+  await createPosted("2025-02-10", `${ref}-CAPITAL`, "DOP", 1, [
+    line(cash.accountId, 500, 0, `${ref}-CAPITAL`),
+    line(equity.accountId, 0, 500, `${ref}-CAPITAL`)
+  ]);
+  await createPosted("2025-02-11", `${ref}-LIABILITY`, "DOP", 1, [
+    line(cash.accountId, 300, 0, `${ref}-LIABILITY`),
+    line(payable.accountId, 0, 300, `${ref}-LIABILITY`)
+  ]);
+  await createPosted("2025-02-12", `${ref}-REVENUE`, "DOP", 1, [
+    line(cash.accountId, 1000, 0, `${ref}-REVENUE`),
+    line(revenue.accountId, 0, 1000, `${ref}-REVENUE`)
+  ]);
+  await createPosted("2025-02-13", `${ref}-EXPENSE`, "DOP", 1, [
+    line(expense.accountId, 200, 0, `${ref}-EXPENSE`),
+    line(cash.accountId, 0, 200, `${ref}-EXPENSE`)
+  ]);
+
+  const dopSheet = await getBalanceSheet(
+    { search: ref, asOfDate: "2025-02-14", compareAsOfDate: "2025-02-12", currencyCode: "DOP" },
+    session
+  );
+  if (
+    dopSheet.records.some((record) => ["REVENUE", "EXPENSE", "COST"].includes(record.accountType)) ||
+    !dopSheet.records.some((record) => record.section === "CURRENT_YEAR_RESULT" && record.baseAmount === 800) ||
+    dopSheet.summary.hasMultipleCurrencies ||
+    dopSheet.summary.totalAssets !== 1600 ||
+    dopSheet.summary.totalLiabilities !== 300 ||
+    dopSheet.summary.totalEquity !== 1300 ||
+    dopSheet.summary.currentYearResult !== 800 ||
+    dopSheet.summary.difference !== 0 ||
+    !dopSheet.summary.isBalanced ||
+    dopSheet.summary.comparison?.totalAssets !== 1800 ||
+    dopSheet.summary.comparison.totalLiabilities !== 300 ||
+    dopSheet.summary.comparison.totalEquity !== 1500 ||
+    !dopSheet.summary.comparison.isBalanced
+  ) {
+    fail("Balance sheet did not calculate DOP equation, comparison or result line correctly.");
+  }
+
+  smokeStep("balance sheet multcurrency policy uses base totals");
+  await createPosted("2025-02-20", `${ref}-USD-REVENUE`, "USD", 60, [
+    line(cash.accountId, 10, 0, `${ref}-USD-REVENUE`),
+    line(revenue.accountId, 0, 10, `${ref}-USD-REVENUE`)
+  ]);
+  const multiCurrency = await getBalanceSheetSummary({ search: ref, asOfDate: "2025-02-20" }, session);
+  const dopBreakdown = multiCurrency.currencyTotals.find((item) => item.currencyCode === "DOP");
+  const usdBreakdown = multiCurrency.currencyTotals.find((item) => item.currencyCode === "USD");
+  if (
+    !multiCurrency.hasMultipleCurrencies ||
+    multiCurrency.totalAssets !== null ||
+    multiCurrency.totalLiabilities !== null ||
+    multiCurrency.totalEquity !== null ||
+    multiCurrency.difference !== null ||
+    multiCurrency.totalAssetsBase !== 2200 ||
+    multiCurrency.totalLiabilitiesBase !== 300 ||
+    multiCurrency.totalEquityBase !== 1900 ||
+    multiCurrency.currentYearResultBase !== 1400 ||
+    multiCurrency.differenceBase !== 0 ||
+    !multiCurrency.isBalanced ||
+    dopBreakdown?.difference !== 0 ||
+    usdBreakdown?.totalAssets !== 10 ||
+    usdBreakdown.currentYearResult !== 10 ||
+    usdBreakdown.difference !== 0
+  ) {
+    fail("Balance sheet multcurrency summary mixed original currencies or missed base totals.");
+  }
+
+  const dopOnly = await getBalanceSheetSummary({ search: ref, asOfDate: "2025-02-20", currencyCode: "DOP" }, session);
+  if (
+    dopOnly.hasMultipleCurrencies ||
+    dopOnly.totalAssets !== 1600 ||
+    dopOnly.totalLiabilities !== 300 ||
+    dopOnly.totalEquity !== 1300 ||
+    dopOnly.currentYearResult !== 800 ||
+    dopOnly.difference !== 0 ||
+    !dopOnly.isBalanced
+  ) {
+    fail("Balance sheet currencyCode filter did not isolate DOP totals.");
+  }
+}
+
 async function validateCrud(session) {
   const suffix = smokeRun;
   const customerCode = `QA-CUST-${suffix}`;
@@ -8517,6 +8670,7 @@ async function main() {
   await validateGeneralLedgerFlow(session);
   await validateTrialBalanceFlow(session);
   await validateIncomeStatementFlow(session);
+  await validateBalanceSheetFlow(session);
   await validateCrud(session);
   console.log("smoke: local runtime validation OK");
 }
