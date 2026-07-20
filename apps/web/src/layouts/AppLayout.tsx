@@ -124,7 +124,8 @@ const navigation: NavigationItem[] = [
       { label: "Asientos contables", path: "/accounting/journal-entries" },
       { label: "Libro Mayor", path: "/accounting/general-ledger" },
       { label: "Balance de Comprobación", path: "/accounting/trial-balance" },
-      { label: "Estado de Resultados", path: "/accounting/income-statement" }
+      { label: "Estado de Resultados", path: "/accounting/income-statement" },
+      { label: "Balance General", path: "/accounting/balance-sheet" }
     ]
   },
   { label: "Workflows", path: "/workflows" },
@@ -338,6 +339,10 @@ function breadcrumb(path: string) {
     return ["Doble S ERP", "Contabilidad", "Estado de Resultados"];
   }
 
+  if (segments[0] === "accounting" && segments[1] === "balance-sheet") {
+    return ["Doble S ERP", "Contabilidad", "Balance General"];
+  }
+
   const labels: Record<string, string> = {
     dashboard: "Dashboard",
     workflows: "Workflows",
@@ -509,6 +514,7 @@ export function AppLayout({ children, currentPath, onNavigate }: AppLayoutProps)
     { label: "Libro Mayor", category: "Contabilidad", path: "/accounting/general-ledger" },
     { label: "Balance de Comprobación", category: "Contabilidad", path: "/accounting/trial-balance" },
     { label: "Estado de Resultados", category: "Contabilidad", path: "/accounting/income-statement" },
+    { label: "Balance General", category: "Contabilidad", path: "/accounting/balance-sheet" },
     { label: "Seguridad y Accesos", category: "Configuración", path: "/security" },
     { label: "Configuración General", category: "Configuración", path: "/settings" }
   ];
