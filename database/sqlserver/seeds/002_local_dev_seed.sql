@@ -172,6 +172,7 @@ VALUES
   ('accounting', 'accounting.general-ledger.read', 'Local read accounting general ledger'),
   ('accounting', 'accounting.general-ledger.export', 'Reserved export accounting general ledger'),
   ('accounting', 'accounting.trial-balance.read', 'Local read accounting trial balance'),
+  ('accounting', 'accounting.income-statement.read', 'Local read accounting income statement'),
   ('inventory', 'inventory.items.read', 'Local read items'),
   ('inventory', 'inventory.items.create', 'Local create items'),
   ('inventory', 'inventory.items.update', 'Local update items'),
