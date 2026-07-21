@@ -1,5 +1,6 @@
 import { domainEventPublisher } from "../../events/application/DomainEventPublisher.js";
-import { accountingPostingService } from "../../accounting/application/AccountingPostingService.js";
+import { businessEventPublisher } from "../../events/application/BusinessEventPublisher.js";
+import { businessEvents } from "../../events/application/BusinessEvent.js";
 import { BaseService } from "../../../services/BaseService.js";
 import { auditEvent } from "../../../utils/audit.js";
 import { logger } from "../../../utils/logger.js";
@@ -20,10 +21,7 @@ export type AccountsReceivableContext = AccountsReceivableContextInput & {
 };
 
 export class AccountsReceivableDocumentService extends BaseService {
-  constructor(
-    private readonly repository = accountsReceivableDocumentRepository,
-    private readonly postingService = accountingPostingService
-  ) {
+  constructor(private readonly repository = accountsReceivableDocumentRepository) {
     super();
   }
 
@@ -34,11 +32,23 @@ export class AccountsReceivableDocumentService extends BaseService {
     };
     const result = await this.repository.createDocument(input);
     if (result.sourceType === "CUSTOMER_DEBIT_NOTE") {
-      await this.postingService.create(context, {
-        sourceModule: "CUSTOMER_DEBIT_NOTE",
-        documentId: result.id,
-        postingDate: result.documentDate.toISOString().slice(0, 10),
-        reference: result.documentNumber
+      await businessEventPublisher.publish(context, {
+        eventName: businessEvents.customerDebitNoteApproved,
+        eventType: businessEvents.customerDebitNoteApproved,
+        sourceModule: "sales",
+        sourceEntity: "ar.AccountsReceivableDocuments",
+        sourceEntityId: result.id,
+        payload: {
+          documentId: result.id,
+          sourceDocumentType: "CUSTOMER_DEBIT_NOTE",
+          documentNumber: result.documentNumber,
+          customerId: result.customerId,
+          postingDate: result.documentDate.toISOString().slice(0, 10),
+          reference: result.documentNumber,
+          currencyCode: result.currencyCode,
+          exchangeRate: result.exchangeRate,
+          totalAmount: result.totalAmount
+        }
       });
     }
 

@@ -1,5 +1,6 @@
 import { domainEventPublisher } from "../../events/application/DomainEventPublisher.js";
-import { accountingPostingService } from "../../accounting/application/AccountingPostingService.js";
+import { businessEventPublisher } from "../../events/application/BusinessEventPublisher.js";
+import { businessEvents } from "../../events/application/BusinessEvent.js";
 import { BaseService } from "../../../services/BaseService.js";
 import { auditEvent } from "../../../utils/audit.js";
 import { logger } from "../../../utils/logger.js";
@@ -20,10 +21,7 @@ export type CustomerCreditNoteContext = CustomerCreditNoteContextInput & {
 };
 
 export class CustomerCreditNoteService extends BaseService {
-  constructor(
-    private readonly repository = customerCreditNoteRepository,
-    private readonly postingService = accountingPostingService
-  ) {
+  constructor(private readonly repository = customerCreditNoteRepository) {
     super();
   }
 
@@ -54,11 +52,21 @@ export class CustomerCreditNoteService extends BaseService {
 
   async postCustomerCreditNote(context: CustomerCreditNoteContext, customerCreditNoteId: string) {
     const result = await this.repository.postCustomerCreditNote(context, customerCreditNoteId);
-    await this.postingService.create(context, {
-      sourceModule: "CUSTOMER_CREDIT_NOTE",
-      documentId: result.id,
-      postingDate: result.creditNoteDate.toISOString().slice(0, 10),
-      reference: result.creditNoteNumber
+    await businessEventPublisher.publish(context, {
+      eventName: businessEvents.customerCreditNoteApproved,
+      eventType: businessEvents.customerCreditNoteApproved,
+      sourceModule: "sales",
+      sourceEntity: "ar.CustomerCreditNotes",
+      sourceEntityId: result.id,
+      payload: {
+        documentId: result.id,
+        sourceDocumentType: "CUSTOMER_CREDIT_NOTE",
+        creditNoteNumber: result.creditNoteNumber,
+        customerId: result.customerId,
+        postingDate: result.creditNoteDate.toISOString().slice(0, 10),
+        reference: result.creditNoteNumber,
+        totalAmount: result.amount
+      }
     });
 
     await this.recordPostSideEffects(context, result);

@@ -1,5 +1,5 @@
 import { BaseSqlRepository } from "../../../repositories/BaseSqlRepository.js";
-import type { SalesInvoiceContextInput } from "./SalesInvoiceRepository.js";
+import type { PostingContextInput } from "../application/AccountingPostingEngine.js";
 
 export type SalesAccountingSource =
   | "SALES_INVOICE"
@@ -52,7 +52,7 @@ type EntryRow = {
 
 export class SalesAccountingRepository extends BaseSqlRepository {
   async getStatus(
-    context: SalesInvoiceContextInput,
+    context: PostingContextInput,
     sourceDocumentType: SalesAccountingSource,
     documentId: string
   ): Promise<SalesAccountingStatusResult> {

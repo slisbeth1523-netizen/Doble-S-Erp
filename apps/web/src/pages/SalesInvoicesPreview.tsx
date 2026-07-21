@@ -452,13 +452,15 @@ export function SalesInvoicesPreview() {
       <Card>
         <h2>Contabilidad</h2>
         <Table
-          columns={["Estado Contable", "Numero de Asiento", "Fecha", "Usuario"]}
+          columns={["Estado Contable", "Numero de Asiento", "Fecha", "Usuario", "Moneda", "Tasa"]}
           rows={[
             [
               accountingStatusLabels[accounting?.accountingStatus ?? "NOT_POSTED"],
               accounting?.journalEntry?.entryNumber ?? "-",
               accounting?.journalEntry?.entryDate ? String(accounting.journalEntry.entryDate).slice(0, 10) : "-",
-              accounting?.journalEntry?.createdBy ?? "-"
+              accounting?.journalEntry?.createdBy ?? "-",
+              selectedInvoice?.currencyCode ?? "-",
+              formatNumber(selectedInvoice?.exchangeRate ?? 0)
             ]
           ]}
         />

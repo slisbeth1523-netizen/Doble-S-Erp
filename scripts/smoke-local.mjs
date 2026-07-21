@@ -1328,7 +1328,7 @@ async function postSalesInvoice(salesInvoiceId, payload, session) {
 }
 
 async function getSalesInvoiceAccounting(salesInvoiceId, session) {
-  const body = await expectOk(`/sales/invoices/${salesInvoiceId}/accounting`, {
+  const body = await expectOk(`/accounting/sales/${salesInvoiceId}/journal`, {
     headers: authHeaders(session)
   });
 
@@ -1336,30 +1336,30 @@ async function getSalesInvoiceAccounting(salesInvoiceId, session) {
 }
 
 async function previewSalesInvoiceAccounting(salesInvoiceId, session) {
-  const body = await expectOk(`/sales/invoices/${salesInvoiceId}/accounting/preview`, {
+  const body = await expectOk("/accounting/sales/preview", {
     method: "POST",
     headers: authHeaders(session),
-    body: JSON.stringify({})
+    body: JSON.stringify({ sourceDocumentType: "SALES_INVOICE", documentId: salesInvoiceId })
   });
 
   return body.data;
 }
 
 async function reverseSalesInvoiceAccounting(salesInvoiceId, session) {
-  const body = await expectOk(`/sales/invoices/${salesInvoiceId}/accounting/reverse`, {
+  const body = await expectOk("/accounting/sales/reverse", {
     method: "POST",
     headers: authHeaders(session),
-    body: JSON.stringify({})
+    body: JSON.stringify({ sourceDocumentType: "SALES_INVOICE", documentId: salesInvoiceId })
   });
 
   return body.data;
 }
 
 async function repostSalesInvoiceAccounting(salesInvoiceId, session) {
-  const body = await expectOk(`/sales/invoices/${salesInvoiceId}/accounting/repost`, {
+  const body = await expectOk("/accounting/sales/repost", {
     method: "POST",
     headers: authHeaders(session),
-    body: JSON.stringify({})
+    body: JSON.stringify({ sourceDocumentType: "SALES_INVOICE", documentId: salesInvoiceId })
   });
 
   return body.data;
@@ -1509,20 +1509,20 @@ async function postCustomerCreditNote(customerCreditNoteId, session) {
 }
 
 async function postCustomerCreditNoteAccounting(customerCreditNoteId, session) {
-  const body = await expectOk(`/sales/customer-credit-notes/${customerCreditNoteId}/accounting/post`, {
+  const body = await expectOk("/accounting/sales/post", {
     method: "POST",
     headers: authHeaders(session),
-    body: JSON.stringify({})
+    body: JSON.stringify({ sourceDocumentType: "CUSTOMER_CREDIT_NOTE", documentId: customerCreditNoteId })
   });
 
   return body.data;
 }
 
 async function postCustomerDebitNoteAccounting(accountsReceivableDocumentId, session) {
-  const body = await expectOk(`/sales/customer-debit-notes/${accountsReceivableDocumentId}/accounting/post`, {
+  const body = await expectOk("/accounting/sales/post", {
     method: "POST",
     headers: authHeaders(session),
-    body: JSON.stringify({})
+    body: JSON.stringify({ sourceDocumentType: "CUSTOMER_DEBIT_NOTE", documentId: accountsReceivableDocumentId })
   });
 
   return body.data;
@@ -5693,6 +5693,29 @@ async function validateCustomerCreditNoteFlow(session) {
   }
 }
 
+async function countBusinessEvents(session, eventName, sourceEntityId) {
+  if (!session.user.companyId) {
+    fail("Cannot count business events without company context.");
+  }
+  const pool = await sql.connect(getSqlConfig());
+  const result = await pool
+    .request()
+    .input("TenantId", sql.UniqueIdentifier, session.user.tenantId)
+    .input("CompanyId", sql.UniqueIdentifier, session.user.companyId)
+    .input("EventName", sql.NVarChar(120), eventName)
+    .input("SourceEntityId", sql.UniqueIdentifier, sourceEntityId)
+    .query(`
+      SELECT COUNT(1) AS EventCount
+      FROM events.DomainEvents
+      WHERE TenantId = @TenantId
+        AND CompanyId = @CompanyId
+        AND EventName = @EventName
+        AND SourceEntityId = @SourceEntityId;
+    `);
+
+  return Number(result.recordset[0]?.EventCount ?? 0);
+}
+
 function assertAmount(actual, expected, message) {
   if (Math.abs(Number(actual ?? 0) - expected) > 0.01) {
     fail(`${message}. Expected ${expected}, got ${actual}.`);
@@ -6703,19 +6726,16 @@ async function validateSalesInvoiceFlow(session) {
   }
 
   smokeStep("sales invoice automatic accounting");
-  if (
-    !postedPartialInvoice.accounting ||
-    postedPartialInvoice.accounting.accountingStatus !== "POSTED" ||
-    !postedPartialInvoice.accounting.journalEntry?.entryNumber
-  ) {
-    fail("Posting sales invoice did not create an automatic accounting entry.");
-  }
   const invoiceAccounting = await getSalesInvoiceAccounting(partialInvoice.id, session);
   if (
     invoiceAccounting.accountingStatus !== "POSTED" ||
-    invoiceAccounting.journalEntry?.journalEntryId !== postedPartialInvoice.accounting.journalEntry.journalEntryId
+    !invoiceAccounting.journalEntry?.entryNumber
   ) {
-    fail("Sales invoice accounting status did not expose the automatic journal entry.");
+    fail("SalesInvoiceApproved business event did not create the automatic journal entry.");
+  }
+  const salesInvoiceApprovedEvents = await countBusinessEvents(session, "SalesInvoiceApproved", partialInvoice.id);
+  if (salesInvoiceApprovedEvents !== 1) {
+    fail("Sales invoice post did not persist exactly one SalesInvoiceApproved business event.");
   }
   const invoiceAccountingPreview = await previewSalesInvoiceAccounting(partialInvoice.id, session);
   if (
@@ -6737,10 +6757,13 @@ async function validateSalesInvoiceFlow(session) {
   const arCountAfterRetry = await countSalesInvoiceAccountsReceivableDocuments(session, partialInvoice.id);
   if (
     retriedPartialInvoice.accountsReceivableDocumentId !== postedPartialInvoice.accountsReceivableDocumentId ||
-    arCountAfterRetry !== 1 ||
-    retriedPartialInvoice.accounting?.journalEntry?.journalEntryId !== postedPartialInvoice.accounting.journalEntry.journalEntryId
+    arCountAfterRetry !== 1
   ) {
     fail("Retrying sales invoice post duplicated accounts receivable or accounting effects.");
+  }
+  const retryInvoiceAccounting = await getSalesInvoiceAccounting(partialInvoice.id, session);
+  if (retryInvoiceAccounting.journalEntry?.journalEntryId !== invoiceAccounting.journalEntry.journalEntryId) {
+    fail("Retrying sales invoice post duplicated the automatic accounting entry.");
   }
 
   smokeStep("sales invoice accounting reverse and repost");
@@ -6754,7 +6777,7 @@ async function validateSalesInvoiceFlow(session) {
   const repostedInvoiceAccounting = await repostSalesInvoiceAccounting(partialInvoice.id, session);
   if (
     !["POSTED", "REPOSTED"].includes(repostedInvoiceAccounting.accounting.accountingStatus) ||
-    repostedInvoiceAccounting.journalEntry.journalEntryId === postedPartialInvoice.accounting.journalEntry.journalEntryId
+    repostedInvoiceAccounting.journalEntry.journalEntryId === invoiceAccounting.journalEntry.journalEntryId
   ) {
     fail("Sales invoice accounting repost did not create a new accounting entry after reversal.");
   }

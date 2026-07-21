@@ -11,6 +11,7 @@ import { accountingAccountService } from "../../application/AccountingAccountSer
 import { accountingPeriodService } from "../../application/AccountingPeriodService.js";
 import { accountingPostingService } from "../../application/AccountingPostingService.js";
 import { postingRuleService } from "../../application/PostingRuleService.js";
+import { salesAccountingService } from "../../application/SalesAccountingService.js";
 import { balanceSheetService } from "../../application/BalanceSheetService.js";
 import { cashFlowService } from "../../application/CashFlowService.js";
 import { generalLedgerService } from "../../application/GeneralLedgerService.js";
@@ -56,6 +57,13 @@ import {
 } from "../../validators/journal-entry.validators.js";
 import { incomeStatementQuerySchema } from "../../validators/income-statement.validators.js";
 import { trialBalanceQuerySchema } from "../../validators/trial-balance.validators.js";
+import {
+  accountingSalesJournalParamsSchema,
+  accountingSalesJournalQuerySchema,
+  accountingSalesPayloadSchema,
+  type AccountingSalesPayload,
+  type AccountingSalesJournalQuery
+} from "../../validators/accounting-sales.validators.js";
 
 export const accountingRouter = Router();
 
@@ -125,6 +133,76 @@ accountingRouter.post(
     const result = await accountingPostingService.reverse(accountingContext(request), request.body);
 
     sendSuccess(response, result, result.alreadyExists ? 200 : 201);
+  })
+);
+
+function salesAccountingDocument(payload: AccountingSalesPayload) {
+  return {
+    sourceDocumentType: payload.sourceDocumentType,
+    documentId: payload.documentId
+  };
+}
+
+accountingRouter.post(
+  "/sales/preview",
+  validateRequest({ body: accountingSalesPayloadSchema }),
+  requirePermission("sales", "sales.accounting.preview"),
+  asyncHandler(async (request, response) => {
+    const payload = request.body as AccountingSalesPayload;
+    const result = await salesAccountingService.previewSalesDocument(accountingContext(request), salesAccountingDocument(payload), payload);
+
+    sendSuccess(response, result);
+  })
+);
+
+accountingRouter.post(
+  "/sales/post",
+  validateRequest({ body: accountingSalesPayloadSchema }),
+  requirePermission("sales", "sales.accounting.post"),
+  asyncHandler(async (request, response) => {
+    const payload = request.body as AccountingSalesPayload;
+    const result = await salesAccountingService.postSalesDocument(accountingContext(request), salesAccountingDocument(payload), payload);
+
+    sendSuccess(response, result, result.journalEntry.alreadyExists ? 200 : 201);
+  })
+);
+
+accountingRouter.post(
+  "/sales/reverse",
+  validateRequest({ body: accountingSalesPayloadSchema }),
+  requirePermission("sales", "sales.accounting.reverse"),
+  asyncHandler(async (request, response) => {
+    const payload = request.body as AccountingSalesPayload;
+    const result = await salesAccountingService.reverseSalesDocument(accountingContext(request), salesAccountingDocument(payload), payload);
+
+    sendSuccess(response, result, result.journalEntry.alreadyExists ? 200 : 201);
+  })
+);
+
+accountingRouter.post(
+  "/sales/repost",
+  validateRequest({ body: accountingSalesPayloadSchema }),
+  requirePermission("sales", "sales.accounting.repost"),
+  asyncHandler(async (request, response) => {
+    const payload = request.body as AccountingSalesPayload;
+    const result = await salesAccountingService.repostSalesDocument(accountingContext(request), salesAccountingDocument(payload), payload);
+
+    sendSuccess(response, result, result.journalEntry.alreadyExists ? 200 : 201);
+  })
+);
+
+accountingRouter.get(
+  "/sales/:id/journal",
+  validateRequest({ params: accountingSalesJournalParamsSchema, query: accountingSalesJournalQuerySchema }),
+  requirePermission("sales", "sales.accounting.read"),
+  asyncHandler(async (request, response) => {
+    const query = request.query as unknown as AccountingSalesJournalQuery;
+    const result = await salesAccountingService.getSalesDocumentAccounting(accountingContext(request), {
+      sourceDocumentType: query.sourceDocumentType,
+      documentId: request.params.id!
+    });
+
+    sendSuccess(response, result);
   })
 );
 

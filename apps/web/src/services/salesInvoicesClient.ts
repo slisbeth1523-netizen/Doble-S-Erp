@@ -192,23 +192,35 @@ export function postSalesInvoice(invoiceId: string, idempotencyKey: string) {
 }
 
 export function getSalesInvoiceAccounting(invoiceId: string) {
-  return requestApi<SalesAccountingStatus>(`/sales/invoices/${invoiceId}/accounting`);
+  return requestApi<SalesAccountingStatus>(`/accounting/sales/${invoiceId}/journal`);
 }
 
 export function previewSalesInvoiceAccounting(invoiceId: string) {
-  return requestApi<SalesAccountingPreview>(`/sales/invoices/${invoiceId}/accounting/preview`, { method: "POST", body: {} });
+  return requestApi<SalesAccountingPreview>("/accounting/sales/preview", {
+    method: "POST",
+    body: { sourceDocumentType: "SALES_INVOICE", documentId: invoiceId }
+  });
 }
 
 export function postSalesInvoiceAccounting(invoiceId: string) {
-  return requestApi<SalesAccountingActionResult>(`/sales/invoices/${invoiceId}/accounting/post`, { method: "POST", body: {} });
+  return requestApi<SalesAccountingActionResult>("/accounting/sales/post", {
+    method: "POST",
+    body: { sourceDocumentType: "SALES_INVOICE", documentId: invoiceId }
+  });
 }
 
 export function reverseSalesInvoiceAccounting(invoiceId: string) {
-  return requestApi<SalesAccountingActionResult>(`/sales/invoices/${invoiceId}/accounting/reverse`, { method: "POST", body: {} });
+  return requestApi<SalesAccountingActionResult>("/accounting/sales/reverse", {
+    method: "POST",
+    body: { sourceDocumentType: "SALES_INVOICE", documentId: invoiceId }
+  });
 }
 
 export function repostSalesInvoiceAccounting(invoiceId: string) {
-  return requestApi<SalesAccountingActionResult>(`/sales/invoices/${invoiceId}/accounting/repost`, { method: "POST", body: {} });
+  return requestApi<SalesAccountingActionResult>("/accounting/sales/repost", {
+    method: "POST",
+    body: { sourceDocumentType: "SALES_INVOICE", documentId: invoiceId }
+  });
 }
 
 export function orderLabel(order: SalesOrder) {
