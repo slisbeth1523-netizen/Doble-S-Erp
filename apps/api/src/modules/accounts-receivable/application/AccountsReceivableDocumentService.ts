@@ -1,4 +1,5 @@
 import { domainEventPublisher } from "../../events/application/DomainEventPublisher.js";
+import { accountingPostingService } from "../../accounting/application/AccountingPostingService.js";
 import { BaseService } from "../../../services/BaseService.js";
 import { auditEvent } from "../../../utils/audit.js";
 import { logger } from "../../../utils/logger.js";
@@ -19,7 +20,10 @@ export type AccountsReceivableContext = AccountsReceivableContextInput & {
 };
 
 export class AccountsReceivableDocumentService extends BaseService {
-  constructor(private readonly repository = accountsReceivableDocumentRepository) {
+  constructor(
+    private readonly repository = accountsReceivableDocumentRepository,
+    private readonly postingService = accountingPostingService
+  ) {
     super();
   }
 
@@ -29,6 +33,14 @@ export class AccountsReceivableDocumentService extends BaseService {
       ...payload
     };
     const result = await this.repository.createDocument(input);
+    if (result.sourceType === "CUSTOMER_DEBIT_NOTE") {
+      await this.postingService.create(context, {
+        sourceModule: "CUSTOMER_DEBIT_NOTE",
+        documentId: result.id,
+        postingDate: result.documentDate.toISOString().slice(0, 10),
+        reference: result.documentNumber
+      });
+    }
 
     await this.recordCreateSideEffects(context, result);
 

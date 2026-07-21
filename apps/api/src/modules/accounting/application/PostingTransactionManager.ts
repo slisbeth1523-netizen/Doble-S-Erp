@@ -26,7 +26,14 @@ export class PostingTransactionManager {
     await transaction.begin();
 
     try {
-      const existing = await this.findExistingPosting(transaction, context, preview.sourceModule, preview.sourceDocumentType, preview.documentId);
+      const existing = await this.findExistingPosting(
+        transaction,
+        context,
+        preview.sourceModule,
+        preview.sourceDocumentType,
+        preview.documentId,
+        true
+      );
       if (existing) {
         await transaction.commit();
         return { ...(await this.getEntry(context, existing)), alreadyExists: true };
@@ -239,19 +246,36 @@ export class PostingTransactionManager {
     context: PostingContextInput,
     sourceModule: string,
     sourceDocumentType: string,
-    documentId: string
+    documentId: string,
+    ignoreReversed = false
   ) {
+    const reversalFilter = ignoreReversed
+      ? `
+          AND NOT EXISTS (
+            SELECT 1
+            FROM accounting.JournalEntries reversal WITH (UPDLOCK, HOLDLOCK)
+            WHERE reversal.TenantId = entry.TenantId
+              AND reversal.CompanyId = entry.CompanyId
+              AND reversal.SourceModule = entry.SourceModule
+              AND reversal.SourceDocumentType = @ReversalSourceDocumentType
+              AND reversal.SourceDocumentId = entry.SourceDocumentId
+              AND reversal.IsActive = 1
+              AND reversal.CreatedAt >= entry.CreatedAt
+          )
+        `
+      : "";
     const rows = await this.queryInTransaction<IdRow>(
       transaction,
       `
         SELECT TOP (1) JournalEntryId AS id
-        FROM accounting.JournalEntries WITH (UPDLOCK, HOLDLOCK)
+        FROM accounting.JournalEntries entry WITH (UPDLOCK, HOLDLOCK)
         WHERE TenantId = @TenantId
           AND CompanyId = @CompanyId
           AND SourceModule = @SourceModule
           AND SourceDocumentType = @SourceDocumentType
           AND SourceDocumentId = @SourceDocumentId
           AND IsActive = 1
+          ${reversalFilter}
         ORDER BY CreatedAt DESC;
       `,
       [
@@ -259,7 +283,8 @@ export class PostingTransactionManager {
         { name: "CompanyId", value: context.companyId },
         { name: "SourceModule", value: sourceModule },
         { name: "SourceDocumentType", value: sourceDocumentType },
-        { name: "SourceDocumentId", value: documentId }
+        { name: "SourceDocumentId", value: documentId },
+        { name: "ReversalSourceDocumentType", value: `${sourceDocumentType}_REVERSAL` }
       ]
     );
 

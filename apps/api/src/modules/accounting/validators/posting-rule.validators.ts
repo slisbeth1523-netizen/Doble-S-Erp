@@ -7,7 +7,14 @@ const uniqueIdentifierSchema = z
 const nullableUniqueIdentifierSchema = uniqueIdentifierSchema.nullable().optional();
 
 const sourceModuleSchema = z.enum(["ACCOUNTS_RECEIVABLE", "ACCOUNTS_PAYABLE", "SALES", "PURCHASING"]);
-const sourceDocumentTypeSchema = z.enum(["AR_DOCUMENT", "AP_DOCUMENT", "SALES_INVOICE", "SUPPLIER_INVOICE"]);
+const sourceDocumentTypeSchema = z.enum([
+  "AR_DOCUMENT",
+  "AP_DOCUMENT",
+  "SALES_INVOICE",
+  "SUPPLIER_INVOICE",
+  "CUSTOMER_CREDIT_NOTE",
+  "CUSTOMER_DEBIT_NOTE"
+]);
 const directionSchema = z.enum(["RECEIVABLE", "PAYABLE"]);
 
 export const postingRuleIdParamsSchema = z.object({

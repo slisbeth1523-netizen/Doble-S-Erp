@@ -51,6 +51,57 @@ export type SalesInvoice = {
   lineCount: number;
   totalQuantity: number;
   lines: SalesInvoiceLine[];
+  accounting?: SalesAccountingStatus;
+  accountingJournalEntry?: SalesAccountingActionResult["journalEntry"];
+};
+
+export type SalesAccountingEntry = {
+  journalEntryId: string;
+  entryNumber: string;
+  entryDate: string;
+  status: string;
+  sourceModule: string;
+  sourceDocumentType: string;
+  sourceDocumentId: string;
+  totalDebit: number;
+  totalCredit: number;
+  createdAt: string;
+  createdBy?: string;
+};
+
+export type SalesAccountingStatus = {
+  accountingStatus: "NOT_POSTED" | "POSTED" | "REVERSED" | "REPOSTED";
+  sourceModule: "SALES";
+  sourceDocumentType: "SALES_INVOICE" | "CUSTOMER_CREDIT_NOTE" | "CUSTOMER_DEBIT_NOTE";
+  documentId: string;
+  journalEntry?: SalesAccountingEntry;
+  reversalEntry?: SalesAccountingEntry;
+  latestEntry?: SalesAccountingEntry;
+};
+
+export type SalesAccountingPreviewLine = {
+  lineNumber: number;
+  side: "DEBIT" | "CREDIT";
+  accountCode: string;
+  accountName: string;
+  debitAmount: number;
+  creditAmount: number;
+};
+
+export type SalesAccountingPreview = {
+  documentNumber: string;
+  postingDate: string;
+  description: string;
+  reference: string;
+  totalDebit: number;
+  totalCredit: number;
+  difference: number;
+  lines: SalesAccountingPreviewLine[];
+};
+
+export type SalesAccountingActionResult = {
+  accounting: SalesAccountingStatus;
+  journalEntry: SalesAccountingEntry & { alreadyExists?: boolean; lines?: unknown[] };
 };
 
 export type SalesInvoicePendingLine = {
@@ -138,6 +189,26 @@ export function postSalesInvoice(invoiceId: string, idempotencyKey: string) {
     method: "POST",
     body: { idempotencyKey }
   });
+}
+
+export function getSalesInvoiceAccounting(invoiceId: string) {
+  return requestApi<SalesAccountingStatus>(`/sales/invoices/${invoiceId}/accounting`);
+}
+
+export function previewSalesInvoiceAccounting(invoiceId: string) {
+  return requestApi<SalesAccountingPreview>(`/sales/invoices/${invoiceId}/accounting/preview`, { method: "POST", body: {} });
+}
+
+export function postSalesInvoiceAccounting(invoiceId: string) {
+  return requestApi<SalesAccountingActionResult>(`/sales/invoices/${invoiceId}/accounting/post`, { method: "POST", body: {} });
+}
+
+export function reverseSalesInvoiceAccounting(invoiceId: string) {
+  return requestApi<SalesAccountingActionResult>(`/sales/invoices/${invoiceId}/accounting/reverse`, { method: "POST", body: {} });
+}
+
+export function repostSalesInvoiceAccounting(invoiceId: string) {
+  return requestApi<SalesAccountingActionResult>(`/sales/invoices/${invoiceId}/accounting/repost`, { method: "POST", body: {} });
 }
 
 export function orderLabel(order: SalesOrder) {

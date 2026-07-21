@@ -1,4 +1,5 @@
 import { domainEventPublisher } from "../../events/application/DomainEventPublisher.js";
+import { accountingPostingService } from "../../accounting/application/AccountingPostingService.js";
 import { BaseService } from "../../../services/BaseService.js";
 import { auditEvent } from "../../../utils/audit.js";
 import { logger } from "../../../utils/logger.js";
@@ -19,7 +20,10 @@ export type CustomerCreditNoteContext = CustomerCreditNoteContextInput & {
 };
 
 export class CustomerCreditNoteService extends BaseService {
-  constructor(private readonly repository = customerCreditNoteRepository) {
+  constructor(
+    private readonly repository = customerCreditNoteRepository,
+    private readonly postingService = accountingPostingService
+  ) {
     super();
   }
 
@@ -50,6 +54,12 @@ export class CustomerCreditNoteService extends BaseService {
 
   async postCustomerCreditNote(context: CustomerCreditNoteContext, customerCreditNoteId: string) {
     const result = await this.repository.postCustomerCreditNote(context, customerCreditNoteId);
+    await this.postingService.create(context, {
+      sourceModule: "CUSTOMER_CREDIT_NOTE",
+      documentId: result.id,
+      postingDate: result.creditNoteDate.toISOString().slice(0, 10),
+      reference: result.creditNoteNumber
+    });
 
     await this.recordPostSideEffects(context, result);
 

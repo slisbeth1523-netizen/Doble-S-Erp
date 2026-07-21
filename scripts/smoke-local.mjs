@@ -1327,6 +1327,44 @@ async function postSalesInvoice(salesInvoiceId, payload, session) {
   return body.data;
 }
 
+async function getSalesInvoiceAccounting(salesInvoiceId, session) {
+  const body = await expectOk(`/sales/invoices/${salesInvoiceId}/accounting`, {
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
+async function previewSalesInvoiceAccounting(salesInvoiceId, session) {
+  const body = await expectOk(`/sales/invoices/${salesInvoiceId}/accounting/preview`, {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify({})
+  });
+
+  return body.data;
+}
+
+async function reverseSalesInvoiceAccounting(salesInvoiceId, session) {
+  const body = await expectOk(`/sales/invoices/${salesInvoiceId}/accounting/reverse`, {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify({})
+  });
+
+  return body.data;
+}
+
+async function repostSalesInvoiceAccounting(salesInvoiceId, session) {
+  const body = await expectOk(`/sales/invoices/${salesInvoiceId}/accounting/repost`, {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify({})
+  });
+
+  return body.data;
+}
+
 async function getSalesOrderInvoiceLines(salesOrderId, session) {
   const body = await expectOk(`/sales/orders/${salesOrderId}/invoice-pending-lines`, {
     headers: authHeaders(session)
@@ -1465,6 +1503,26 @@ async function postCustomerCreditNote(customerCreditNoteId, session) {
   const body = await expectOk(`/accounts-receivable/customer-credit-notes/${customerCreditNoteId}/post`, {
     method: "POST",
     headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
+async function postCustomerCreditNoteAccounting(customerCreditNoteId, session) {
+  const body = await expectOk(`/sales/customer-credit-notes/${customerCreditNoteId}/accounting/post`, {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify({})
+  });
+
+  return body.data;
+}
+
+async function postCustomerDebitNoteAccounting(accountsReceivableDocumentId, session) {
+  const body = await expectOk(`/sales/customer-debit-notes/${accountsReceivableDocumentId}/accounting/post`, {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify({})
   });
 
   return body.data;
@@ -5577,6 +5635,16 @@ async function validateCustomerCreditNoteFlow(session) {
   if (postedNote.status !== "POSTED") {
     fail("Customer credit note was not posted.");
   }
+  smokeStep("customer credit note automatic sales accounting");
+  const creditNoteAccounting = await postCustomerCreditNoteAccounting(note.id, session);
+  if (
+    creditNoteAccounting.accounting.accountingStatus !== "POSTED" ||
+    creditNoteAccounting.journalEntry.sourceDocumentType !== "CUSTOMER_CREDIT_NOTE" ||
+    creditNoteAccounting.journalEntry.totalDebit !== 30 ||
+    creditNoteAccounting.journalEntry.totalCredit !== 30
+  ) {
+    fail("Customer credit note did not create an idempotent sales accounting entry.");
+  }
 
   const postedSnapshot = await getAccountsReceivableDocumentSnapshot(document.id, session);
   if (
@@ -5596,6 +5664,32 @@ async function validateCustomerCreditNoteFlow(session) {
     retrySnapshot.remainingAmount !== 70
   ) {
     fail("Retrying customer credit note post duplicated AR balance effects.");
+  }
+
+  smokeStep("customer debit note automatic sales accounting");
+  const debitNote = await createAccountsReceivableDocument(
+    {
+      customerId: customer.customerId,
+      sourceType: "CUSTOMER_DEBIT_NOTE",
+      documentDate,
+      dueDate,
+      currencyCode: "DOP",
+      exchangeRate: 1,
+      totalAmount: 25,
+      reference: `ND-CXC-${smokeRun}`,
+      notes: "Nota de debito cliente smoke local"
+    },
+    session
+  );
+  const debitNoteAccounting = await postCustomerDebitNoteAccounting(debitNote.id, session);
+  if (
+    debitNote.sourceType !== "CUSTOMER_DEBIT_NOTE" ||
+    debitNoteAccounting.accounting.accountingStatus !== "POSTED" ||
+    debitNoteAccounting.journalEntry.sourceDocumentType !== "CUSTOMER_DEBIT_NOTE" ||
+    debitNoteAccounting.journalEntry.totalDebit !== 25 ||
+    debitNoteAccounting.journalEntry.totalCredit !== 25
+  ) {
+    fail("Customer debit note did not create an idempotent sales accounting entry.");
   }
 }
 
@@ -6608,6 +6702,31 @@ async function validateSalesInvoiceFlow(session) {
     fail("Posting sales invoice did not create exactly one accounts receivable document.");
   }
 
+  smokeStep("sales invoice automatic accounting");
+  if (
+    !postedPartialInvoice.accounting ||
+    postedPartialInvoice.accounting.accountingStatus !== "POSTED" ||
+    !postedPartialInvoice.accounting.journalEntry?.entryNumber
+  ) {
+    fail("Posting sales invoice did not create an automatic accounting entry.");
+  }
+  const invoiceAccounting = await getSalesInvoiceAccounting(partialInvoice.id, session);
+  if (
+    invoiceAccounting.accountingStatus !== "POSTED" ||
+    invoiceAccounting.journalEntry?.journalEntryId !== postedPartialInvoice.accounting.journalEntry.journalEntryId
+  ) {
+    fail("Sales invoice accounting status did not expose the automatic journal entry.");
+  }
+  const invoiceAccountingPreview = await previewSalesInvoiceAccounting(partialInvoice.id, session);
+  if (
+    invoiceAccountingPreview.sourceDocumentType !== "SALES_INVOICE" ||
+    invoiceAccountingPreview.totalDebit !== postedPartialInvoice.totalAmount ||
+    invoiceAccountingPreview.totalCredit !== postedPartialInvoice.totalAmount ||
+    invoiceAccountingPreview.difference !== 0
+  ) {
+    fail("Sales invoice accounting preview did not use the posting engine correctly.");
+  }
+
   const pendingAfterPartial = await getSalesOrderInvoiceLines(invoiceOrder.order.id, session);
   const partialPendingLine = pendingAfterPartial.find((line) => line.salesOrderLineId === invoiceOrder.line.id);
   if (!partialPendingLine || Number(partialPendingLine.previouslyInvoicedQuantity ?? 0) !== 2 || Number(partialPendingLine.pendingInvoiceQuantity ?? 0) !== 3) {
@@ -6618,9 +6737,26 @@ async function validateSalesInvoiceFlow(session) {
   const arCountAfterRetry = await countSalesInvoiceAccountsReceivableDocuments(session, partialInvoice.id);
   if (
     retriedPartialInvoice.accountsReceivableDocumentId !== postedPartialInvoice.accountsReceivableDocumentId ||
-    arCountAfterRetry !== 1
+    arCountAfterRetry !== 1 ||
+    retriedPartialInvoice.accounting?.journalEntry?.journalEntryId !== postedPartialInvoice.accounting.journalEntry.journalEntryId
   ) {
-    fail("Retrying sales invoice post duplicated accounts receivable document.");
+    fail("Retrying sales invoice post duplicated accounts receivable or accounting effects.");
+  }
+
+  smokeStep("sales invoice accounting reverse and repost");
+  const reversedInvoiceAccounting = await reverseSalesInvoiceAccounting(partialInvoice.id, session);
+  if (
+    reversedInvoiceAccounting.accounting.accountingStatus !== "REVERSED" ||
+    reversedInvoiceAccounting.journalEntry.sourceDocumentType !== "SALES_INVOICE_REVERSAL"
+  ) {
+    fail("Sales invoice accounting reverse did not create an inverse entry.");
+  }
+  const repostedInvoiceAccounting = await repostSalesInvoiceAccounting(partialInvoice.id, session);
+  if (
+    !["POSTED", "REPOSTED"].includes(repostedInvoiceAccounting.accounting.accountingStatus) ||
+    repostedInvoiceAccounting.journalEntry.journalEntryId === postedPartialInvoice.accounting.journalEntry.journalEntryId
+  ) {
+    fail("Sales invoice accounting repost did not create a new accounting entry after reversal.");
   }
 
   await expectSalesInvoiceFailure(

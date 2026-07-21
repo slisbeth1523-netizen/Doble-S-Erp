@@ -106,6 +106,11 @@ VALUES
   ('sales', 'sales.invoices.create', 'Local create sales invoices'),
   ('sales', 'sales.invoices.update', 'Local update sales invoices'),
   ('sales', 'sales.invoices.post', 'Local post sales invoices'),
+  ('sales', 'sales.accounting.read', 'Local read sales accounting integration'),
+  ('sales', 'sales.accounting.preview', 'Local preview sales accounting integration'),
+  ('sales', 'sales.accounting.post', 'Local post sales accounting integration'),
+  ('sales', 'sales.accounting.reverse', 'Local reverse sales accounting integration'),
+  ('sales', 'sales.accounting.repost', 'Local repost sales accounting integration'),
   ('sales', 'sales.returns.read', 'Local read sales returns'),
   ('sales', 'sales.returns.create', 'Local create sales returns'),
   ('sales', 'sales.returns.update', 'Local update sales returns'),
@@ -270,6 +275,8 @@ DECLARE @PostingRuleArId UNIQUEIDENTIFIER = 'accc0000-0000-0000-0000-00000000000
 DECLARE @PostingRuleApId UNIQUEIDENTIFIER = 'accc0000-0000-0000-0000-000000000002';
 DECLARE @PostingRuleSalesInvoiceId UNIQUEIDENTIFIER = 'accc0000-0000-0000-0000-000000000003';
 DECLARE @PostingRuleSupplierInvoiceId UNIQUEIDENTIFIER = 'accc0000-0000-0000-0000-000000000004';
+DECLARE @PostingRuleCustomerCreditNoteId UNIQUEIDENTIFIER = 'accc0000-0000-0000-0000-000000000005';
+DECLARE @PostingRuleCustomerDebitNoteId UNIQUEIDENTIFIER = 'accc0000-0000-0000-0000-000000000006';
 DECLARE @WarehouseId UNIQUEIDENTIFIER = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee';
 DECLARE @TransitWarehouseId UNIQUEIDENTIFIER = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeef';
 DECLARE @InventoryMovementId UNIQUEIDENTIFIER = 'abababab-abab-abab-abab-abababababab';
@@ -424,6 +431,35 @@ BEGIN
   );
 END;
 
+IF OBJECT_ID('accounting.AccountingPeriods', 'U') IS NOT NULL
+BEGIN
+  DECLARE @CurrentFiscalYear INT = YEAR(SYSUTCDATETIME());
+  DECLARE @CurrentPeriodNumber INT = MONTH(SYSUTCDATETIME());
+  DECLARE @CurrentPeriodStart DATE = DATEFROMPARTS(@CurrentFiscalYear, @CurrentPeriodNumber, 1);
+  DECLARE @CurrentPeriodEnd DATE = EOMONTH(@CurrentPeriodStart);
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM accounting.AccountingPeriods
+    WHERE TenantId = @TenantId
+      AND CompanyId = @CompanyId
+      AND FiscalYear = @CurrentFiscalYear
+      AND PeriodNumber = @CurrentPeriodNumber
+      AND IsAdjustmentPeriod = 0
+  )
+  BEGIN
+    INSERT INTO accounting.AccountingPeriods (
+      AccountingPeriodId, TenantId, CompanyId, FiscalYear, PeriodNumber, Name,
+      StartDate, EndDate, Status, IsAdjustmentPeriod, OpenedAt, OpenedBy, IsActive, CreatedBy
+    )
+    VALUES (
+      NEWID(), @TenantId, @CompanyId, @CurrentFiscalYear, @CurrentPeriodNumber,
+      CONCAT('Periodo local ', @CurrentFiscalYear, '-', RIGHT(CONCAT('0', @CurrentPeriodNumber), 2)),
+      @CurrentPeriodStart, @CurrentPeriodEnd, 'OPEN', 0, SYSUTCDATETIME(), @UserId, 1, @UserId
+    );
+  END;
+END;
+
 IF OBJECT_ID('accounting.Accounts', 'U') IS NOT NULL
 BEGIN
   DECLARE @SeedAccounts TABLE (
@@ -514,7 +550,11 @@ BEGIN
     (@PostingRuleSalesInvoiceId, 'SALES-INVOICE-DEFAULT', 'Factura de venta', 'SALES', 'SALES_INVOICE', 'RECEIVABLE',
       @AccountReceivableId, @AccountSalesRevenueId, @AccountTaxPayableId, 100),
     (@PostingRuleSupplierInvoiceId, 'SUPPLIER-INVOICE-DEFAULT', 'Factura proveedor', 'PURCHASING', 'SUPPLIER_INVOICE', 'PAYABLE',
-      @AccountExpensePostingId, @AccountPayableId, @AccountTaxReceivableId, 100);
+      @AccountExpensePostingId, @AccountPayableId, @AccountTaxReceivableId, 100),
+    (@PostingRuleCustomerCreditNoteId, 'CUSTOMER-CREDIT-NOTE-DEFAULT', 'Nota de credito cliente', 'SALES', 'CUSTOMER_CREDIT_NOTE', 'PAYABLE',
+      @AccountSalesRevenueId, @AccountReceivableId, @AccountTaxPayableId, 100),
+    (@PostingRuleCustomerDebitNoteId, 'CUSTOMER-DEBIT-NOTE-DEFAULT', 'Nota de debito cliente', 'SALES', 'CUSTOMER_DEBIT_NOTE', 'RECEIVABLE',
+      @AccountReceivableId, @AccountSalesRevenueId, @AccountTaxPayableId, 100);
 
   INSERT INTO accounting.PostingRules (
     PostingRuleId, TenantId, CompanyId, RuleCode, Name, SourceModule, SourceDocumentType,

@@ -1,4 +1,5 @@
 import { domainEventPublisher } from "../../events/application/DomainEventPublisher.js";
+import { salesAccountingService } from "./SalesAccountingService.js";
 import { BaseService } from "../../../services/BaseService.js";
 import { auditEvent } from "../../../utils/audit.js";
 import { logger } from "../../../utils/logger.js";
@@ -27,7 +28,10 @@ const auditActions: Record<SideEffectAction, string> = {
 };
 
 export class SalesInvoiceService extends BaseService {
-  constructor(private readonly repository = salesInvoiceRepository) {
+  constructor(
+    private readonly repository = salesInvoiceRepository,
+    private readonly accounting = salesAccountingService
+  ) {
     super();
   }
 
@@ -73,11 +77,19 @@ export class SalesInvoiceService extends BaseService {
 
   async postInvoice(context: SalesInvoiceContext, invoiceId: string, payload: SalesInvoicePostPayload) {
     const result = await this.repository.postInvoice(context, invoiceId, payload);
+    const accountingResult = await this.accounting.postInvoiceAccounting(context, result.id, {
+      postingDate: result.invoiceDate.toISOString().slice(0, 10),
+      reference: result.invoiceNumber
+    });
     if (!result.idempotencyReplayed) {
       await this.recordSideEffects(context, result, "posted");
       await this.recordAccountsReceivableCreatedEvent(context, result);
     }
-    return result;
+    return {
+      ...result,
+      accounting: accountingResult.accounting,
+      accountingJournalEntry: accountingResult.journalEntry
+    };
   }
 
   private async recordSideEffects(context: SalesInvoiceContext, result: SalesInvoiceResult, action: SideEffectAction) {

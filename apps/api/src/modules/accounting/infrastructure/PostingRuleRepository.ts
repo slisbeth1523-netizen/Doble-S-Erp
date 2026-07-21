@@ -358,6 +358,78 @@ export class PostingRuleRepository extends BaseSqlRepository {
       });
     }
 
+    if (normalized === "CUSTOMER_CREDIT_NOTE") {
+      const rows = await this.query<DocumentRow>(
+        `
+          SELECT
+            note.CustomerCreditNoteId AS DocumentId,
+            note.CreditNoteNumber AS DocumentNumber,
+            note.CreditNoteDate AS DocumentDate,
+            CONCAT(N'Nota de credito cliente ', note.CreditNoteNumber) AS Description,
+            CASE WHEN COUNT(DISTINCT document.CurrencyCode) = 1 THEN MAX(document.CurrencyCode) ELSE NULL END AS CurrencyCode,
+            CASE WHEN COUNT(DISTINCT document.ExchangeRate) = 1 THEN MAX(document.ExchangeRate) ELSE NULL END AS ExchangeRate,
+            note.Amount AS TotalAmount,
+            CAST(0 AS decimal(18, 4)) AS TaxAmount,
+            CAST(NULL AS uniqueidentifier) AS CostCenterId,
+            note.Status,
+            note.IsActive
+          FROM ar.CustomerCreditNotes note
+          LEFT JOIN ar.CustomerCreditNoteApplications application
+            ON application.CustomerCreditNoteId = note.CustomerCreditNoteId
+           AND application.TenantId = note.TenantId
+           AND application.CompanyId = note.CompanyId
+          LEFT JOIN ar.AccountsReceivableDocuments document
+            ON document.AccountsReceivableDocumentId = application.AccountsReceivableDocumentId
+           AND document.TenantId = note.TenantId
+           AND document.CompanyId = note.CompanyId
+          WHERE note.TenantId = @TenantId
+            AND note.CompanyId = @CompanyId
+            AND note.CustomerCreditNoteId = @DocumentId
+          GROUP BY
+            note.CustomerCreditNoteId,
+            note.CreditNoteNumber,
+            note.CreditNoteDate,
+            note.Amount,
+            note.Status,
+            note.IsActive;
+        `,
+        this.documentParameters(context, documentId)
+      );
+
+      return this.mapDocument(rows[0], "SALES", "CUSTOMER_CREDIT_NOTE", "PAYABLE", documentId, {
+        validStatuses: ["POSTED"]
+      });
+    }
+
+    if (normalized === "CUSTOMER_DEBIT_NOTE") {
+      const rows = await this.query<DocumentRow>(
+        `
+          SELECT
+            document.AccountsReceivableDocumentId AS DocumentId,
+            document.DocumentNumber,
+            document.DocumentDate,
+            CONCAT(N'Nota de debito cliente ', document.DocumentNumber) AS Description,
+            document.CurrencyCode,
+            document.ExchangeRate,
+            document.TotalAmount,
+            CAST(0 AS decimal(18, 4)) AS TaxAmount,
+            CAST(NULL AS uniqueidentifier) AS CostCenterId,
+            document.Status,
+            document.IsActive
+          FROM ar.AccountsReceivableDocuments document
+          WHERE document.TenantId = @TenantId
+            AND document.CompanyId = @CompanyId
+            AND document.AccountsReceivableDocumentId = @DocumentId
+            AND document.SourceType = N'CUSTOMER_DEBIT_NOTE';
+        `,
+        this.documentParameters(context, documentId)
+      );
+
+      return this.mapDocument(rows[0], "SALES", "CUSTOMER_DEBIT_NOTE", "RECEIVABLE", documentId, {
+        validStatuses: ["OPEN", "PARTIALLY_PAID", "PAID"]
+      });
+    }
+
     if (normalized === "SUPPLIER_INVOICE") {
       const currency = await this.supplierInvoiceCurrencyProjection();
       const rows = await this.query<DocumentRow>(
@@ -530,12 +602,14 @@ export class PostingRuleRepository extends BaseSqlRepository {
   }
 
   private normalizeSource(sourceModule: string) {
-    // Foundation scope: AR/AP documents, sales invoices and supplier invoices only.
-    // Cash, banks, receipts, payments, notes, inventory and transfers are intentionally deferred.
+    // Sales accounting extends the foundation scope through configurable posting rules.
+    // Cash, banks, receipts, payments, inventory and transfers are intentionally deferred.
     const source = sourceModule.toUpperCase();
     if (["AR", "ACCOUNTS_RECEIVABLE", "AR_DOCUMENT", "ACCOUNTS_RECEIVABLE_DOCUMENT"].includes(source)) return "AR_DOCUMENT";
     if (["AP", "ACCOUNTS_PAYABLE", "AP_DOCUMENT", "ACCOUNTS_PAYABLE_DOCUMENT"].includes(source)) return "AP_DOCUMENT";
     if (["SALES", "SALES_INVOICE"].includes(source)) return "SALES_INVOICE";
+    if (["CUSTOMER_CREDIT_NOTE", "SALES_CREDIT_NOTE", "SALES_CUSTOMER_CREDIT_NOTE"].includes(source)) return "CUSTOMER_CREDIT_NOTE";
+    if (["CUSTOMER_DEBIT_NOTE", "SALES_DEBIT_NOTE", "SALES_CUSTOMER_DEBIT_NOTE"].includes(source)) return "CUSTOMER_DEBIT_NOTE";
     if (["PURCHASING", "SUPPLIER_INVOICE"].includes(source)) return "SUPPLIER_INVOICE";
     return source;
   }

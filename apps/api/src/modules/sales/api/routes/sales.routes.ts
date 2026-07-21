@@ -9,11 +9,16 @@ import { sendSuccess } from "../../../../utils/responseBuilder.js";
 import { validateRequest } from "../../../../utils/validateRequest.js";
 import { inventoryReservationService } from "../../../inventory/application/InventoryReservationService.js";
 import { inventoryReservationCreateSchema } from "../../../inventory/validators/inventory-reservation.validators.js";
+import { salesAccountingService } from "../../application/SalesAccountingService.js";
 import { salesInvoiceService } from "../../application/SalesInvoiceService.js";
 import { salesOrderService } from "../../application/SalesOrderService.js";
 import { salesQuotationService } from "../../application/SalesQuotationService.js";
 import { salesReturnService } from "../../application/SalesReturnService.js";
 import { salesShipmentService } from "../../application/SalesShipmentService.js";
+import {
+  salesAccountingDocumentParamsSchema,
+  salesAccountingPayloadSchema
+} from "../../validators/sales-accounting.validators.js";
 import {
   salesInvoiceCreateSchema,
   salesInvoiceIdParamsSchema,
@@ -287,6 +292,149 @@ salesRouter.post(
   requirePermission("sales", "sales.invoices.post"),
   asyncHandler(async (request, response) => {
     const result = await salesInvoiceService.postInvoice(salesContext(request), request.params.id!, request.body);
+
+    sendSuccess(response, result);
+  })
+);
+
+salesRouter.get(
+  "/invoices/:id/accounting",
+  validateRequest({ params: salesAccountingDocumentParamsSchema }),
+  requirePermission("sales", "sales.accounting.read"),
+  asyncHandler(async (request, response) => {
+    const result = await salesAccountingService.getInvoiceAccounting(salesContext(request), request.params.id!);
+
+    sendSuccess(response, result);
+  })
+);
+
+salesRouter.post(
+  "/invoices/:id/accounting/preview",
+  validateRequest({ params: salesAccountingDocumentParamsSchema, body: salesAccountingPayloadSchema }),
+  requirePermission("sales", "sales.accounting.preview"),
+  asyncHandler(async (request, response) => {
+    const result = await salesAccountingService.previewInvoice(salesContext(request), request.params.id!, request.body);
+
+    sendSuccess(response, result);
+  })
+);
+
+salesRouter.post(
+  "/invoices/:id/accounting/post",
+  validateRequest({ params: salesAccountingDocumentParamsSchema, body: salesAccountingPayloadSchema }),
+  requirePermission("sales", "sales.accounting.post"),
+  asyncHandler(async (request, response) => {
+    const result = await salesAccountingService.postInvoiceAccounting(salesContext(request), request.params.id!, request.body);
+
+    sendSuccess(response, result);
+  })
+);
+
+salesRouter.post(
+  "/invoices/:id/accounting/reverse",
+  validateRequest({ params: salesAccountingDocumentParamsSchema, body: salesAccountingPayloadSchema }),
+  requirePermission("sales", "sales.accounting.reverse"),
+  asyncHandler(async (request, response) => {
+    const result = await salesAccountingService.reverseInvoiceAccounting(salesContext(request), request.params.id!, request.body);
+
+    sendSuccess(response, result);
+  })
+);
+
+salesRouter.post(
+  "/invoices/:id/accounting/repost",
+  validateRequest({ params: salesAccountingDocumentParamsSchema, body: salesAccountingPayloadSchema }),
+  requirePermission("sales", "sales.accounting.repost"),
+  asyncHandler(async (request, response) => {
+    const result = await salesAccountingService.repostInvoiceAccounting(salesContext(request), request.params.id!, request.body);
+
+    sendSuccess(response, result);
+  })
+);
+
+salesRouter.post(
+  "/customer-credit-notes/:id/accounting/preview",
+  validateRequest({ params: salesAccountingDocumentParamsSchema, body: salesAccountingPayloadSchema }),
+  requirePermission("sales", "sales.accounting.preview"),
+  asyncHandler(async (request, response) => {
+    const result = await salesAccountingService.previewCustomerCreditNote(salesContext(request), request.params.id!, request.body);
+
+    sendSuccess(response, result);
+  })
+);
+
+salesRouter.post(
+  "/customer-credit-notes/:id/accounting/post",
+  validateRequest({ params: salesAccountingDocumentParamsSchema, body: salesAccountingPayloadSchema }),
+  requirePermission("sales", "sales.accounting.post"),
+  asyncHandler(async (request, response) => {
+    const result = await salesAccountingService.postCustomerCreditNote(salesContext(request), request.params.id!, request.body);
+
+    sendSuccess(response, result);
+  })
+);
+
+salesRouter.post(
+  "/customer-credit-notes/:id/accounting/reverse",
+  validateRequest({ params: salesAccountingDocumentParamsSchema, body: salesAccountingPayloadSchema }),
+  requirePermission("sales", "sales.accounting.reverse"),
+  asyncHandler(async (request, response) => {
+    const result = await salesAccountingService.reverseCustomerCreditNote(salesContext(request), request.params.id!, request.body);
+
+    sendSuccess(response, result);
+  })
+);
+
+salesRouter.post(
+  "/customer-credit-notes/:id/accounting/repost",
+  validateRequest({ params: salesAccountingDocumentParamsSchema, body: salesAccountingPayloadSchema }),
+  requirePermission("sales", "sales.accounting.repost"),
+  asyncHandler(async (request, response) => {
+    const result = await salesAccountingService.repostCustomerCreditNote(salesContext(request), request.params.id!, request.body);
+
+    sendSuccess(response, result);
+  })
+);
+
+salesRouter.post(
+  "/customer-debit-notes/:id/accounting/preview",
+  validateRequest({ params: salesAccountingDocumentParamsSchema, body: salesAccountingPayloadSchema }),
+  requirePermission("sales", "sales.accounting.preview"),
+  asyncHandler(async (request, response) => {
+    const result = await salesAccountingService.previewCustomerDebitNote(salesContext(request), request.params.id!, request.body);
+
+    sendSuccess(response, result);
+  })
+);
+
+salesRouter.post(
+  "/customer-debit-notes/:id/accounting/post",
+  validateRequest({ params: salesAccountingDocumentParamsSchema, body: salesAccountingPayloadSchema }),
+  requirePermission("sales", "sales.accounting.post"),
+  asyncHandler(async (request, response) => {
+    const result = await salesAccountingService.postCustomerDebitNote(salesContext(request), request.params.id!, request.body);
+
+    sendSuccess(response, result);
+  })
+);
+
+salesRouter.post(
+  "/customer-debit-notes/:id/accounting/reverse",
+  validateRequest({ params: salesAccountingDocumentParamsSchema, body: salesAccountingPayloadSchema }),
+  requirePermission("sales", "sales.accounting.reverse"),
+  asyncHandler(async (request, response) => {
+    const result = await salesAccountingService.reverseCustomerDebitNote(salesContext(request), request.params.id!, request.body);
+
+    sendSuccess(response, result);
+  })
+);
+
+salesRouter.post(
+  "/customer-debit-notes/:id/accounting/repost",
+  validateRequest({ params: salesAccountingDocumentParamsSchema, body: salesAccountingPayloadSchema }),
+  requirePermission("sales", "sales.accounting.repost"),
+  asyncHandler(async (request, response) => {
+    const result = await salesAccountingService.repostCustomerDebitNote(salesContext(request), request.params.id!, request.body);
 
     sendSuccess(response, result);
   })

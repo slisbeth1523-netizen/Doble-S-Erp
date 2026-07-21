@@ -2,11 +2,13 @@ import { ConflictError, ValidationError } from "../../../errors/index.js";
 import type { PostingRulePayload } from "../validators/posting-rule.validators.js";
 
 const validPairs = new Set([
-  "ACCOUNTS_RECEIVABLE:AR_DOCUMENT:RECEIVABLE",
-  "ACCOUNTS_PAYABLE:AP_DOCUMENT:PAYABLE",
-  "SALES:SALES_INVOICE:RECEIVABLE",
-  "PURCHASING:SUPPLIER_INVOICE:PAYABLE"
-]);
+      "ACCOUNTS_RECEIVABLE:AR_DOCUMENT:RECEIVABLE",
+      "ACCOUNTS_PAYABLE:AP_DOCUMENT:PAYABLE",
+      "SALES:SALES_INVOICE:RECEIVABLE",
+      "SALES:CUSTOMER_CREDIT_NOTE:PAYABLE",
+      "SALES:CUSTOMER_DEBIT_NOTE:RECEIVABLE",
+      "PURCHASING:SUPPLIER_INVOICE:PAYABLE"
+    ]);
 
 export class PostingRuleValidator {
   validatePayload(payload: PostingRulePayload) {

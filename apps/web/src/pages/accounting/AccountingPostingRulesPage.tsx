@@ -52,6 +52,8 @@ const sourceOptions = [
   { module: "ACCOUNTS_RECEIVABLE", type: "AR_DOCUMENT", direction: "RECEIVABLE", label: "Documento CxC" },
   { module: "ACCOUNTS_PAYABLE", type: "AP_DOCUMENT", direction: "PAYABLE", label: "Documento CxP" },
   { module: "SALES", type: "SALES_INVOICE", direction: "RECEIVABLE", label: "Factura de venta" },
+  { module: "SALES", type: "CUSTOMER_CREDIT_NOTE", direction: "PAYABLE", label: "Nota de credito cliente" },
+  { module: "SALES", type: "CUSTOMER_DEBIT_NOTE", direction: "RECEIVABLE", label: "Nota de debito cliente" },
   { module: "PURCHASING", type: "SUPPLIER_INVOICE", direction: "PAYABLE", label: "Factura proveedor" }
 ] as const;
 
