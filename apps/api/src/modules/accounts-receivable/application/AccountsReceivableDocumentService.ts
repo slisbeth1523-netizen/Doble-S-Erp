@@ -1,4 +1,6 @@
 import { domainEventPublisher } from "../../events/application/DomainEventPublisher.js";
+import { businessEventPublisher } from "../../events/application/BusinessEventPublisher.js";
+import { businessEvents } from "../../events/application/BusinessEvent.js";
 import { BaseService } from "../../../services/BaseService.js";
 import { auditEvent } from "../../../utils/audit.js";
 import { logger } from "../../../utils/logger.js";
@@ -29,6 +31,26 @@ export class AccountsReceivableDocumentService extends BaseService {
       ...payload
     };
     const result = await this.repository.createDocument(input);
+    if (result.sourceType === "CUSTOMER_DEBIT_NOTE") {
+      await businessEventPublisher.publish(context, {
+        eventName: businessEvents.customerDebitNoteApproved,
+        eventType: businessEvents.customerDebitNoteApproved,
+        sourceModule: "sales",
+        sourceEntity: "ar.AccountsReceivableDocuments",
+        sourceEntityId: result.id,
+        payload: {
+          documentId: result.id,
+          sourceDocumentType: "CUSTOMER_DEBIT_NOTE",
+          documentNumber: result.documentNumber,
+          customerId: result.customerId,
+          postingDate: result.documentDate.toISOString().slice(0, 10),
+          reference: result.documentNumber,
+          currencyCode: result.currencyCode,
+          exchangeRate: result.exchangeRate,
+          totalAmount: result.totalAmount
+        }
+      });
+    }
 
     await this.recordCreateSideEffects(context, result);
 

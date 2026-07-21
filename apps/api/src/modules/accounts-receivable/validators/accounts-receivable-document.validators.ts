@@ -41,7 +41,7 @@ export const customerBalanceListQuerySchema = z.object({
 export const accountsReceivableDocumentCreateSchema = z
   .object({
     customerId: uniqueIdentifierSchema,
-    sourceType: z.enum(["MANUAL", "OPENING_BALANCE"]),
+    sourceType: z.enum(["MANUAL", "CUSTOMER_DEBIT_NOTE", "OPENING_BALANCE"]),
     documentDate: dateInputSchema.optional(),
     dueDate: dateInputSchema,
     currencyCode: z.string().trim().length(3).transform((value) => value.toUpperCase()),

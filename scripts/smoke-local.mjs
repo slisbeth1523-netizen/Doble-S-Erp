@@ -483,6 +483,74 @@ async function getCashFlowSummary(query, session, extraHeaders = {}) {
   return body.data;
 }
 
+async function previewAccountingPosting(payload, session, extraHeaders = {}) {
+  const body = await expectOk("/accounting/postings/preview", {
+    method: "POST",
+    headers: { ...authHeaders(session), ...extraHeaders },
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function createAccountingPosting(payload, session, extraHeaders = {}) {
+  const body = await expectOk("/accounting/postings/create", {
+    method: "POST",
+    headers: { ...authHeaders(session), ...extraHeaders },
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function listPostingRules(query, session) {
+  const params = new URLSearchParams(query);
+  const body = await expectOk(`/accounting/posting-rules?${params.toString()}`, {
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
+async function createPostingRule(payload, session) {
+  const body = await expectOk("/accounting/posting-rules", {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function updatePostingRule(postingRuleId, payload, session) {
+  const body = await expectOk(`/accounting/posting-rules/${postingRuleId}`, {
+    method: "PATCH",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function deletePostingRule(postingRuleId, session) {
+  const body = await expectOk(`/accounting/posting-rules/${postingRuleId}`, {
+    method: "DELETE",
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
+async function reverseAccountingPosting(payload, session, extraHeaders = {}) {
+  const body = await expectOk("/accounting/postings/reverse", {
+    method: "POST",
+    headers: { ...authHeaders(session), ...extraHeaders },
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
 async function ensureOtherCompanyCostCenter(session, code) {
   const companyId = "99999999-9999-9999-9999-999999999998";
   const costCenterId = randomUUID();
@@ -1259,6 +1327,44 @@ async function postSalesInvoice(salesInvoiceId, payload, session) {
   return body.data;
 }
 
+async function getSalesInvoiceAccounting(salesInvoiceId, session) {
+  const body = await expectOk(`/accounting/sales/${salesInvoiceId}/journal`, {
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
+async function previewSalesInvoiceAccounting(salesInvoiceId, session) {
+  const body = await expectOk("/accounting/sales/preview", {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify({ sourceDocumentType: "SALES_INVOICE", documentId: salesInvoiceId })
+  });
+
+  return body.data;
+}
+
+async function reverseSalesInvoiceAccounting(salesInvoiceId, session) {
+  const body = await expectOk("/accounting/sales/reverse", {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify({ sourceDocumentType: "SALES_INVOICE", documentId: salesInvoiceId })
+  });
+
+  return body.data;
+}
+
+async function repostSalesInvoiceAccounting(salesInvoiceId, session) {
+  const body = await expectOk("/accounting/sales/repost", {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify({ sourceDocumentType: "SALES_INVOICE", documentId: salesInvoiceId })
+  });
+
+  return body.data;
+}
+
 async function getSalesOrderInvoiceLines(salesOrderId, session) {
   const body = await expectOk(`/sales/orders/${salesOrderId}/invoice-pending-lines`, {
     headers: authHeaders(session)
@@ -1397,6 +1503,26 @@ async function postCustomerCreditNote(customerCreditNoteId, session) {
   const body = await expectOk(`/accounts-receivable/customer-credit-notes/${customerCreditNoteId}/post`, {
     method: "POST",
     headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
+async function postCustomerCreditNoteAccounting(customerCreditNoteId, session) {
+  const body = await expectOk("/accounting/sales/post", {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify({ sourceDocumentType: "CUSTOMER_CREDIT_NOTE", documentId: customerCreditNoteId })
+  });
+
+  return body.data;
+}
+
+async function postCustomerDebitNoteAccounting(accountsReceivableDocumentId, session) {
+  const body = await expectOk("/accounting/sales/post", {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify({ sourceDocumentType: "CUSTOMER_DEBIT_NOTE", documentId: accountsReceivableDocumentId })
   });
 
   return body.data;
@@ -5509,6 +5635,16 @@ async function validateCustomerCreditNoteFlow(session) {
   if (postedNote.status !== "POSTED") {
     fail("Customer credit note was not posted.");
   }
+  smokeStep("customer credit note automatic sales accounting");
+  const creditNoteAccounting = await postCustomerCreditNoteAccounting(note.id, session);
+  if (
+    creditNoteAccounting.accounting.accountingStatus !== "POSTED" ||
+    creditNoteAccounting.journalEntry.sourceDocumentType !== "CUSTOMER_CREDIT_NOTE" ||
+    creditNoteAccounting.journalEntry.totalDebit !== 30 ||
+    creditNoteAccounting.journalEntry.totalCredit !== 30
+  ) {
+    fail("Customer credit note did not create an idempotent sales accounting entry.");
+  }
 
   const postedSnapshot = await getAccountsReceivableDocumentSnapshot(document.id, session);
   if (
@@ -5529,6 +5665,55 @@ async function validateCustomerCreditNoteFlow(session) {
   ) {
     fail("Retrying customer credit note post duplicated AR balance effects.");
   }
+
+  smokeStep("customer debit note automatic sales accounting");
+  const debitNote = await createAccountsReceivableDocument(
+    {
+      customerId: customer.customerId,
+      sourceType: "CUSTOMER_DEBIT_NOTE",
+      documentDate,
+      dueDate,
+      currencyCode: "DOP",
+      exchangeRate: 1,
+      totalAmount: 25,
+      reference: `ND-CXC-${smokeRun}`,
+      notes: "Nota de debito cliente smoke local"
+    },
+    session
+  );
+  const debitNoteAccounting = await postCustomerDebitNoteAccounting(debitNote.id, session);
+  if (
+    debitNote.sourceType !== "CUSTOMER_DEBIT_NOTE" ||
+    debitNoteAccounting.accounting.accountingStatus !== "POSTED" ||
+    debitNoteAccounting.journalEntry.sourceDocumentType !== "CUSTOMER_DEBIT_NOTE" ||
+    debitNoteAccounting.journalEntry.totalDebit !== 25 ||
+    debitNoteAccounting.journalEntry.totalCredit !== 25
+  ) {
+    fail("Customer debit note did not create an idempotent sales accounting entry.");
+  }
+}
+
+async function countBusinessEvents(session, eventName, sourceEntityId) {
+  if (!session.user.companyId) {
+    fail("Cannot count business events without company context.");
+  }
+  const pool = await sql.connect(getSqlConfig());
+  const result = await pool
+    .request()
+    .input("TenantId", sql.UniqueIdentifier, session.user.tenantId)
+    .input("CompanyId", sql.UniqueIdentifier, session.user.companyId)
+    .input("EventName", sql.NVarChar(120), eventName)
+    .input("SourceEntityId", sql.UniqueIdentifier, sourceEntityId)
+    .query(`
+      SELECT COUNT(1) AS EventCount
+      FROM events.DomainEvents
+      WHERE TenantId = @TenantId
+        AND CompanyId = @CompanyId
+        AND EventName = @EventName
+        AND SourceEntityId = @SourceEntityId;
+    `);
+
+  return Number(result.recordset[0]?.EventCount ?? 0);
 }
 
 function assertAmount(actual, expected, message) {
@@ -6540,6 +6725,28 @@ async function validateSalesInvoiceFlow(session) {
     fail("Posting sales invoice did not create exactly one accounts receivable document.");
   }
 
+  smokeStep("sales invoice automatic accounting");
+  const invoiceAccounting = await getSalesInvoiceAccounting(partialInvoice.id, session);
+  if (
+    invoiceAccounting.accountingStatus !== "POSTED" ||
+    !invoiceAccounting.journalEntry?.entryNumber
+  ) {
+    fail("SalesInvoiceApproved business event did not create the automatic journal entry.");
+  }
+  const salesInvoiceApprovedEvents = await countBusinessEvents(session, "SalesInvoiceApproved", partialInvoice.id);
+  if (salesInvoiceApprovedEvents !== 1) {
+    fail("Sales invoice post did not persist exactly one SalesInvoiceApproved business event.");
+  }
+  const invoiceAccountingPreview = await previewSalesInvoiceAccounting(partialInvoice.id, session);
+  if (
+    invoiceAccountingPreview.sourceDocumentType !== "SALES_INVOICE" ||
+    invoiceAccountingPreview.totalDebit !== postedPartialInvoice.totalAmount ||
+    invoiceAccountingPreview.totalCredit !== postedPartialInvoice.totalAmount ||
+    invoiceAccountingPreview.difference !== 0
+  ) {
+    fail("Sales invoice accounting preview did not use the posting engine correctly.");
+  }
+
   const pendingAfterPartial = await getSalesOrderInvoiceLines(invoiceOrder.order.id, session);
   const partialPendingLine = pendingAfterPartial.find((line) => line.salesOrderLineId === invoiceOrder.line.id);
   if (!partialPendingLine || Number(partialPendingLine.previouslyInvoicedQuantity ?? 0) !== 2 || Number(partialPendingLine.pendingInvoiceQuantity ?? 0) !== 3) {
@@ -6552,7 +6759,27 @@ async function validateSalesInvoiceFlow(session) {
     retriedPartialInvoice.accountsReceivableDocumentId !== postedPartialInvoice.accountsReceivableDocumentId ||
     arCountAfterRetry !== 1
   ) {
-    fail("Retrying sales invoice post duplicated accounts receivable document.");
+    fail("Retrying sales invoice post duplicated accounts receivable or accounting effects.");
+  }
+  const retryInvoiceAccounting = await getSalesInvoiceAccounting(partialInvoice.id, session);
+  if (retryInvoiceAccounting.journalEntry?.journalEntryId !== invoiceAccounting.journalEntry.journalEntryId) {
+    fail("Retrying sales invoice post duplicated the automatic accounting entry.");
+  }
+
+  smokeStep("sales invoice accounting reverse and repost");
+  const reversedInvoiceAccounting = await reverseSalesInvoiceAccounting(partialInvoice.id, session);
+  if (
+    reversedInvoiceAccounting.accounting.accountingStatus !== "REVERSED" ||
+    reversedInvoiceAccounting.journalEntry.sourceDocumentType !== "SALES_INVOICE_REVERSAL"
+  ) {
+    fail("Sales invoice accounting reverse did not create an inverse entry.");
+  }
+  const repostedInvoiceAccounting = await repostSalesInvoiceAccounting(partialInvoice.id, session);
+  if (
+    !["POSTED", "REPOSTED"].includes(repostedInvoiceAccounting.accounting.accountingStatus) ||
+    repostedInvoiceAccounting.journalEntry.journalEntryId === invoiceAccounting.journalEntry.journalEntryId
+  ) {
+    fail("Sales invoice accounting repost did not create a new accounting entry after reversal.");
   }
 
   await expectSalesInvoiceFailure(
@@ -8622,6 +8849,195 @@ async function validateCashFlowStatementFlow(session) {
   }
 }
 
+async function validateAutomaticPostingEngineFlow(session) {
+  const customer = await getDemoCustomerReferences(session);
+  const documentDate = "2025-02-21";
+  const dueDate = "2025-02-28";
+  const document = await createAccountsReceivableDocument(
+    {
+      customerId: customer.customerId,
+      sourceType: "MANUAL",
+      documentDate,
+      dueDate,
+      currencyCode: "DOP",
+      exchangeRate: 1,
+      totalAmount: 275,
+      reference: `POST-ENG-${smokeRun}`,
+      notes: "Documento CxC para smoke de motor contable"
+    },
+    session
+  );
+  const payload = {
+    sourceModule: "ACCOUNTS_RECEIVABLE",
+    documentId: document.id,
+    postingDate: documentDate,
+    reference: `POST-ENG-${smokeRun}`
+  };
+
+  smokeStep("automatic posting engine preview resolves balanced AR posting");
+  const preview = await previewAccountingPosting(payload, session);
+  if (
+    preview.sourceModule !== "ACCOUNTS_RECEIVABLE" ||
+    preview.sourceDocumentType !== "AR_DOCUMENT" ||
+    preview.documentId.toLowerCase() !== document.id.toLowerCase() ||
+    preview.totalDebit !== 275 ||
+    preview.totalCredit !== 275 ||
+    preview.difference !== 0 ||
+    preview.lines.length < 2 ||
+    !preview.lines.some((line) => line.side === "DEBIT" && line.debitAmount === 275 && line.accountId) ||
+    !preview.lines.some((line) => line.side === "CREDIT" && line.creditAmount === 275 && line.accountId)
+  ) {
+    fail("Automatic posting preview did not resolve balanced configured AR debit and credit lines.");
+  }
+
+  const cancelledDocument = await createAccountsReceivableDocument(
+    {
+      customerId: customer.customerId,
+      sourceType: "MANUAL",
+      documentDate,
+      dueDate,
+      currencyCode: "DOP",
+      exchangeRate: 1,
+      totalAmount: 125,
+      reference: `POST-CANCEL-${smokeRun}`,
+      notes: "Documento CxC cancelado para smoke de motor contable"
+    },
+    session
+  );
+  const pool = await sql.connect(getSqlConfig());
+  const cancelledUpdate = await pool
+    .request()
+    .input("TenantId", sql.UniqueIdentifier, session.user.tenantId)
+    .input("CompanyId", sql.UniqueIdentifier, session.user.companyId)
+    .input("DocumentId", sql.UniqueIdentifier, cancelledDocument.id)
+    .query(`
+      UPDATE ar.AccountsReceivableDocuments
+         SET Status = N'CANCELLED',
+             UpdatedAt = SYSUTCDATETIME()
+       WHERE TenantId = @TenantId
+         AND CompanyId = @CompanyId
+         AND AccountsReceivableDocumentId = @DocumentId;
+    `);
+  if (cancelledUpdate.rowsAffected[0] !== 1) {
+    fail("Smoke could not mark the source document as cancelled.");
+  }
+  smokeStep("automatic posting engine rejects non-postable document status");
+  const cancelledPreview = await request("/accounting/postings/preview", {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify({
+      sourceModule: "ACCOUNTS_RECEIVABLE",
+      documentId: cancelledDocument.id,
+      postingDate: documentDate,
+      reference: `POST-CANCEL-${smokeRun}`
+    })
+  });
+  if (cancelledPreview.response.ok || cancelledPreview.body?.success !== false) {
+    fail("Automatic posting preview must reject cancelled source documents.");
+  }
+
+  smokeStep("accounting posting rules CRUD and cache invalidation");
+  const currentRules = await listPostingRules({ sourceDocumentType: "AR_DOCUMENT", pageSize: "50" }, session);
+  if (!currentRules.records.some((rule) => rule.sourceDocumentType === "AR_DOCUMENT" && rule.isActive)) {
+    fail("Posting rules endpoint did not return an active AR rule.");
+  }
+  const accounts = await listAccountingAccounts({ pageSize: "200" }, session);
+  const accountIdOf = (account) => account.accountId ?? account.id;
+  const assetAccounts = accounts.records.filter(
+    (account) => account.accountType === "ASSET" && account.allowsPosting && account.isActive && !account.isBlocked
+  );
+  const revenue = accounts.records.find(
+    (account) => account.accountType === "REVENUE" && account.allowsPosting && account.isActive && !account.isBlocked
+  );
+  const liability = accounts.records.find(
+    (account) => account.accountType === "LIABILITY" && account.allowsPosting && account.isActive && !account.isBlocked
+  );
+  const currentDebitId = preview.lines.find((line) => line.side === "DEBIT")?.accountId;
+  const alternateDebit = assetAccounts.find((account) => accountIdOf(account) !== currentDebitId);
+  if (!alternateDebit || !revenue || !liability) {
+    fail("Posting rules smoke requires configured asset, revenue and liability accounts.");
+  }
+  const alternateDebitId = accountIdOf(alternateDebit);
+  const revenueId = accountIdOf(revenue);
+  const liabilityId = accountIdOf(liability);
+  if (!alternateDebitId || !revenueId || !liabilityId) {
+    fail("Posting rules smoke could not resolve account identifiers.");
+  }
+  const rulePayload = {
+    ruleCode: `AR-SMOKE-${smokeRun}`,
+    name: "Regla smoke motor contable",
+    description: "Regla temporal para validar cache e invalidacion",
+    sourceModule: "ACCOUNTS_RECEIVABLE",
+    sourceDocumentType: "AR_DOCUMENT",
+    direction: "RECEIVABLE",
+    debitAccountId: alternateDebitId,
+    creditAccountId: revenueId,
+    taxAccountId: liabilityId,
+    costCenterId: null,
+    appliesTax: true,
+    priority: 1,
+    isDefault: false,
+    isActive: true
+  };
+  const createdRule = await createPostingRule(rulePayload, session);
+  const afterCreatePreview = await previewAccountingPosting(payload, session);
+  if (!afterCreatePreview.lines.some((line) => line.side === "DEBIT" && line.accountId === alternateDebitId)) {
+    fail("Posting rule cache was not invalidated after creating a higher priority rule.");
+  }
+  const updatedRule = await updatePostingRule(
+    createdRule.postingRuleId,
+    { ...rulePayload, name: "Regla smoke motor contable actualizada", priority: 999 },
+    session
+  );
+  if (updatedRule.priority !== 999) {
+    fail("Posting rule update did not persist priority.");
+  }
+  const afterUpdatePreview = await previewAccountingPosting(payload, session);
+  if (afterUpdatePreview.lines.some((line) => line.side === "DEBIT" && line.accountId === alternateDebitId)) {
+    fail("Posting rule cache was not invalidated after lowering rule priority.");
+  }
+  const deletedRule = await deletePostingRule(createdRule.postingRuleId, session);
+  if (deletedRule.isActive) {
+    fail("Posting rule delete did not deactivate the rule.");
+  }
+
+  smokeStep("automatic posting engine create is idempotent per source document");
+  const created = await createAccountingPosting(payload, session);
+  if (
+    created.status !== "DRAFT" ||
+    created.sourceModule !== "ACCOUNTS_RECEIVABLE" ||
+    created.sourceDocumentType !== "AR_DOCUMENT" ||
+    created.sourceDocumentId.toLowerCase() !== document.id.toLowerCase() ||
+    created.totalDebit !== 275 ||
+    created.totalCredit !== 275 ||
+    created.lines.length < 2 ||
+    created.alreadyExists
+  ) {
+    fail("Automatic posting create did not persist the expected DRAFT journal entry.");
+  }
+  const retry = await createAccountingPosting(payload, session);
+  if (!retry.alreadyExists || retry.journalEntryId !== created.journalEntryId) {
+    fail("Automatic posting create retry duplicated or did not return the existing journal entry.");
+  }
+
+  smokeStep("automatic posting engine reverse is idempotent per source document");
+  const reversed = await reverseAccountingPosting(payload, session);
+  if (
+    reversed.status !== "DRAFT" ||
+    reversed.sourceDocumentType !== "AR_DOCUMENT_REVERSAL" ||
+    reversed.sourceDocumentId.toLowerCase() !== document.id.toLowerCase() ||
+    reversed.totalDebit !== created.totalCredit ||
+    reversed.totalCredit !== created.totalDebit ||
+    reversed.alreadyExists
+  ) {
+    fail("Automatic posting reverse did not create the expected reversing journal entry.");
+  }
+  const reverseRetry = await reverseAccountingPosting(payload, session);
+  if (!reverseRetry.alreadyExists || reverseRetry.journalEntryId !== reversed.journalEntryId) {
+    fail("Automatic posting reverse retry duplicated or did not return the existing reversal.");
+  }
+}
+
 async function validateCrud(session) {
   const suffix = smokeRun;
   const customerCode = `QA-CUST-${suffix}`;
@@ -8874,6 +9290,7 @@ async function main() {
   await validateIncomeStatementFlow(session);
   await validateBalanceSheetFlow(session);
   await validateCashFlowStatementFlow(session);
+  await validateAutomaticPostingEngineFlow(session);
   await validateCrud(session);
   console.log("smoke: local runtime validation OK");
 }

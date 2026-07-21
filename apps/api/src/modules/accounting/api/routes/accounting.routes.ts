@@ -9,6 +9,9 @@ import { sendSuccess } from "../../../../utils/responseBuilder.js";
 import { validateRequest } from "../../../../utils/validateRequest.js";
 import { accountingAccountService } from "../../application/AccountingAccountService.js";
 import { accountingPeriodService } from "../../application/AccountingPeriodService.js";
+import { accountingPostingService } from "../../application/AccountingPostingService.js";
+import { postingRuleService } from "../../application/PostingRuleService.js";
+import { salesAccountingService } from "../../application/SalesAccountingService.js";
 import { balanceSheetService } from "../../application/BalanceSheetService.js";
 import { cashFlowService } from "../../application/CashFlowService.js";
 import { generalLedgerService } from "../../application/GeneralLedgerService.js";
@@ -21,6 +24,13 @@ import {
   accountingAccountListQuerySchema,
   accountingAccountPayloadSchema
 } from "../../validators/accounting-account.validators.js";
+import { postingRequestSchema } from "../../validators/posting-engine.validators.js";
+import {
+  postingRuleIdParamsSchema,
+  postingRuleListQuerySchema,
+  postingRulePayloadSchema,
+  type PostingRuleListQuery
+} from "../../validators/posting-rule.validators.js";
 import { balanceSheetQuerySchema } from "../../validators/balance-sheet.validators.js";
 import { cashFlowQuerySchema } from "../../validators/cash-flow.validators.js";
 import {
@@ -47,6 +57,13 @@ import {
 } from "../../validators/journal-entry.validators.js";
 import { incomeStatementQuerySchema } from "../../validators/income-statement.validators.js";
 import { trialBalanceQuerySchema } from "../../validators/trial-balance.validators.js";
+import {
+  accountingSalesJournalParamsSchema,
+  accountingSalesJournalQuerySchema,
+  accountingSalesPayloadSchema,
+  type AccountingSalesPayload,
+  type AccountingSalesJournalQuery
+} from "../../validators/accounting-sales.validators.js";
 
 export const accountingRouter = Router();
 
@@ -81,6 +98,164 @@ accountingRouter.get(
   requirePermission("accounting", "accounting.cash-flow.read"),
   asyncHandler(async (request, response) => {
     const result = await cashFlowService.getSummary(accountingContext(request), request.query);
+
+    sendSuccess(response, result);
+  })
+);
+
+accountingRouter.post(
+  "/postings/preview",
+  validateRequest({ body: postingRequestSchema }),
+  requirePermission("accounting", "accounting.posting-engine.preview"),
+  asyncHandler(async (request, response) => {
+    const result = await accountingPostingService.preview(accountingContext(request), request.body);
+
+    sendSuccess(response, result);
+  })
+);
+
+accountingRouter.post(
+  "/postings/create",
+  validateRequest({ body: postingRequestSchema }),
+  requirePermission("accounting", "accounting.posting-engine.execute"),
+  asyncHandler(async (request, response) => {
+    const result = await accountingPostingService.create(accountingContext(request), request.body);
+
+    sendSuccess(response, result, result.alreadyExists ? 200 : 201);
+  })
+);
+
+accountingRouter.post(
+  "/postings/reverse",
+  validateRequest({ body: postingRequestSchema }),
+  requirePermission("accounting", "accounting.posting-engine.execute"),
+  asyncHandler(async (request, response) => {
+    const result = await accountingPostingService.reverse(accountingContext(request), request.body);
+
+    sendSuccess(response, result, result.alreadyExists ? 200 : 201);
+  })
+);
+
+function salesAccountingDocument(payload: AccountingSalesPayload) {
+  return {
+    sourceDocumentType: payload.sourceDocumentType,
+    documentId: payload.documentId
+  };
+}
+
+accountingRouter.post(
+  "/sales/preview",
+  validateRequest({ body: accountingSalesPayloadSchema }),
+  requirePermission("sales", "sales.accounting.preview"),
+  asyncHandler(async (request, response) => {
+    const payload = request.body as AccountingSalesPayload;
+    const result = await salesAccountingService.previewSalesDocument(accountingContext(request), salesAccountingDocument(payload), payload);
+
+    sendSuccess(response, result);
+  })
+);
+
+accountingRouter.post(
+  "/sales/post",
+  validateRequest({ body: accountingSalesPayloadSchema }),
+  requirePermission("sales", "sales.accounting.post"),
+  asyncHandler(async (request, response) => {
+    const payload = request.body as AccountingSalesPayload;
+    const result = await salesAccountingService.postSalesDocument(accountingContext(request), salesAccountingDocument(payload), payload);
+
+    sendSuccess(response, result, result.journalEntry.alreadyExists ? 200 : 201);
+  })
+);
+
+accountingRouter.post(
+  "/sales/reverse",
+  validateRequest({ body: accountingSalesPayloadSchema }),
+  requirePermission("sales", "sales.accounting.reverse"),
+  asyncHandler(async (request, response) => {
+    const payload = request.body as AccountingSalesPayload;
+    const result = await salesAccountingService.reverseSalesDocument(accountingContext(request), salesAccountingDocument(payload), payload);
+
+    sendSuccess(response, result, result.journalEntry.alreadyExists ? 200 : 201);
+  })
+);
+
+accountingRouter.post(
+  "/sales/repost",
+  validateRequest({ body: accountingSalesPayloadSchema }),
+  requirePermission("sales", "sales.accounting.repost"),
+  asyncHandler(async (request, response) => {
+    const payload = request.body as AccountingSalesPayload;
+    const result = await salesAccountingService.repostSalesDocument(accountingContext(request), salesAccountingDocument(payload), payload);
+
+    sendSuccess(response, result, result.journalEntry.alreadyExists ? 200 : 201);
+  })
+);
+
+accountingRouter.get(
+  "/sales/:id/journal",
+  validateRequest({ params: accountingSalesJournalParamsSchema, query: accountingSalesJournalQuerySchema }),
+  requirePermission("sales", "sales.accounting.read"),
+  asyncHandler(async (request, response) => {
+    const query = request.query as unknown as AccountingSalesJournalQuery;
+    const result = await salesAccountingService.getSalesDocumentAccounting(accountingContext(request), {
+      sourceDocumentType: query.sourceDocumentType,
+      documentId: request.params.id!
+    });
+
+    sendSuccess(response, result);
+  })
+);
+
+accountingRouter.get(
+  "/posting-rules",
+  validateRequest({ query: postingRuleListQuerySchema }),
+  requirePermission("accounting", "accounting.posting-rules.read"),
+  asyncHandler(async (request, response) => {
+    const result = await postingRuleService.listRules(accountingContext(request), request.query as unknown as PostingRuleListQuery);
+
+    sendSuccess(response, result);
+  })
+);
+
+accountingRouter.get(
+  "/posting-rules/:id",
+  validateRequest({ params: postingRuleIdParamsSchema }),
+  requirePermission("accounting", "accounting.posting-rules.read"),
+  asyncHandler(async (request, response) => {
+    const result = await postingRuleService.getRule(accountingContext(request), request.params.id!);
+
+    sendSuccess(response, result);
+  })
+);
+
+accountingRouter.post(
+  "/posting-rules",
+  validateRequest({ body: postingRulePayloadSchema }),
+  requirePermission("accounting", "accounting.posting-rules.create"),
+  asyncHandler(async (request, response) => {
+    const result = await postingRuleService.createRule(accountingContext(request), request.body);
+
+    sendSuccess(response, result, 201);
+  })
+);
+
+accountingRouter.patch(
+  "/posting-rules/:id",
+  validateRequest({ params: postingRuleIdParamsSchema, body: postingRulePayloadSchema }),
+  requirePermission("accounting", "accounting.posting-rules.update"),
+  asyncHandler(async (request, response) => {
+    const result = await postingRuleService.updateRule(accountingContext(request), request.params.id!, request.body);
+
+    sendSuccess(response, result);
+  })
+);
+
+accountingRouter.delete(
+  "/posting-rules/:id",
+  validateRequest({ params: postingRuleIdParamsSchema }),
+  requirePermission("accounting", "accounting.posting-rules.delete"),
+  asyncHandler(async (request, response) => {
+    const result = await postingRuleService.deleteRule(accountingContext(request), request.params.id!);
 
     sendSuccess(response, result);
   })

@@ -4,12 +4,18 @@ import { Alert, Badge, Button, Card, ErrorState, Input, LoadingState, PageHeader
 import {
   addSalesInvoiceLine,
   createSalesInvoice,
+  getSalesInvoiceAccounting,
   getSalesOrderInvoicePendingLines,
   listOrdersForInvoices,
   listSalesInvoices,
   orderLabel,
   postSalesInvoice,
+  previewSalesInvoiceAccounting,
+  repostSalesInvoiceAccounting,
+  reverseSalesInvoiceAccounting,
   type SalesInvoice,
+  type SalesAccountingPreview,
+  type SalesAccountingStatus,
   type SalesInvoicePendingLine
 } from "../services/salesInvoicesClient.js";
 import type { SalesOrder } from "../services/salesOrdersClient.js";
@@ -23,6 +29,13 @@ const invoiceStatusLabels: Record<string, string> = {
   DRAFT: "Borrador",
   POSTED: "Posteada",
   CANCELLED: "Cancelada"
+};
+
+const accountingStatusLabels: Record<string, string> = {
+  NOT_POSTED: "Sin contabilizar",
+  POSTED: "Contabilizada",
+  REVERSED: "Reversada",
+  REPOSTED: "Recontabilizada"
 };
 
 function formatNumber(value: unknown) {
@@ -62,6 +75,8 @@ export function SalesInvoicesPreview() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
+  const [accounting, setAccounting] = useState<SalesAccountingStatus | null>(null);
+  const [accountingPreview, setAccountingPreview] = useState<SalesAccountingPreview | null>(null);
 
   const selectedInvoice = useMemo(
     () => invoices.find((invoice) => invoice.id === selectedInvoiceId),
@@ -81,6 +96,16 @@ export function SalesInvoicesPreview() {
     setPendingLines(lineList);
     setSelectedInvoiceId((current) => current || (invoiceList.records.find((invoice) => invoice.status === "DRAFT")?.id ?? ""));
     setSelectedShipmentLineId(lineList.find((line) => line.pendingInvoiceQuantity > 0)?.salesShipmentLineId ?? "");
+  }
+
+  async function refreshAccounting(invoiceId = selectedInvoiceId) {
+    if (!invoiceId) {
+      setAccounting(null);
+      setAccountingPreview(null);
+      return;
+    }
+    const result = await getSalesInvoiceAccounting(invoiceId);
+    setAccounting(result);
   }
 
   useEffect(() => {
@@ -207,12 +232,78 @@ export function SalesInvoicesPreview() {
         message: `Factura ${result.invoiceNumber} posteada. Documento CxC ${result.accountsReceivableDocumentNumber ?? "-"}.`
       });
       await refresh(selectedOrderId, search);
+      await refreshAccounting(result.id);
     } catch (error: unknown) {
       setFeedback({ tone: "error", message: error instanceof Error ? error.message : "No se pudo postear la factura." });
     } finally {
       setSaving(false);
     }
   }
+
+  async function handleAccountingPreview() {
+    if (!selectedInvoice) return;
+    setSaving(true);
+    setFeedback(null);
+    try {
+      const result = await previewSalesInvoiceAccounting(selectedInvoice.id);
+      setAccountingPreview(result);
+      setFeedback({ tone: "success", message: `Preview contable listo para ${result.documentNumber}.` });
+    } catch (error: unknown) {
+      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "No se pudo generar el preview contable." });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleAccountingReverse() {
+    if (!selectedInvoice) return;
+    setSaving(true);
+    setFeedback(null);
+    try {
+      const result = await reverseSalesInvoiceAccounting(selectedInvoice.id);
+      setAccounting(result.accounting);
+      setFeedback({ tone: "success", message: `Asiento reversado: ${result.journalEntry.entryNumber}.` });
+    } catch (error: unknown) {
+      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "No se pudo reversar el asiento." });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleAccountingRepost() {
+    if (!selectedInvoice) return;
+    setSaving(true);
+    setFeedback(null);
+    try {
+      const result = await repostSalesInvoiceAccounting(selectedInvoice.id);
+      setAccounting(result.accounting);
+      setFeedback({ tone: "success", message: `Factura recontabilizada: ${result.journalEntry.entryNumber}.` });
+    } catch (error: unknown) {
+      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "No se pudo recontabilizar." });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  useEffect(() => {
+    let active = true;
+    if (!selectedInvoiceId) {
+      setAccounting(null);
+      setAccountingPreview(null);
+      return;
+    }
+    getSalesInvoiceAccounting(selectedInvoiceId)
+      .then((result) => {
+        if (active) setAccounting(result);
+      })
+      .catch(() => {
+        if (active) setAccounting(null);
+      });
+    setAccountingPreview(null);
+    return () => {
+      active = false;
+    };
+  }, [selectedInvoiceId]);
 
   if (loading) {
     return <LoadingState label="Cargando facturas..." />;
@@ -356,6 +447,49 @@ export function SalesInvoicesPreview() {
             formatNumber(line.lineTotal)
           ])}
         />
+      </Card>
+
+      <Card>
+        <h2>Contabilidad</h2>
+        <Table
+          columns={["Estado Contable", "Numero de Asiento", "Fecha", "Usuario", "Moneda", "Tasa"]}
+          rows={[
+            [
+              accountingStatusLabels[accounting?.accountingStatus ?? "NOT_POSTED"],
+              accounting?.journalEntry?.entryNumber ?? "-",
+              accounting?.journalEntry?.entryDate ? String(accounting.journalEntry.entryDate).slice(0, 10) : "-",
+              accounting?.journalEntry?.createdBy ?? "-",
+              selectedInvoice?.currencyCode ?? "-",
+              formatNumber(selectedInvoice?.exchangeRate ?? 0)
+            ]
+          ]}
+        />
+        <div className="toolbar-row">
+          <Button disabled={saving || !selectedInvoice || selectedInvoice.status !== "POSTED"} onClick={handleAccountingPreview} type="button" variant="secondary">
+            Preview
+          </Button>
+          <a className="ui-button ui-button-secondary" href="/accounting/journal-entries">
+            Ver Asiento
+          </a>
+          <Button disabled={saving || !accounting?.journalEntry} onClick={handleAccountingReverse} type="button" variant="secondary">
+            Reversar
+          </Button>
+          <Button disabled={saving || !accounting?.journalEntry} onClick={handleAccountingRepost} type="button" variant="secondary">
+            Recontabilizar
+          </Button>
+        </div>
+        {accountingPreview ? (
+          <Table
+            columns={["Linea", "Tipo", "Cuenta", "Debito", "Credito"]}
+            rows={accountingPreview.lines.map((line) => [
+              line.lineNumber,
+              line.side === "DEBIT" ? "Debito" : "Credito",
+              `${line.accountCode} - ${line.accountName}`,
+              formatNumber(line.debitAmount),
+              formatNumber(line.creditAmount)
+            ])}
+          />
+        ) : null}
       </Card>
     </div>
   );

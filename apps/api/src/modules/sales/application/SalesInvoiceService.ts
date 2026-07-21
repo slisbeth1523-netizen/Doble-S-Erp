@@ -1,4 +1,6 @@
 import { domainEventPublisher } from "../../events/application/DomainEventPublisher.js";
+import { businessEventPublisher } from "../../events/application/BusinessEventPublisher.js";
+import { businessEvents } from "../../events/application/BusinessEvent.js";
 import { BaseService } from "../../../services/BaseService.js";
 import { auditEvent } from "../../../utils/audit.js";
 import { logger } from "../../../utils/logger.js";
@@ -76,8 +78,30 @@ export class SalesInvoiceService extends BaseService {
     if (!result.idempotencyReplayed) {
       await this.recordSideEffects(context, result, "posted");
       await this.recordAccountsReceivableCreatedEvent(context, result);
+      await this.publishInvoiceApprovedEvent(context, result);
     }
     return result;
+  }
+
+  private async publishInvoiceApprovedEvent(context: SalesInvoiceContext, result: SalesInvoiceResult) {
+    await businessEventPublisher.publish(context, {
+      eventName: businessEvents.salesInvoiceApproved,
+      eventType: businessEvents.salesInvoiceApproved,
+      sourceModule: "sales",
+      sourceEntity: "sales.SalesInvoices",
+      sourceEntityId: result.id,
+      payload: {
+        documentId: result.id,
+        sourceDocumentType: "SALES_INVOICE",
+        invoiceNumber: result.invoiceNumber,
+        customerId: result.customerId,
+        postingDate: result.invoiceDate.toISOString().slice(0, 10),
+        reference: result.invoiceNumber,
+        currencyCode: result.currencyCode,
+        exchangeRate: result.exchangeRate,
+        totalAmount: result.totalAmount
+      }
+    });
   }
 
   private async recordSideEffects(context: SalesInvoiceContext, result: SalesInvoiceResult, action: SideEffectAction) {

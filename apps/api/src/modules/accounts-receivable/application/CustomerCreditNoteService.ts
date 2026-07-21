@@ -1,4 +1,6 @@
 import { domainEventPublisher } from "../../events/application/DomainEventPublisher.js";
+import { businessEventPublisher } from "../../events/application/BusinessEventPublisher.js";
+import { businessEvents } from "../../events/application/BusinessEvent.js";
 import { BaseService } from "../../../services/BaseService.js";
 import { auditEvent } from "../../../utils/audit.js";
 import { logger } from "../../../utils/logger.js";
@@ -50,6 +52,22 @@ export class CustomerCreditNoteService extends BaseService {
 
   async postCustomerCreditNote(context: CustomerCreditNoteContext, customerCreditNoteId: string) {
     const result = await this.repository.postCustomerCreditNote(context, customerCreditNoteId);
+    await businessEventPublisher.publish(context, {
+      eventName: businessEvents.customerCreditNoteApproved,
+      eventType: businessEvents.customerCreditNoteApproved,
+      sourceModule: "sales",
+      sourceEntity: "ar.CustomerCreditNotes",
+      sourceEntityId: result.id,
+      payload: {
+        documentId: result.id,
+        sourceDocumentType: "CUSTOMER_CREDIT_NOTE",
+        creditNoteNumber: result.creditNoteNumber,
+        customerId: result.customerId,
+        postingDate: result.creditNoteDate.toISOString().slice(0, 10),
+        reference: result.creditNoteNumber,
+        totalAmount: result.amount
+      }
+    });
 
     await this.recordPostSideEffects(context, result);
 
