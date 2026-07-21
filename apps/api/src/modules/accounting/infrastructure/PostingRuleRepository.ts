@@ -3,6 +3,7 @@ import sql from "mssql";
 import { NotFoundError, ValidationError } from "../../../errors/index.js";
 import { BaseSqlRepository, type SqlParameter } from "../../../repositories/BaseSqlRepository.js";
 import type { PostingContextInput } from "../application/AccountingPostingEngine.js";
+import { postingAccountResolver } from "./PostingAccountResolver.js";
 
 export type PostingDocument = {
   sourceModule: string;
@@ -31,11 +32,13 @@ type DocumentRow = {
   DocumentNumber: string;
   DocumentDate: Date;
   Description: string;
-  CurrencyCode: string;
-  ExchangeRate: number;
+  CurrencyCode: string | null;
+  ExchangeRate: number | null;
   TotalAmount: number;
   TaxAmount: number;
   CostCenterId: string | null;
+  Status: string;
+  IsActive: boolean;
 };
 
 type AccountRow = {
@@ -46,6 +49,10 @@ type AccountRow = {
 };
 
 export class PostingRuleRepository extends BaseSqlRepository {
+  constructor(private readonly accountResolver = postingAccountResolver) {
+    super();
+  }
+
   async resolveDocument(context: PostingContextInput, sourceModule: string, documentId: string): Promise<PostingDocument> {
     const normalized = this.normalizeSource(sourceModule);
 
@@ -61,17 +68,20 @@ export class PostingRuleRepository extends BaseSqlRepository {
             document.ExchangeRate,
             document.TotalAmount,
             CAST(0 AS decimal(18, 4)) AS TaxAmount,
-            CAST(NULL AS uniqueidentifier) AS CostCenterId
+            CAST(NULL AS uniqueidentifier) AS CostCenterId,
+            document.Status,
+            document.IsActive
           FROM ar.AccountsReceivableDocuments document
           WHERE document.TenantId = @TenantId
             AND document.CompanyId = @CompanyId
-            AND document.AccountsReceivableDocumentId = @DocumentId
-            AND document.IsActive = 1;
+            AND document.AccountsReceivableDocumentId = @DocumentId;
         `,
         this.documentParameters(context, documentId)
       );
 
-      return this.mapDocument(rows[0], "ACCOUNTS_RECEIVABLE", "AR_DOCUMENT", "RECEIVABLE", documentId);
+      return this.mapDocument(rows[0], "ACCOUNTS_RECEIVABLE", "AR_DOCUMENT", "RECEIVABLE", documentId, {
+        validStatuses: ["OPEN", "PARTIALLY_PAID", "PAID"]
+      });
     }
 
     if (normalized === "AP_DOCUMENT") {
@@ -86,17 +96,20 @@ export class PostingRuleRepository extends BaseSqlRepository {
             document.ExchangeRate,
             document.TotalAmount,
             CAST(0 AS decimal(18, 4)) AS TaxAmount,
-            CAST(NULL AS uniqueidentifier) AS CostCenterId
+            CAST(NULL AS uniqueidentifier) AS CostCenterId,
+            document.Status,
+            document.IsActive
           FROM ap.AccountsPayableDocuments document
           WHERE document.TenantId = @TenantId
             AND document.CompanyId = @CompanyId
-            AND document.AccountsPayableDocumentId = @DocumentId
-            AND document.IsActive = 1;
+            AND document.AccountsPayableDocumentId = @DocumentId;
         `,
         this.documentParameters(context, documentId)
       );
 
-      return this.mapDocument(rows[0], "ACCOUNTS_PAYABLE", "AP_DOCUMENT", "PAYABLE", documentId);
+      return this.mapDocument(rows[0], "ACCOUNTS_PAYABLE", "AP_DOCUMENT", "PAYABLE", documentId, {
+        validStatuses: ["PENDING", "OPEN", "PARTIALLY_PAID", "PAID"]
+      });
     }
 
     if (normalized === "SALES_INVOICE") {
@@ -111,20 +124,24 @@ export class PostingRuleRepository extends BaseSqlRepository {
             invoice.ExchangeRate,
             invoice.TotalAmount,
             invoice.TaxAmount,
-            CAST(NULL AS uniqueidentifier) AS CostCenterId
+            CAST(NULL AS uniqueidentifier) AS CostCenterId,
+            invoice.Status,
+            invoice.IsActive
           FROM sales.SalesInvoices invoice
           WHERE invoice.TenantId = @TenantId
             AND invoice.CompanyId = @CompanyId
-            AND invoice.SalesInvoiceId = @DocumentId
-            AND invoice.IsActive = 1;
+            AND invoice.SalesInvoiceId = @DocumentId;
         `,
         this.documentParameters(context, documentId)
       );
 
-      return this.mapDocument(rows[0], "SALES", "SALES_INVOICE", "RECEIVABLE", documentId);
+      return this.mapDocument(rows[0], "SALES", "SALES_INVOICE", "RECEIVABLE", documentId, {
+        validStatuses: ["POSTED"]
+      });
     }
 
     if (normalized === "SUPPLIER_INVOICE") {
+      const currency = await this.supplierInvoiceCurrencyProjection();
       const rows = await this.query<DocumentRow>(
         `
           SELECT
@@ -132,21 +149,25 @@ export class PostingRuleRepository extends BaseSqlRepository {
             invoice.SupplierInvoiceNumber AS DocumentNumber,
             invoice.InvoiceDate AS DocumentDate,
             CONCAT(N'Factura proveedor ', invoice.SupplierInvoiceNumber) AS Description,
-            CAST(N'DOP' AS nvarchar(3)) AS CurrencyCode,
-            CAST(1 AS decimal(18, 6)) AS ExchangeRate,
+            ${currency.currencyCodeSql} AS CurrencyCode,
+            ${currency.exchangeRateSql} AS ExchangeRate,
             invoice.TotalAmount,
             invoice.TaxAmount,
-            CAST(NULL AS uniqueidentifier) AS CostCenterId
+            CAST(NULL AS uniqueidentifier) AS CostCenterId,
+            invoice.Status,
+            invoice.IsActive
           FROM purchasing.SupplierInvoices invoice
+          ${currency.joinSql}
           WHERE invoice.TenantId = @TenantId
             AND invoice.CompanyId = @CompanyId
-            AND invoice.SupplierInvoiceId = @DocumentId
-            AND invoice.IsActive = 1;
+            AND invoice.SupplierInvoiceId = @DocumentId;
         `,
         this.documentParameters(context, documentId)
       );
 
-      return this.mapDocument(rows[0], "PURCHASING", "SUPPLIER_INVOICE", "PAYABLE", documentId);
+      return this.mapDocument(rows[0], "PURCHASING", "SUPPLIER_INVOICE", "PAYABLE", documentId, {
+        validStatuses: ["POSTED"]
+      });
     }
 
     throw new ValidationError(
@@ -157,19 +178,7 @@ export class PostingRuleRepository extends BaseSqlRepository {
   }
 
   async resolveAccounts(context: PostingContextInput, document: PostingDocument) {
-    if (document.direction === "RECEIVABLE") {
-      return {
-        debit: await this.findAccount(context, ["1-01-003"], "ASSET", "cuentas por cobrar"),
-        credit: await this.findAccount(context, ["4-01", "4"], "REVENUE", "ingresos"),
-        tax: document.taxAmount > 0 ? await this.findAccount(context, ["2-03"], "LIABILITY", "itbis por pagar") : undefined
-      };
-    }
-
-    return {
-      debit: await this.findAccount(context, ["5-01", "5"], "EXPENSE", "gasto"),
-      credit: await this.findAccount(context, ["2-01"], "LIABILITY", "cuentas por pagar"),
-      tax: document.taxAmount > 0 ? await this.findAccount(context, ["1-01-004"], "ASSET", "itbis adelantado") : undefined
-    };
+    return this.accountResolver.resolveAccounts(context, document);
   }
 
   async validateAccountInTransaction(
@@ -206,46 +215,9 @@ export class PostingRuleRepository extends BaseSqlRepository {
     return this.mapAccount(rows[0]);
   }
 
-  private async findAccount(
-    context: PostingContextInput,
-    preferredCodes: string[],
-    accountType: string,
-    nameSearch: string
-  ): Promise<PostingAccount> {
-    const rows = await this.query<AccountRow>(
-      `
-        SELECT TOP (1) AccountId, Code, Name, AccountType
-        FROM accounting.Accounts
-        WHERE TenantId = @TenantId
-          AND CompanyId = @CompanyId
-          AND IsActive = 1
-          AND IsBlocked = 0
-          AND AllowsPosting = 1
-          AND AccountType = @AccountType
-          AND (
-            Code IN (${preferredCodes.map((_, index) => `@Code${index}`).join(", ")})
-            OR LOWER(Name) LIKE @NameSearch
-          )
-        ORDER BY
-          CASE ${preferredCodes.map((_, index) => `WHEN Code = @Code${index} THEN ${index}`).join(" ")} ELSE 99 END,
-          Code;
-      `,
-      [
-        { name: "TenantId", value: context.tenantId },
-        { name: "CompanyId", value: context.companyId },
-        { name: "AccountType", value: accountType },
-        { name: "NameSearch", value: `%${nameSearch.toLowerCase()}%` },
-        ...preferredCodes.map((code, index) => ({ name: `Code${index}`, value: code }))
-      ]
-    );
-    if (!rows[0]) {
-      throw new NotFoundError("No posting account rule could be resolved.", { accountType, preferredCodes }, "POSTING_ACCOUNT_NOT_FOUND");
-    }
-
-    return this.mapAccount(rows[0]);
-  }
-
   private normalizeSource(sourceModule: string) {
+    // Foundation scope: AR/AP documents, sales invoices and supplier invoices only.
+    // Cash, banks, receipts, payments, notes, inventory and transfers are intentionally deferred.
     const source = sourceModule.toUpperCase();
     if (["AR", "ACCOUNTS_RECEIVABLE", "AR_DOCUMENT", "ACCOUNTS_RECEIVABLE_DOCUMENT"].includes(source)) return "AR_DOCUMENT";
     if (["AP", "ACCOUNTS_PAYABLE", "AP_DOCUMENT", "ACCOUNTS_PAYABLE_DOCUMENT"].includes(source)) return "AP_DOCUMENT";
@@ -259,10 +231,43 @@ export class PostingRuleRepository extends BaseSqlRepository {
     sourceModule: string,
     sourceDocumentType: string,
     direction: PostingDocument["direction"],
-    documentId: string
+    documentId: string,
+    rules: { validStatuses: string[] }
   ): PostingDocument {
     if (!row) {
       throw new NotFoundError("Source document was not found.", { documentId, sourceDocumentType }, "POSTING_DOCUMENT_NOT_FOUND");
+    }
+
+    if (!row.IsActive) {
+      throw new ValidationError("Source document is not active.", { documentId, sourceDocumentType }, "POSTING_DOCUMENT_INACTIVE");
+    }
+    if (!rules.validStatuses.includes(row.Status)) {
+      throw new ValidationError(
+        "Source document status is not postable.",
+        { documentId, sourceDocumentType, status: row.Status, validStatuses: rules.validStatuses },
+        "POSTING_DOCUMENT_STATUS_INVALID"
+      );
+    }
+    if (!row.CurrencyCode || row.CurrencyCode.trim().length !== 3) {
+      throw new ValidationError(
+        "Source document does not have a valid currency.",
+        { documentId, sourceDocumentType },
+        "POSTING_DOCUMENT_CURRENCY_REQUIRED"
+      );
+    }
+    if (!row.ExchangeRate || Number(row.ExchangeRate) <= 0) {
+      throw new ValidationError(
+        "Source document does not have a valid exchange rate.",
+        { documentId, sourceDocumentType },
+        "POSTING_DOCUMENT_EXCHANGE_RATE_REQUIRED"
+      );
+    }
+    if (Number(row.TotalAmount) <= 0) {
+      throw new ValidationError(
+        "Source document total must be greater than zero.",
+        { documentId, sourceDocumentType },
+        "POSTING_DOCUMENT_TOTAL_INVALID"
+      );
     }
 
     return {
@@ -272,8 +277,8 @@ export class PostingRuleRepository extends BaseSqlRepository {
       documentNumber: row.DocumentNumber,
       documentDate: this.toDateInput(row.DocumentDate),
       description: row.Description,
-      currencyCode: row.CurrencyCode,
-      exchangeRate: Number(row.ExchangeRate || 1),
+      currencyCode: row.CurrencyCode.trim().toUpperCase(),
+      exchangeRate: Number(row.ExchangeRate),
       totalAmount: Number(row.TotalAmount),
       taxAmount: Number(row.TaxAmount ?? 0),
       costCenterId: row.CostCenterId ?? undefined,
@@ -301,6 +306,50 @@ export class PostingRuleRepository extends BaseSqlRepository {
   private toDateInput(value: Date | string) {
     if (typeof value === "string") return value.slice(0, 10);
     return value.toISOString().slice(0, 10);
+  }
+
+  private async supplierInvoiceCurrencyProjection() {
+    const hasInvoiceCurrency = await this.hasColumn("purchasing.SupplierInvoices", "CurrencyCode");
+    const hasInvoiceExchangeRate = await this.hasColumn("purchasing.SupplierInvoices", "ExchangeRate");
+    const hasApCurrency = await this.hasColumn("ap.AccountsPayableDocuments", "CurrencyCode");
+    const hasApExchangeRate = await this.hasColumn("ap.AccountsPayableDocuments", "ExchangeRate");
+    const joinSql =
+      hasApCurrency || hasApExchangeRate
+        ? `
+          LEFT JOIN ap.AccountsPayableDocuments apDocument
+            ON apDocument.TenantId = invoice.TenantId
+           AND apDocument.CompanyId = invoice.CompanyId
+           AND apDocument.SourceDocumentId = invoice.SupplierInvoiceId
+           AND apDocument.IsActive = 1
+        `
+        : "";
+    const currencySources: string[] = [];
+    const exchangeSources: string[] = [];
+
+    if (hasInvoiceCurrency) currencySources.push("invoice.CurrencyCode");
+    if (hasApCurrency) currencySources.push("apDocument.CurrencyCode");
+    if (hasInvoiceExchangeRate) exchangeSources.push("invoice.ExchangeRate");
+    if (hasApExchangeRate) exchangeSources.push("apDocument.ExchangeRate");
+
+    return {
+      joinSql,
+      currencyCodeSql: currencySources.length > 0 ? `COALESCE(${currencySources.join(", ")})` : "CAST(NULL AS nvarchar(3))",
+      exchangeRateSql: exchangeSources.length > 0 ? `COALESCE(${exchangeSources.join(", ")})` : "CAST(NULL AS decimal(18, 6))"
+    };
+  }
+
+  private async hasColumn(tableName: string, columnName: string) {
+    const rows = await this.query<{ ExistsFlag: number }>(
+      `
+        SELECT CASE WHEN COL_LENGTH(@TableName, @ColumnName) IS NULL THEN 0 ELSE 1 END AS ExistsFlag;
+      `,
+      [
+        { name: "TableName", value: tableName },
+        { name: "ColumnName", value: columnName }
+      ]
+    );
+
+    return rows[0]?.ExistsFlag === 1;
   }
 
   protected async queryInTransaction<TRecord>(

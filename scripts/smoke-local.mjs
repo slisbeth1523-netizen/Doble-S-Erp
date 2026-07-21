@@ -8687,10 +8687,56 @@ async function validateAutomaticPostingEngineFlow(session) {
     preview.totalCredit !== 275 ||
     preview.difference !== 0 ||
     preview.lines.length < 2 ||
-    !preview.lines.some((line) => line.side === "DEBIT" && line.accountCode === "1-01-003") ||
-    !preview.lines.some((line) => line.side === "CREDIT" && line.accountCode === "4-01")
+    !preview.lines.some((line) => line.side === "DEBIT" && line.debitAmount === 275 && line.accountId) ||
+    !preview.lines.some((line) => line.side === "CREDIT" && line.creditAmount === 275 && line.accountId)
   ) {
-    fail("Automatic posting preview did not resolve balanced AR debit and credit lines.");
+    fail("Automatic posting preview did not resolve balanced configured AR debit and credit lines.");
+  }
+
+  const cancelledDocument = await createAccountsReceivableDocument(
+    {
+      customerId: customer.customerId,
+      sourceType: "MANUAL",
+      documentDate,
+      dueDate,
+      currencyCode: "DOP",
+      exchangeRate: 1,
+      totalAmount: 125,
+      reference: `POST-CANCEL-${smokeRun}`,
+      notes: "Documento CxC cancelado para smoke de motor contable"
+    },
+    session
+  );
+  const pool = await sql.connect(getSqlConfig());
+  const cancelledUpdate = await pool
+    .request()
+    .input("TenantId", sql.UniqueIdentifier, session.user.tenantId)
+    .input("CompanyId", sql.UniqueIdentifier, session.user.companyId)
+    .input("DocumentId", sql.UniqueIdentifier, cancelledDocument.id)
+    .query(`
+      UPDATE ar.AccountsReceivableDocuments
+         SET Status = N'CANCELLED',
+             UpdatedAt = SYSUTCDATETIME()
+       WHERE TenantId = @TenantId
+         AND CompanyId = @CompanyId
+         AND AccountsReceivableDocumentId = @DocumentId;
+    `);
+  if (cancelledUpdate.rowsAffected[0] !== 1) {
+    fail("Smoke could not mark the source document as cancelled.");
+  }
+  smokeStep("automatic posting engine rejects non-postable document status");
+  const cancelledPreview = await request("/accounting/postings/preview", {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify({
+      sourceModule: "ACCOUNTS_RECEIVABLE",
+      documentId: cancelledDocument.id,
+      postingDate: documentDate,
+      reference: `POST-CANCEL-${smokeRun}`
+    })
+  });
+  if (cancelledPreview.response.ok || cancelledPreview.body?.success !== false) {
+    fail("Automatic posting preview must reject cancelled source documents.");
   }
 
   smokeStep("automatic posting engine create is idempotent per source document");

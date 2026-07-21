@@ -427,35 +427,36 @@ BEGIN
     AccountType NVARCHAR(30) NOT NULL,
     NormalBalance NVARCHAR(10) NOT NULL,
     AllowsPosting BIT NOT NULL,
-    IsControlAccount BIT NOT NULL
+    IsControlAccount BIT NOT NULL,
+    PostingSlot NVARCHAR(120) NULL
   );
 
-  INSERT INTO @SeedAccounts (AccountId, Code, Name, ParentAccountId, Level, AccountType, NormalBalance, AllowsPosting, IsControlAccount)
+  INSERT INTO @SeedAccounts (AccountId, Code, Name, ParentAccountId, Level, AccountType, NormalBalance, AllowsPosting, IsControlAccount, PostingSlot)
   VALUES
-    (@AccountAssetsId, '1', 'Activos', NULL, 1, 'ASSET', 'DEBIT', 0, 1),
-    (@AccountCurrentAssetsId, '1-01', 'Activos corrientes', @AccountAssetsId, 2, 'ASSET', 'DEBIT', 0, 1),
-    (@AccountCashId, '1-01-001', 'Caja general', @AccountCurrentAssetsId, 3, 'ASSET', 'DEBIT', 1, 0),
-    (@AccountBankId, '1-01-002', 'Banco general', @AccountCurrentAssetsId, 3, 'ASSET', 'DEBIT', 1, 0),
-    (@AccountReceivableId, '1-01-003', 'Cuentas por cobrar clientes', @AccountCurrentAssetsId, 3, 'ASSET', 'DEBIT', 1, 0),
-    (@AccountTaxReceivableId, '1-01-004', 'ITBIS adelantado', @AccountCurrentAssetsId, 3, 'ASSET', 'DEBIT', 1, 0),
-    (@AccountLiabilitiesId, '2', 'Pasivos', NULL, 1, 'LIABILITY', 'CREDIT', 0, 1),
-    (@AccountPayableId, '2-01', 'Cuentas por pagar', @AccountLiabilitiesId, 2, 'LIABILITY', 'CREDIT', 1, 0),
-    (@AccountTaxPayableId, '2-03', 'ITBIS por pagar', @AccountLiabilitiesId, 2, 'LIABILITY', 'CREDIT', 1, 0),
-    (@AccountEquityId, '3', 'Patrimonio', NULL, 1, 'EQUITY', 'CREDIT', 0, 1),
-    (@AccountRevenueId, '4', 'Ingresos', NULL, 1, 'REVENUE', 'CREDIT', 0, 1),
-    (@AccountSalesRevenueId, '4-01', 'Ingresos por ventas', @AccountRevenueId, 2, 'REVENUE', 'CREDIT', 1, 0),
-    (@AccountExpensesId, '5', 'Gastos', NULL, 1, 'EXPENSE', 'DEBIT', 0, 1),
-    (@AccountExpensePostingId, '5-01', 'Gasto operativo automatico', @AccountExpensesId, 2, 'EXPENSE', 'DEBIT', 1, 0);
+    (@AccountAssetsId, '1', 'Activos', NULL, 1, 'ASSET', 'DEBIT', 0, 1, NULL),
+    (@AccountCurrentAssetsId, '1-01', 'Activos corrientes', @AccountAssetsId, 2, 'ASSET', 'DEBIT', 0, 1, NULL),
+    (@AccountCashId, '1-01-001', 'Caja general', @AccountCurrentAssetsId, 3, 'ASSET', 'DEBIT', 1, 0, NULL),
+    (@AccountBankId, '1-01-002', 'Banco general', @AccountCurrentAssetsId, 3, 'ASSET', 'DEBIT', 1, 0, NULL),
+    (@AccountReceivableId, '1-01-003', 'Cuentas por cobrar clientes', @AccountCurrentAssetsId, 3, 'ASSET', 'DEBIT', 1, 0, 'POST_AR'),
+    (@AccountTaxReceivableId, '1-01-004', 'ITBIS adelantado', @AccountCurrentAssetsId, 3, 'ASSET', 'DEBIT', 1, 0, 'POST_TAX_REC'),
+    (@AccountLiabilitiesId, '2', 'Pasivos', NULL, 1, 'LIABILITY', 'CREDIT', 0, 1, NULL),
+    (@AccountPayableId, '2-01', 'Cuentas por pagar', @AccountLiabilitiesId, 2, 'LIABILITY', 'CREDIT', 1, 0, 'POST_AP'),
+    (@AccountTaxPayableId, '2-03', 'ITBIS por pagar', @AccountLiabilitiesId, 2, 'LIABILITY', 'CREDIT', 1, 0, 'POST_TAX_PAY'),
+    (@AccountEquityId, '3', 'Patrimonio', NULL, 1, 'EQUITY', 'CREDIT', 0, 1, NULL),
+    (@AccountRevenueId, '4', 'Ingresos', NULL, 1, 'REVENUE', 'CREDIT', 0, 1, NULL),
+    (@AccountSalesRevenueId, '4-01', 'Ingresos por ventas', @AccountRevenueId, 2, 'REVENUE', 'CREDIT', 1, 0, 'POST_SALES_REV'),
+    (@AccountExpensesId, '5', 'Gastos', NULL, 1, 'EXPENSE', 'DEBIT', 0, 1, NULL),
+    (@AccountExpensePostingId, '5-01', 'Gasto operativo automatico', @AccountExpensesId, 2, 'EXPENSE', 'DEBIT', 1, 0, 'POST_PUR_EXP');
 
   INSERT INTO accounting.Accounts (
     AccountId, TenantId, CompanyId, Code, Name, ParentAccountId, Level,
     AccountType, NormalBalance, AllowsPosting, IsControlAccount,
-    RequiresCostCenter, RequiresThirdParty, IsBlocked, IsActive, CreatedBy
+    Classification, RequiresCostCenter, RequiresThirdParty, IsBlocked, IsActive, CreatedBy
   )
   SELECT
     seed.AccountId, @TenantId, @CompanyId, seed.Code, seed.Name, seed.ParentAccountId, seed.Level,
     seed.AccountType, seed.NormalBalance, seed.AllowsPosting, seed.IsControlAccount,
-    0, 0, 0, 1, @UserId
+    seed.PostingSlot, 0, 0, 0, 1, @UserId
   FROM @SeedAccounts seed
   WHERE NOT EXISTS (
     SELECT 1
@@ -464,6 +465,18 @@ BEGIN
       AND existing.CompanyId = @CompanyId
       AND existing.Code = seed.Code
   );
+
+  UPDATE account
+     SET Classification = seed.PostingSlot,
+         UpdatedAt = SYSUTCDATETIME(),
+         UpdatedBy = @UserId
+    FROM accounting.Accounts account
+    INNER JOIN @SeedAccounts seed
+      ON seed.Code = account.Code
+   WHERE account.TenantId = @TenantId
+     AND account.CompanyId = @CompanyId
+     AND seed.PostingSlot IS NOT NULL
+     AND ISNULL(account.Classification, N'') <> seed.PostingSlot;
 END;
 
 IF OBJECT_ID('inventory.Warehouses', 'U') IS NOT NULL
