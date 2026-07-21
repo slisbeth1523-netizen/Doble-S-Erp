@@ -174,6 +174,7 @@ VALUES
   ('accounting', 'accounting.trial-balance.read', 'Local read accounting trial balance'),
   ('accounting', 'accounting.income-statement.read', 'Local read accounting income statement'),
   ('accounting', 'accounting.balance-sheet.read', 'Local read accounting balance sheet'),
+  ('accounting', 'accounting.cash-flow.read', 'Local read accounting cash flow'),
   ('inventory', 'inventory.items.read', 'Local read items'),
   ('inventory', 'inventory.items.create', 'Local create items'),
   ('inventory', 'inventory.items.update', 'Local update items'),
