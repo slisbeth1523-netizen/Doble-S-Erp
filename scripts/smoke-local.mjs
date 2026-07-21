@@ -483,6 +483,36 @@ async function getCashFlowSummary(query, session, extraHeaders = {}) {
   return body.data;
 }
 
+async function previewAccountingPosting(payload, session, extraHeaders = {}) {
+  const body = await expectOk("/accounting/postings/preview", {
+    method: "POST",
+    headers: { ...authHeaders(session), ...extraHeaders },
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function createAccountingPosting(payload, session, extraHeaders = {}) {
+  const body = await expectOk("/accounting/postings/create", {
+    method: "POST",
+    headers: { ...authHeaders(session), ...extraHeaders },
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function reverseAccountingPosting(payload, session, extraHeaders = {}) {
+  const body = await expectOk("/accounting/postings/reverse", {
+    method: "POST",
+    headers: { ...authHeaders(session), ...extraHeaders },
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
 async function ensureOtherCompanyCostCenter(session, code) {
   const companyId = "99999999-9999-9999-9999-999999999998";
   const costCenterId = randomUUID();
@@ -8622,6 +8652,84 @@ async function validateCashFlowStatementFlow(session) {
   }
 }
 
+async function validateAutomaticPostingEngineFlow(session) {
+  const customer = await getDemoCustomerReferences(session);
+  const documentDate = "2025-02-21";
+  const dueDate = "2025-02-28";
+  const document = await createAccountsReceivableDocument(
+    {
+      customerId: customer.customerId,
+      sourceType: "MANUAL",
+      documentDate,
+      dueDate,
+      currencyCode: "DOP",
+      exchangeRate: 1,
+      totalAmount: 275,
+      reference: `POST-ENG-${smokeRun}`,
+      notes: "Documento CxC para smoke de motor contable"
+    },
+    session
+  );
+  const payload = {
+    sourceModule: "ACCOUNTS_RECEIVABLE",
+    documentId: document.id,
+    postingDate: documentDate,
+    reference: `POST-ENG-${smokeRun}`
+  };
+
+  smokeStep("automatic posting engine preview resolves balanced AR posting");
+  const preview = await previewAccountingPosting(payload, session);
+  if (
+    preview.sourceModule !== "ACCOUNTS_RECEIVABLE" ||
+    preview.sourceDocumentType !== "AR_DOCUMENT" ||
+    preview.documentId.toLowerCase() !== document.id.toLowerCase() ||
+    preview.totalDebit !== 275 ||
+    preview.totalCredit !== 275 ||
+    preview.difference !== 0 ||
+    preview.lines.length < 2 ||
+    !preview.lines.some((line) => line.side === "DEBIT" && line.accountCode === "1-01-003") ||
+    !preview.lines.some((line) => line.side === "CREDIT" && line.accountCode === "4-01")
+  ) {
+    fail("Automatic posting preview did not resolve balanced AR debit and credit lines.");
+  }
+
+  smokeStep("automatic posting engine create is idempotent per source document");
+  const created = await createAccountingPosting(payload, session);
+  if (
+    created.status !== "DRAFT" ||
+    created.sourceModule !== "ACCOUNTS_RECEIVABLE" ||
+    created.sourceDocumentType !== "AR_DOCUMENT" ||
+    created.sourceDocumentId.toLowerCase() !== document.id.toLowerCase() ||
+    created.totalDebit !== 275 ||
+    created.totalCredit !== 275 ||
+    created.lines.length < 2 ||
+    created.alreadyExists
+  ) {
+    fail("Automatic posting create did not persist the expected DRAFT journal entry.");
+  }
+  const retry = await createAccountingPosting(payload, session);
+  if (!retry.alreadyExists || retry.journalEntryId !== created.journalEntryId) {
+    fail("Automatic posting create retry duplicated or did not return the existing journal entry.");
+  }
+
+  smokeStep("automatic posting engine reverse is idempotent per source document");
+  const reversed = await reverseAccountingPosting(payload, session);
+  if (
+    reversed.status !== "DRAFT" ||
+    reversed.sourceDocumentType !== "AR_DOCUMENT_REVERSAL" ||
+    reversed.sourceDocumentId.toLowerCase() !== document.id.toLowerCase() ||
+    reversed.totalDebit !== created.totalCredit ||
+    reversed.totalCredit !== created.totalDebit ||
+    reversed.alreadyExists
+  ) {
+    fail("Automatic posting reverse did not create the expected reversing journal entry.");
+  }
+  const reverseRetry = await reverseAccountingPosting(payload, session);
+  if (!reverseRetry.alreadyExists || reverseRetry.journalEntryId !== reversed.journalEntryId) {
+    fail("Automatic posting reverse retry duplicated or did not return the existing reversal.");
+  }
+}
+
 async function validateCrud(session) {
   const suffix = smokeRun;
   const customerCode = `QA-CUST-${suffix}`;
@@ -8874,6 +8982,7 @@ async function main() {
   await validateIncomeStatementFlow(session);
   await validateBalanceSheetFlow(session);
   await validateCashFlowStatementFlow(session);
+  await validateAutomaticPostingEngineFlow(session);
   await validateCrud(session);
   console.log("smoke: local runtime validation OK");
 }

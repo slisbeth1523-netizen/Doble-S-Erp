@@ -175,6 +175,8 @@ VALUES
   ('accounting', 'accounting.income-statement.read', 'Local read accounting income statement'),
   ('accounting', 'accounting.balance-sheet.read', 'Local read accounting balance sheet'),
   ('accounting', 'accounting.cash-flow.read', 'Local read accounting cash flow'),
+  ('accounting', 'accounting.posting-engine.preview', 'Local preview automatic accounting postings'),
+  ('accounting', 'accounting.posting-engine.execute', 'Local execute automatic accounting postings'),
   ('inventory', 'inventory.items.read', 'Local read items'),
   ('inventory', 'inventory.items.create', 'Local create items'),
   ('inventory', 'inventory.items.update', 'Local update items'),
@@ -250,11 +252,16 @@ DECLARE @AccountAssetsId UNIQUEIDENTIFIER = 'ca000000-0000-0000-0000-00000000000
 DECLARE @AccountCurrentAssetsId UNIQUEIDENTIFIER = 'ca000000-0000-0000-0000-000000000002';
 DECLARE @AccountCashId UNIQUEIDENTIFIER = 'ca000000-0000-0000-0000-000000000003';
 DECLARE @AccountBankId UNIQUEIDENTIFIER = 'ca000000-0000-0000-0000-000000000004';
+DECLARE @AccountReceivableId UNIQUEIDENTIFIER = 'ca000000-0000-0000-0000-000000000010';
+DECLARE @AccountTaxReceivableId UNIQUEIDENTIFIER = 'ca000000-0000-0000-0000-000000000011';
 DECLARE @AccountLiabilitiesId UNIQUEIDENTIFIER = 'ca000000-0000-0000-0000-000000000005';
 DECLARE @AccountPayableId UNIQUEIDENTIFIER = 'ca000000-0000-0000-0000-000000000006';
 DECLARE @AccountEquityId UNIQUEIDENTIFIER = 'ca000000-0000-0000-0000-000000000007';
 DECLARE @AccountRevenueId UNIQUEIDENTIFIER = 'ca000000-0000-0000-0000-000000000008';
 DECLARE @AccountExpensesId UNIQUEIDENTIFIER = 'ca000000-0000-0000-0000-000000000009';
+DECLARE @AccountSalesRevenueId UNIQUEIDENTIFIER = 'ca000000-0000-0000-0000-000000000012';
+DECLARE @AccountExpensePostingId UNIQUEIDENTIFIER = 'ca000000-0000-0000-0000-000000000013';
+DECLARE @AccountTaxPayableId UNIQUEIDENTIFIER = 'ca000000-0000-0000-0000-000000000014';
 DECLARE @WarehouseId UNIQUEIDENTIFIER = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee';
 DECLARE @TransitWarehouseId UNIQUEIDENTIFIER = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeef';
 DECLARE @InventoryMovementId UNIQUEIDENTIFIER = 'abababab-abab-abab-abab-abababababab';
@@ -429,11 +436,16 @@ BEGIN
     (@AccountCurrentAssetsId, '1-01', 'Activos corrientes', @AccountAssetsId, 2, 'ASSET', 'DEBIT', 0, 1),
     (@AccountCashId, '1-01-001', 'Caja general', @AccountCurrentAssetsId, 3, 'ASSET', 'DEBIT', 1, 0),
     (@AccountBankId, '1-01-002', 'Banco general', @AccountCurrentAssetsId, 3, 'ASSET', 'DEBIT', 1, 0),
+    (@AccountReceivableId, '1-01-003', 'Cuentas por cobrar clientes', @AccountCurrentAssetsId, 3, 'ASSET', 'DEBIT', 1, 0),
+    (@AccountTaxReceivableId, '1-01-004', 'ITBIS adelantado', @AccountCurrentAssetsId, 3, 'ASSET', 'DEBIT', 1, 0),
     (@AccountLiabilitiesId, '2', 'Pasivos', NULL, 1, 'LIABILITY', 'CREDIT', 0, 1),
     (@AccountPayableId, '2-01', 'Cuentas por pagar', @AccountLiabilitiesId, 2, 'LIABILITY', 'CREDIT', 1, 0),
+    (@AccountTaxPayableId, '2-03', 'ITBIS por pagar', @AccountLiabilitiesId, 2, 'LIABILITY', 'CREDIT', 1, 0),
     (@AccountEquityId, '3', 'Patrimonio', NULL, 1, 'EQUITY', 'CREDIT', 0, 1),
     (@AccountRevenueId, '4', 'Ingresos', NULL, 1, 'REVENUE', 'CREDIT', 0, 1),
-    (@AccountExpensesId, '5', 'Gastos', NULL, 1, 'EXPENSE', 'DEBIT', 0, 1);
+    (@AccountSalesRevenueId, '4-01', 'Ingresos por ventas', @AccountRevenueId, 2, 'REVENUE', 'CREDIT', 1, 0),
+    (@AccountExpensesId, '5', 'Gastos', NULL, 1, 'EXPENSE', 'DEBIT', 0, 1),
+    (@AccountExpensePostingId, '5-01', 'Gasto operativo automatico', @AccountExpensesId, 2, 'EXPENSE', 'DEBIT', 1, 0);
 
   INSERT INTO accounting.Accounts (
     AccountId, TenantId, CompanyId, Code, Name, ParentAccountId, Level,

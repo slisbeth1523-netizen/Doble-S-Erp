@@ -9,6 +9,7 @@ import { sendSuccess } from "../../../../utils/responseBuilder.js";
 import { validateRequest } from "../../../../utils/validateRequest.js";
 import { accountingAccountService } from "../../application/AccountingAccountService.js";
 import { accountingPeriodService } from "../../application/AccountingPeriodService.js";
+import { accountingPostingService } from "../../application/AccountingPostingService.js";
 import { balanceSheetService } from "../../application/BalanceSheetService.js";
 import { cashFlowService } from "../../application/CashFlowService.js";
 import { generalLedgerService } from "../../application/GeneralLedgerService.js";
@@ -21,6 +22,7 @@ import {
   accountingAccountListQuerySchema,
   accountingAccountPayloadSchema
 } from "../../validators/accounting-account.validators.js";
+import { postingRequestSchema } from "../../validators/posting-engine.validators.js";
 import { balanceSheetQuerySchema } from "../../validators/balance-sheet.validators.js";
 import { cashFlowQuerySchema } from "../../validators/cash-flow.validators.js";
 import {
@@ -83,6 +85,39 @@ accountingRouter.get(
     const result = await cashFlowService.getSummary(accountingContext(request), request.query);
 
     sendSuccess(response, result);
+  })
+);
+
+accountingRouter.post(
+  "/postings/preview",
+  validateRequest({ body: postingRequestSchema }),
+  requirePermission("accounting", "accounting.posting-engine.preview"),
+  asyncHandler(async (request, response) => {
+    const result = await accountingPostingService.preview(accountingContext(request), request.body);
+
+    sendSuccess(response, result);
+  })
+);
+
+accountingRouter.post(
+  "/postings/create",
+  validateRequest({ body: postingRequestSchema }),
+  requirePermission("accounting", "accounting.posting-engine.execute"),
+  asyncHandler(async (request, response) => {
+    const result = await accountingPostingService.create(accountingContext(request), request.body);
+
+    sendSuccess(response, result, result.alreadyExists ? 200 : 201);
+  })
+);
+
+accountingRouter.post(
+  "/postings/reverse",
+  validateRequest({ body: postingRequestSchema }),
+  requirePermission("accounting", "accounting.posting-engine.execute"),
+  asyncHandler(async (request, response) => {
+    const result = await accountingPostingService.reverse(accountingContext(request), request.body);
+
+    sendSuccess(response, result, result.alreadyExists ? 200 : 201);
   })
 );
 
