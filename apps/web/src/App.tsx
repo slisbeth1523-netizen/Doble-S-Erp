@@ -33,6 +33,7 @@ import { WorkflowsPreview } from "./pages/WorkflowsPreview.js";
 
 import { BalanceSheetPage } from "./pages/accounting/BalanceSheetPage.js";
 import { AccountingPostingEnginePage } from "./pages/accounting/AccountingPostingEnginePage.js";
+import { AccountingPostingRulesPage } from "./pages/accounting/AccountingPostingRulesPage.js";
 import { CashFlowPage } from "./pages/accounting/CashFlowPage.js";
 import { ChartOfAccounts } from "./pages/accounting/ChartOfAccounts.js";
 import { AccountingPeriodsPage } from "./pages/accounting/AccountingPeriodsPage.js";
@@ -204,6 +205,10 @@ export function App() {
 
     if (path === "/accounting/posting-engine") {
       return <AccountingPostingEnginePage />;
+    }
+
+    if (path === "/accounting/posting-rules") {
+      return <AccountingPostingRulesPage />;
     }
 
     if (path === "/security") {

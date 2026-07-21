@@ -10,6 +10,7 @@ import { validateRequest } from "../../../../utils/validateRequest.js";
 import { accountingAccountService } from "../../application/AccountingAccountService.js";
 import { accountingPeriodService } from "../../application/AccountingPeriodService.js";
 import { accountingPostingService } from "../../application/AccountingPostingService.js";
+import { postingRuleService } from "../../application/PostingRuleService.js";
 import { balanceSheetService } from "../../application/BalanceSheetService.js";
 import { cashFlowService } from "../../application/CashFlowService.js";
 import { generalLedgerService } from "../../application/GeneralLedgerService.js";
@@ -23,6 +24,12 @@ import {
   accountingAccountPayloadSchema
 } from "../../validators/accounting-account.validators.js";
 import { postingRequestSchema } from "../../validators/posting-engine.validators.js";
+import {
+  postingRuleIdParamsSchema,
+  postingRuleListQuerySchema,
+  postingRulePayloadSchema,
+  type PostingRuleListQuery
+} from "../../validators/posting-rule.validators.js";
 import { balanceSheetQuerySchema } from "../../validators/balance-sheet.validators.js";
 import { cashFlowQuerySchema } from "../../validators/cash-flow.validators.js";
 import {
@@ -118,6 +125,61 @@ accountingRouter.post(
     const result = await accountingPostingService.reverse(accountingContext(request), request.body);
 
     sendSuccess(response, result, result.alreadyExists ? 200 : 201);
+  })
+);
+
+accountingRouter.get(
+  "/posting-rules",
+  validateRequest({ query: postingRuleListQuerySchema }),
+  requirePermission("accounting", "accounting.posting-rules.read"),
+  asyncHandler(async (request, response) => {
+    const result = await postingRuleService.listRules(accountingContext(request), request.query as unknown as PostingRuleListQuery);
+
+    sendSuccess(response, result);
+  })
+);
+
+accountingRouter.get(
+  "/posting-rules/:id",
+  validateRequest({ params: postingRuleIdParamsSchema }),
+  requirePermission("accounting", "accounting.posting-rules.read"),
+  asyncHandler(async (request, response) => {
+    const result = await postingRuleService.getRule(accountingContext(request), request.params.id!);
+
+    sendSuccess(response, result);
+  })
+);
+
+accountingRouter.post(
+  "/posting-rules",
+  validateRequest({ body: postingRulePayloadSchema }),
+  requirePermission("accounting", "accounting.posting-rules.create"),
+  asyncHandler(async (request, response) => {
+    const result = await postingRuleService.createRule(accountingContext(request), request.body);
+
+    sendSuccess(response, result, 201);
+  })
+);
+
+accountingRouter.patch(
+  "/posting-rules/:id",
+  validateRequest({ params: postingRuleIdParamsSchema, body: postingRulePayloadSchema }),
+  requirePermission("accounting", "accounting.posting-rules.update"),
+  asyncHandler(async (request, response) => {
+    const result = await postingRuleService.updateRule(accountingContext(request), request.params.id!, request.body);
+
+    sendSuccess(response, result);
+  })
+);
+
+accountingRouter.delete(
+  "/posting-rules/:id",
+  validateRequest({ params: postingRuleIdParamsSchema }),
+  requirePermission("accounting", "accounting.posting-rules.delete"),
+  asyncHandler(async (request, response) => {
+    const result = await postingRuleService.deleteRule(accountingContext(request), request.params.id!);
+
+    sendSuccess(response, result);
   })
 );
 

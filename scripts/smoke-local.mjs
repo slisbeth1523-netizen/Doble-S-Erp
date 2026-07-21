@@ -503,6 +503,44 @@ async function createAccountingPosting(payload, session, extraHeaders = {}) {
   return body.data;
 }
 
+async function listPostingRules(query, session) {
+  const params = new URLSearchParams(query);
+  const body = await expectOk(`/accounting/posting-rules?${params.toString()}`, {
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
+async function createPostingRule(payload, session) {
+  const body = await expectOk("/accounting/posting-rules", {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function updatePostingRule(postingRuleId, payload, session) {
+  const body = await expectOk(`/accounting/posting-rules/${postingRuleId}`, {
+    method: "PATCH",
+    headers: authHeaders(session),
+    body: JSON.stringify(payload)
+  });
+
+  return body.data;
+}
+
+async function deletePostingRule(postingRuleId, session) {
+  const body = await expectOk(`/accounting/posting-rules/${postingRuleId}`, {
+    method: "DELETE",
+    headers: authHeaders(session)
+  });
+
+  return body.data;
+}
+
 async function reverseAccountingPosting(payload, session, extraHeaders = {}) {
   const body = await expectOk("/accounting/postings/reverse", {
     method: "POST",
@@ -8737,6 +8775,71 @@ async function validateAutomaticPostingEngineFlow(session) {
   });
   if (cancelledPreview.response.ok || cancelledPreview.body?.success !== false) {
     fail("Automatic posting preview must reject cancelled source documents.");
+  }
+
+  smokeStep("accounting posting rules CRUD and cache invalidation");
+  const currentRules = await listPostingRules({ sourceDocumentType: "AR_DOCUMENT", pageSize: "50" }, session);
+  if (!currentRules.records.some((rule) => rule.sourceDocumentType === "AR_DOCUMENT" && rule.isActive)) {
+    fail("Posting rules endpoint did not return an active AR rule.");
+  }
+  const accounts = await listAccountingAccounts({ pageSize: "200" }, session);
+  const accountIdOf = (account) => account.accountId ?? account.id;
+  const assetAccounts = accounts.records.filter(
+    (account) => account.accountType === "ASSET" && account.allowsPosting && account.isActive && !account.isBlocked
+  );
+  const revenue = accounts.records.find(
+    (account) => account.accountType === "REVENUE" && account.allowsPosting && account.isActive && !account.isBlocked
+  );
+  const liability = accounts.records.find(
+    (account) => account.accountType === "LIABILITY" && account.allowsPosting && account.isActive && !account.isBlocked
+  );
+  const currentDebitId = preview.lines.find((line) => line.side === "DEBIT")?.accountId;
+  const alternateDebit = assetAccounts.find((account) => accountIdOf(account) !== currentDebitId);
+  if (!alternateDebit || !revenue || !liability) {
+    fail("Posting rules smoke requires configured asset, revenue and liability accounts.");
+  }
+  const alternateDebitId = accountIdOf(alternateDebit);
+  const revenueId = accountIdOf(revenue);
+  const liabilityId = accountIdOf(liability);
+  if (!alternateDebitId || !revenueId || !liabilityId) {
+    fail("Posting rules smoke could not resolve account identifiers.");
+  }
+  const rulePayload = {
+    ruleCode: `AR-SMOKE-${smokeRun}`,
+    name: "Regla smoke motor contable",
+    description: "Regla temporal para validar cache e invalidacion",
+    sourceModule: "ACCOUNTS_RECEIVABLE",
+    sourceDocumentType: "AR_DOCUMENT",
+    direction: "RECEIVABLE",
+    debitAccountId: alternateDebitId,
+    creditAccountId: revenueId,
+    taxAccountId: liabilityId,
+    costCenterId: null,
+    appliesTax: true,
+    priority: 1,
+    isDefault: false,
+    isActive: true
+  };
+  const createdRule = await createPostingRule(rulePayload, session);
+  const afterCreatePreview = await previewAccountingPosting(payload, session);
+  if (!afterCreatePreview.lines.some((line) => line.side === "DEBIT" && line.accountId === alternateDebitId)) {
+    fail("Posting rule cache was not invalidated after creating a higher priority rule.");
+  }
+  const updatedRule = await updatePostingRule(
+    createdRule.postingRuleId,
+    { ...rulePayload, name: "Regla smoke motor contable actualizada", priority: 999 },
+    session
+  );
+  if (updatedRule.priority !== 999) {
+    fail("Posting rule update did not persist priority.");
+  }
+  const afterUpdatePreview = await previewAccountingPosting(payload, session);
+  if (afterUpdatePreview.lines.some((line) => line.side === "DEBIT" && line.accountId === alternateDebitId)) {
+    fail("Posting rule cache was not invalidated after lowering rule priority.");
+  }
+  const deletedRule = await deletePostingRule(createdRule.postingRuleId, session);
+  if (deletedRule.isActive) {
+    fail("Posting rule delete did not deactivate the rule.");
   }
 
   smokeStep("automatic posting engine create is idempotent per source document");

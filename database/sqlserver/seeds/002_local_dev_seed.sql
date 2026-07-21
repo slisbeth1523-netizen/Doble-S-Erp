@@ -177,6 +177,10 @@ VALUES
   ('accounting', 'accounting.cash-flow.read', 'Local read accounting cash flow'),
   ('accounting', 'accounting.posting-engine.preview', 'Local preview automatic accounting postings'),
   ('accounting', 'accounting.posting-engine.execute', 'Local execute automatic accounting postings'),
+  ('accounting', 'accounting.posting-rules.read', 'Local read accounting posting rules'),
+  ('accounting', 'accounting.posting-rules.create', 'Local create accounting posting rules'),
+  ('accounting', 'accounting.posting-rules.update', 'Local update accounting posting rules'),
+  ('accounting', 'accounting.posting-rules.delete', 'Local delete accounting posting rules'),
   ('inventory', 'inventory.items.read', 'Local read items'),
   ('inventory', 'inventory.items.create', 'Local create items'),
   ('inventory', 'inventory.items.update', 'Local update items'),
@@ -262,6 +266,10 @@ DECLARE @AccountExpensesId UNIQUEIDENTIFIER = 'ca000000-0000-0000-0000-000000000
 DECLARE @AccountSalesRevenueId UNIQUEIDENTIFIER = 'ca000000-0000-0000-0000-000000000012';
 DECLARE @AccountExpensePostingId UNIQUEIDENTIFIER = 'ca000000-0000-0000-0000-000000000013';
 DECLARE @AccountTaxPayableId UNIQUEIDENTIFIER = 'ca000000-0000-0000-0000-000000000014';
+DECLARE @PostingRuleArId UNIQUEIDENTIFIER = 'accc0000-0000-0000-0000-000000000001';
+DECLARE @PostingRuleApId UNIQUEIDENTIFIER = 'accc0000-0000-0000-0000-000000000002';
+DECLARE @PostingRuleSalesInvoiceId UNIQUEIDENTIFIER = 'accc0000-0000-0000-0000-000000000003';
+DECLARE @PostingRuleSupplierInvoiceId UNIQUEIDENTIFIER = 'accc0000-0000-0000-0000-000000000004';
 DECLARE @WarehouseId UNIQUEIDENTIFIER = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee';
 DECLARE @TransitWarehouseId UNIQUEIDENTIFIER = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeef';
 DECLARE @InventoryMovementId UNIQUEIDENTIFIER = 'abababab-abab-abab-abab-abababababab';
@@ -477,6 +485,74 @@ BEGIN
      AND account.CompanyId = @CompanyId
      AND seed.PostingSlot IS NOT NULL
      AND ISNULL(account.Classification, N'') <> seed.PostingSlot;
+END;
+
+IF OBJECT_ID('accounting.PostingRules', 'U') IS NOT NULL
+BEGIN
+  DECLARE @SeedPostingRules TABLE (
+    PostingRuleId UNIQUEIDENTIFIER NOT NULL,
+    RuleCode NVARCHAR(80) NOT NULL,
+    Name NVARCHAR(200) NOT NULL,
+    SourceModule NVARCHAR(40) NOT NULL,
+    SourceDocumentType NVARCHAR(40) NOT NULL,
+    Direction NVARCHAR(20) NOT NULL,
+    DebitAccountId UNIQUEIDENTIFIER NOT NULL,
+    CreditAccountId UNIQUEIDENTIFIER NOT NULL,
+    TaxAccountId UNIQUEIDENTIFIER NULL,
+    Priority INT NOT NULL
+  );
+
+  INSERT INTO @SeedPostingRules (
+    PostingRuleId, RuleCode, Name, SourceModule, SourceDocumentType, Direction,
+    DebitAccountId, CreditAccountId, TaxAccountId, Priority
+  )
+  VALUES
+    (@PostingRuleArId, 'AR-DOCUMENT-DEFAULT', 'CxC documento manual', 'ACCOUNTS_RECEIVABLE', 'AR_DOCUMENT', 'RECEIVABLE',
+      @AccountReceivableId, @AccountSalesRevenueId, @AccountTaxPayableId, 100),
+    (@PostingRuleApId, 'AP-DOCUMENT-DEFAULT', 'CxP documento proveedor', 'ACCOUNTS_PAYABLE', 'AP_DOCUMENT', 'PAYABLE',
+      @AccountExpensePostingId, @AccountPayableId, @AccountTaxReceivableId, 100),
+    (@PostingRuleSalesInvoiceId, 'SALES-INVOICE-DEFAULT', 'Factura de venta', 'SALES', 'SALES_INVOICE', 'RECEIVABLE',
+      @AccountReceivableId, @AccountSalesRevenueId, @AccountTaxPayableId, 100),
+    (@PostingRuleSupplierInvoiceId, 'SUPPLIER-INVOICE-DEFAULT', 'Factura proveedor', 'PURCHASING', 'SUPPLIER_INVOICE', 'PAYABLE',
+      @AccountExpensePostingId, @AccountPayableId, @AccountTaxReceivableId, 100);
+
+  INSERT INTO accounting.PostingRules (
+    PostingRuleId, TenantId, CompanyId, RuleCode, Name, SourceModule, SourceDocumentType,
+    Direction, DebitAccountId, CreditAccountId, TaxAccountId, AppliesTax, Priority,
+    IsDefault, IsActive, CreatedBy
+  )
+  SELECT
+    seed.PostingRuleId, @TenantId, @CompanyId, seed.RuleCode, seed.Name, seed.SourceModule, seed.SourceDocumentType,
+    seed.Direction, seed.DebitAccountId, seed.CreditAccountId, seed.TaxAccountId, 1, seed.Priority,
+    1, 1, @UserId
+  FROM @SeedPostingRules seed
+  WHERE NOT EXISTS (
+    SELECT 1
+    FROM accounting.PostingRules existing
+    WHERE existing.TenantId = @TenantId
+      AND existing.CompanyId = @CompanyId
+      AND existing.RuleCode = seed.RuleCode
+  );
+
+  UPDATE postingRule
+     SET Name = seed.Name,
+         SourceModule = seed.SourceModule,
+         SourceDocumentType = seed.SourceDocumentType,
+         Direction = seed.Direction,
+         DebitAccountId = seed.DebitAccountId,
+         CreditAccountId = seed.CreditAccountId,
+         TaxAccountId = seed.TaxAccountId,
+         AppliesTax = 1,
+         Priority = seed.Priority,
+         IsDefault = 1,
+         IsActive = 1,
+         UpdatedAt = SYSUTCDATETIME(),
+         UpdatedBy = @UserId
+    FROM accounting.PostingRules postingRule
+    INNER JOIN @SeedPostingRules seed
+      ON seed.RuleCode = postingRule.RuleCode
+   WHERE postingRule.TenantId = @TenantId
+     AND postingRule.CompanyId = @CompanyId;
 END;
 
 IF OBJECT_ID('inventory.Warehouses', 'U') IS NOT NULL

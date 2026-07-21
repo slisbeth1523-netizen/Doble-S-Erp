@@ -46,24 +46,25 @@ export class PostingPreviewService {
     const accounts = await this.rules.resolveAccounts(context, document);
     const taxableBase = Math.max(document.totalAmount - document.taxAmount, 0);
     const entryDate = postingDate ?? document.documentDate;
+    const costCenterId = accounts.costCenterId ?? document.costCenterId;
     const lines: PostingLinePreview[] = [];
 
     if (document.direction === "RECEIVABLE") {
-      lines.push(this.line(1, "DEBIT", accounts.debit, document, document.totalAmount, 0, entryDate, "Cuenta por cobrar"));
+      lines.push(this.line(1, "DEBIT", accounts.debit, document, document.totalAmount, 0, entryDate, "Cuenta por cobrar", 0, costCenterId));
       if (taxableBase > 0) {
-        lines.push(this.line(lines.length + 1, "CREDIT", accounts.credit, document, 0, taxableBase, entryDate, "Ingreso"));
+        lines.push(this.line(lines.length + 1, "CREDIT", accounts.credit, document, 0, taxableBase, entryDate, "Ingreso", 0, costCenterId));
       }
       if (document.taxAmount > 0 && accounts.tax) {
-        lines.push(this.line(lines.length + 1, "CREDIT", accounts.tax, document, 0, document.taxAmount, entryDate, "Impuesto por pagar", document.taxAmount));
+        lines.push(this.line(lines.length + 1, "CREDIT", accounts.tax, document, 0, document.taxAmount, entryDate, "Impuesto por pagar", document.taxAmount, costCenterId));
       }
     } else {
       if (taxableBase > 0) {
-        lines.push(this.line(1, "DEBIT", accounts.debit, document, taxableBase, 0, entryDate, "Gasto o costo"));
+        lines.push(this.line(1, "DEBIT", accounts.debit, document, taxableBase, 0, entryDate, "Gasto o costo", 0, costCenterId));
       }
       if (document.taxAmount > 0 && accounts.tax) {
-        lines.push(this.line(lines.length + 1, "DEBIT", accounts.tax, document, document.taxAmount, 0, entryDate, "Impuesto acreditable", document.taxAmount));
+        lines.push(this.line(lines.length + 1, "DEBIT", accounts.tax, document, document.taxAmount, 0, entryDate, "Impuesto acreditable", document.taxAmount, costCenterId));
       }
-      lines.push(this.line(lines.length + 1, "CREDIT", accounts.credit, document, 0, document.totalAmount, entryDate, "Cuenta por pagar"));
+      lines.push(this.line(lines.length + 1, "CREDIT", accounts.credit, document, 0, document.totalAmount, entryDate, "Cuenta por pagar", 0, costCenterId));
     }
 
     const totalDebit = this.round(lines.reduce((sum, line) => sum + line.debitAmount, 0));
@@ -101,7 +102,8 @@ export class PostingPreviewService {
     creditAmount: number,
     postingDate: string,
     label: string,
-    taxAmount = 0
+    taxAmount = 0,
+    costCenterId?: string
   ): PostingLinePreview {
     return {
       lineNumber,
@@ -109,7 +111,7 @@ export class PostingPreviewService {
       accountId: account.accountId,
       accountCode: account.code,
       accountName: account.name,
-      costCenterId: document.costCenterId,
+      costCenterId,
       description: `${label} - ${document.documentNumber}`,
       debitAmount: this.round(debitAmount),
       creditAmount: this.round(creditAmount),

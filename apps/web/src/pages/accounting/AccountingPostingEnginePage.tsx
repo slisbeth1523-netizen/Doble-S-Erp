@@ -90,6 +90,9 @@ export function AccountingPostingEnginePage() {
             <a className="ui-button ui-button-secondary" href="/accounting/general-ledger">
               Libro Mayor
             </a>
+            <a className="ui-button ui-button-secondary" href="/accounting/posting-rules">
+              Reglas Contables
+            </a>
           </div>
         }
       />

@@ -127,7 +127,8 @@ const navigation: NavigationItem[] = [
       { label: "Estado de Resultados", path: "/accounting/income-statement" },
       { label: "Balance General", path: "/accounting/balance-sheet" },
       { label: "Flujo de Efectivo", path: "/accounting/cash-flow" },
-      { label: "Motor Contable", path: "/accounting/posting-engine" }
+      { label: "Motor Contable", path: "/accounting/posting-engine" },
+      { label: "Reglas Contables", path: "/accounting/posting-rules" }
     ]
   },
   { label: "Workflows", path: "/workflows" },
@@ -353,6 +354,10 @@ function breadcrumb(path: string) {
     return ["Doble S ERP", "Contabilidad", "Motor Contable"];
   }
 
+  if (segments[0] === "accounting" && segments[1] === "posting-rules") {
+    return ["Doble S ERP", "Contabilidad", "Reglas Contables"];
+  }
+
   const labels: Record<string, string> = {
     dashboard: "Dashboard",
     workflows: "Workflows",
@@ -527,6 +532,7 @@ export function AppLayout({ children, currentPath, onNavigate }: AppLayoutProps)
     { label: "Balance General", category: "Contabilidad", path: "/accounting/balance-sheet" },
     { label: "Flujo de Efectivo", category: "Contabilidad", path: "/accounting/cash-flow" },
     { label: "Motor Contable", category: "Contabilidad", path: "/accounting/posting-engine" },
+    { label: "Reglas Contables", category: "Contabilidad", path: "/accounting/posting-rules" },
     { label: "Seguridad y Accesos", category: "Configuración", path: "/security" },
     { label: "Configuración General", category: "Configuración", path: "/settings" }
   ];
